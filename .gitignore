@@ -1,0 +1,36 @@
+# Python environments and generated metadata
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+config/local.yaml
+
+# Serenity runtime state (created by later phases)
+runs/
+cache/
+models/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Frontend and editor artifacts
+node_modules/
+.svelte-kit/
+.DS_Store
+.idea/
+.vscode/

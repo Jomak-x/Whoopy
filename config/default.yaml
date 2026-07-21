@@ -1,0 +1,37 @@
+# Safe, versioned defaults shared by the CLI, worker, and future API.
+# Override machine-specific values in config/local.yaml, not in this file.
+llm:
+  # Registry key from models.yaml; the concrete adapter remains replaceable.
+  backend: mlx_qwen3
+  hq_backend: mlx_llama3_hq
+  max_context_tokens: 8192
+
+tts:
+  # Kokoro is the initial baseline, not a permanent pipeline dependency.
+  backend: kokoro
+  voice: af_heart
+  speed: 0.9
+
+ambience:
+  backend: loop_library
+  default_tags: [rain, drone]
+
+render:
+  target_lufs: -16.0
+  true_peak_db: -1.5
+  master_format: flac_48k_24bit
+  delivery: [aac_160k, opus_96k]
+
+pauses:
+  # Micro-pauses remain punctuation inside speech. Deliberate pauses become
+  # exact SILENCE events in the canonical timeline.
+  micro_max_ms: 800
+  deliberate_min_ms: 1500
+
+pipeline:
+  checkpoint_dir: ./runs
+  cache: content_addressed
+
+storage:
+  # The local core starts with SQLite. Commons moves to PostgreSQL later.
+  db_url: sqlite:///./serenity.db
