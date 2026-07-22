@@ -5,25 +5,44 @@
 # prompt formatting, sampling quirks, voice controls, and runtime errors inside
 # that adapter rather than branching on model names in the pipeline.
 llm:
+  llama_cpp_qwen3_1_7b:
+    adapter: serenity.adapters.llm.llama_cpp:LlamaCppAdapter
+    versioned_model_id: Qwen/Qwen3-1.7B-GGUF
+    license_id: Apache-2.0
+    runtime: llama_cpp
+    platforms: [macos-arm64, macos-x86_64, windows-arm64, windows-x86_64, linux-x86_64, linux-arm64]
+    profile_candidates: [lite]
+    status: planned
   mlx_qwen3:
     adapter: serenity.adapters.llm.mlx_qwen3:MLXQwen3Adapter
     versioned_model_id: Qwen/Qwen3-32B
     license_id: Apache-2.0
     runtime: mlx
+    platforms: [macos-arm64]
     status: planned
   mlx_llama3_hq:
     adapter: serenity.adapters.llm.mlx_llama3_hq:MLXLlama3HQAdapter
     versioned_model_id: meta-llama/Llama-3.3-70B-Instruct
     license_id: Llama-3.3-Community
     runtime: mlx
+    platforms: [macos-arm64]
     status: planned
 
 tts:
+  sherpa_onnx_kokoro:
+    adapter: serenity.adapters.tts.sherpa_onnx:SherpaOnnxKokoroAdapter
+    versioned_model_id: hexgrad/Kokoro-82M
+    license_id: Apache-2.0
+    runtime: sherpa_onnx
+    platforms: [macos-arm64, macos-x86_64, windows-arm64, windows-x86_64, linux-x86_64, linux-arm64]
+    publication_policy: allowed_after_asset_check
+    status: planned
   kokoro:
     adapter: serenity.adapters.tts.kokoro:KokoroAdapter
     versioned_model_id: hexgrad/Kokoro-82M
     license_id: Apache-2.0
     runtime: native
+    platforms: [macos-arm64]
     publication_policy: allowed_after_asset_check
     status: planned
   styletts2:

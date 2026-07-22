@@ -45,27 +45,25 @@ Goal: Create the smallest installable Python project without implementing produc
 
 Changes:
 
-- Add `pyproject.toml` with Python 3.11 support.
+- Add `pyproject.toml`, `.python-version`, and a cross-platform `uv.lock` with Python 3.11 support.
 - Add the `serenity` package and an empty `tests/` package.
 - Add `.gitignore` entries for virtual environments, Python caches, generated runs, model weights, local databases, and local configuration.
-- Add a minimal `Makefile` with `setup`, `test`, `lint`, and `format` targets.
+- Add a platform-neutral Python quality script plus optional Unix Make wrappers.
 - Add a placeholder CLI that supports `serenity --help`.
 
 Acceptance criteria:
 
-- The project installs in a Python 3.11 virtual environment.
+- `uv` installs the project reproducibly on Windows, macOS, and Linux.
 - `serenity --help` exits successfully.
-- `make test` succeeds.
+- the platform-neutral quality script succeeds.
 - A new contributor can find the supported Python version in the README.
 
 Verification:
 
 ```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-make setup
-serenity --help
-make test
+uv sync --extra dev --locked
+uv run serenity --help
+uv run --extra dev python scripts/check.py
 ```
 
 Out of scope: timeline models, audio, ML dependencies, API, and frontend.
@@ -79,10 +77,13 @@ Changes:
 - Add `config/default.yaml`.
 - Add `config/models.yaml`.
 - Add `config/pacing_profiles.yaml`.
+- Add `config/runtime_profiles.yaml`.
 - Add `.env.example`.
 - Implement layered configuration loading with this precedence:
   `default.yaml` < `local.yaml` < `SERENITY_*` environment variables < CLI arguments.
 - Add tests for defaults, overrides, missing files, and invalid values.
+- Add `serenity doctor` with cross-platform RAM, disk, CPU, and accelerator inspection.
+- Select the highest safe Basic, Lite, Standard, High, or Studio profile without loading a model.
 
 Acceptance criteria:
 
@@ -90,13 +91,15 @@ Acceptance criteria:
 - Environment variables override YAML values.
 - Invalid settings produce a readable error.
 - `config/local.yaml` is ignored by Git.
+- Weak laptops fall back to Basic without requiring a local LLM.
+- Machines below Basic return an actionable refusal before any model load.
 
 Verification:
 
 ```bash
-make test
-serenity config show
-SERENITY_TTS__VOICE=test_voice serenity config show
+uv run serenity config show
+uv run serenity doctor
+uv run --extra dev pytest
 ```
 
 Out of scope: constructing model adapters from configuration.
@@ -109,22 +112,22 @@ Changes:
 
 - Add linting and formatting configuration.
 - Add static type checking.
-- Add a CI workflow for Python 3.11.
+- Add a CI matrix for Python 3.11 on Windows, macOS, and Linux.
 - Run unit tests, linting, formatting checks, and type checks in CI.
 
 Acceptance criteria:
 
 - The workflow passes on a clean checkout.
 - A deliberately malformed file would fail the appropriate check.
-- Local `make check` runs the same essential checks as CI.
+- Local `scripts/check.py` runs the same essential checks as CI; Make is an optional Unix wrapper.
 
 Verification:
 
 ```bash
-make check
+uv run --extra dev python scripts/check.py
 ```
 
-Out of scope: macOS ML tests and large model downloads in CI.
+Out of scope: real ML runtime tests and large model downloads in CI.
 
 ## Milestone 1: Canonical Timeline
 
@@ -480,13 +483,14 @@ make test
 
 Out of scope: plugin discovery and third-party package loading.
 
-### PR 17: Add the Kokoro speech adapter
+### PR 17: Add the universal Kokoro speech adapter
 
-Goal: Replace fixture tones with local generated narration on Apple Silicon.
+Goal: Replace fixture tones with local generated narration through one Windows/macOS/Linux path.
 
 Changes:
 
-- Add Kokoro as a native macOS adapter.
+- Add Kokoro through sherpa-onnx as the universal native adapter.
+- Package or acquire verified sherpa-onnx binaries for each supported platform.
 - Pin and record the model and voice versions.
 - Support text, voice, native speed, seed where supported, and output path.
 - Add an optional model download/setup command.
@@ -497,13 +501,14 @@ Acceptance criteria:
 - A short sentence produces audible speech.
 - Output metadata records the selected model and license.
 - Missing weights or an unsupported runtime produce clear recovery instructions.
-- The ML worker runs natively, not inside Docker on macOS.
+- The worker runs natively without Docker on Windows, macOS, and Linux.
+- The same adapter contract selects CPU or an available ONNX execution provider.
 
 Verification:
 
 ```bash
-serenity models doctor kokoro
-serenity generate examples/sleep.txt --tts kokoro
+serenity models doctor sherpa_onnx_kokoro
+serenity generate examples/sleep.txt --tts sherpa_onnx_kokoro
 make test
 ```
 
@@ -531,7 +536,7 @@ Verification:
 
 ```bash
 make test
-serenity generate examples/sleep.txt --tts kokoro
+serenity generate examples/sleep.txt --tts sherpa_onnx_kokoro
 ```
 
 Out of scope: final program loudness mastering.
@@ -705,13 +710,14 @@ make test
 
 Out of scope: a real local LLM.
 
-### PR 25: Add the first native MLX script generator
+### PR 25: Add the first universal llama.cpp script generator
 
 Goal: Generate real meditation scripts locally through the `ScriptGenerator` port.
 
 Changes:
 
-- Implement one MLX model adapter, starting with a practical smaller model if needed for integration.
+- Implement the llama.cpp/GGUF adapter as the universal CPU/Metal/CUDA/Vulkan-capable path.
+- Resolve a precise small GGUF artifact from the safe runtime profile.
 - Implement plan, section-by-section writing, and editorial stages.
 - Validate structured outputs and retry only malformed generations.
 - Record model, quantization, seed, prompt versions, and generation settings.
@@ -721,13 +727,14 @@ Acceptance criteria:
 - A prompt produces a coherent script and valid timeline without cloud services.
 - Long generation is divided into bounded sections.
 - Invalid structured output gets a limited retry and then a clear failure.
-- Model setup and expected memory use are documented.
+- Model setup, checksums, expected memory, and measured throughput are documented.
+- Profile selection refuses unsafe downloads or loads.
 
 Verification:
 
 ```bash
-serenity models doctor <mlx-model>
-serenity generate --theme sleep --minutes 5 --llm <mlx-model> --tts fixture
+serenity models doctor <gguf-model>
+serenity generate --theme sleep --minutes 5 --llm auto --tts fixture
 make test
 ```
 
@@ -875,7 +882,7 @@ Out of scope: authentication and public internet exposure.
 
 ### PR 31: Add Huey background jobs
 
-Goal: Process generation asynchronously while retaining native Apple Silicon model access.
+Goal: Process generation asynchronously while retaining native CPU and accelerator access on every supported operating system.
 
 Changes:
 
@@ -987,13 +994,14 @@ Out of scope: public sharing.
 
 ### PR 35: Add one-command local setup and operational documentation
 
-Goal: Make the polished local product reproducible on a clean Apple Silicon Mac.
+Goal: Make the polished local product reproducible on clean Windows, macOS, and Linux laptops.
 
 Changes:
 
-- Finalize `make setup`, `make worker`, `make dev`, `make test`, and `make doctor`.
+- Finalize cross-platform `uv` setup plus `serenity worker`, `serenity dev`, and `serenity doctor` commands.
+- Build native installer artifacts on each target operating system so end users do not install Python or build tools.
 - Add an optional Docker Compose file only for appropriate non-ML services.
-- Document native worker startup and optional `launchd` installation.
+- Document native worker startup and platform service integration only where optional.
 - Add troubleshooting for FFmpeg, model caches, memory pressure, ports, databases, and failed jobs.
 - Add a clean-machine verification checklist.
 
@@ -1001,17 +1009,17 @@ Acceptance criteria:
 
 - A new machine can follow one documented path from clone to fixture generation.
 - Real-model setup is explicit and separable from the fast fixture setup.
-- Documentation prominently states that macOS ML execution is native.
+- Hardware profiling selects safe capabilities without asking users to choose a backend.
+- Clean Windows, macOS, and Linux machines pass installer smoke tests.
 - All documented commands match real commands.
 
 Verification:
 
 ```bash
-make setup
-make doctor
-make test
-make worker
-make dev
+uv sync --locked
+uv run serenity doctor
+uv run serenity worker
+uv run serenity dev
 ```
 
 Out of scope: the public Commons platform.
@@ -1020,24 +1028,25 @@ Out of scope: the public Commons platform.
 
 These PRs can begin only after the local workflow is dependable.
 
-### PR 36: Add the Qwen3-32B production configuration
+### PR 36: Validate production model profiles and optional accelerators
 
-Goal: Validate and document the specification's default high-quality local script model.
+Goal: Bind measured, quality-tested model artifacts to Lite, Standard, High, and Studio without changing the pipeline.
 
 Changes:
 
-- Add the pinned Qwen3-32B MLX configuration.
-- Measure memory use, generation time, and output quality on the target Mac.
-- Document quantization and model acquisition.
+- Pin one GGUF model and checksum per supported profile after the quality bakeoff.
+- Measure memory use, generation time, and output quality across representative Windows, macOS, and Linux hardware.
+- Add optional MLX acceleration on Apple Silicon only if it passes the same contracts and improves measured performance.
+- Document quantization, model acquisition, and automatic fallback.
 - Add representative prompt evaluations.
 
 Acceptance criteria:
 
-- The full pipeline completes within the target machine's memory.
+- Every profile completes within its documented live-memory margin.
 - Model identity and quantization are recorded in every run.
-- Quality is compared with the smaller integration model before making it the default.
+- Quality is compared across profile candidates before any becomes a default.
 
-Verification: Run the documented local evaluation suite and attach results to the PR.
+Verification: Run the documented cross-platform evaluation suite and attach results to the PR.
 
 ### PR 37: Add the StyleTTS 2 adapter and blind comparison harness
 
@@ -1248,7 +1257,8 @@ PRs 29–39 are complete. The release is ready when:
 
 - the API, worker, and UI provide the complete local workflow;
 - a user can create, monitor, play, inspect, retry, and edit a meditation;
-- setup succeeds predictably on the documented Apple Silicon target;
+- native setup and hardware refusal succeed predictably on Windows, macOS, and Linux;
+- Basic mode remains useful without a local LLM;
 - adapter and asset licenses are recorded in artifacts;
 - documentation matches the shipped commands and behavior.
 
@@ -1265,4 +1275,4 @@ PRs 40–47 are complete. The release is ready when:
 
 ## The First PR To Open
 
-Start only with **PR 1: Add the Python project skeleton**. Do not combine configuration, timeline models, or audio work into it. Merge the smallest healthy foundation, then begin PR 2 from that known-good state.
+The empty-repository exception combines Milestone 0's three foundation slices in PR #1 so every later branch has a portable, tested base. After that PR merges, start only with **PR 4: Define the timeline segment models** and return to one numbered step per pull request.

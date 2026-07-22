@@ -1,16 +1,24 @@
 # Safe, versioned defaults shared by the CLI, worker, and future API.
 # Override machine-specific values in config/local.yaml, not in this file.
 llm:
-  # Registry key from models.yaml; the concrete adapter remains replaceable.
-  backend: mlx_qwen3
-  hq_backend: mlx_llama3_hq
+  # `auto` selects a safe runtime profile after hardware inspection. Users do
+  # not need to understand Metal, CUDA, Vulkan, model sizes, or quantization.
+  backend: auto
+  hq_backend: auto
   max_context_tokens: 8192
 
 tts:
-  # Kokoro is the initial baseline, not a permanent pipeline dependency.
-  backend: kokoro
+  # The universal ONNX path is selected by default; platform accelerators stay
+  # optional implementation details behind the same typed speech port.
+  backend: auto
   voice: af_heart
   speed: 0.9
+
+hardware:
+  # `auto` chooses the highest profile that meets conservative RAM and disk
+  # margins. A named profile remains available for testing and troubleshooting.
+  profile: auto
+  allow_remote_fallback: false
 
 ambience:
   backend: loop_library

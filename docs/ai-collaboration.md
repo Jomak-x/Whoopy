@@ -90,7 +90,8 @@ Decision:
 - ...
 
 Constraints:
-- local-first on Apple Silicon
+- local-first on Windows, macOS, and Linux
+- automatic safe hardware profiles with a no-LLM Basic mode
 - deterministic audio timing
 - canonical timeline as source of truth
 - license-safe public sharing

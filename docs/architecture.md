@@ -4,7 +4,7 @@
 
 Serenity is built as a local generation engine plus an optional public distribution layer.
 
-The local engine exists to solve the hard problem first: generate a high-quality, deterministic meditation audio file on one Mac. The public platform comes later because it adds network, moderation, storage, and license complexity that should not block the core experience.
+The local engine exists to solve the hard problem first: generate a deterministic meditation audio file natively on an ordinary Windows, macOS, or Linux laptop. The public platform comes later because it adds network, moderation, storage, and license complexity that should not block the core experience.
 
 ## Why The System Is Split This Way
 
@@ -24,7 +24,8 @@ flowchart LR
   B --> C[FastAPI control plane]
   C --> D[Huey job queue + SQLite]
   D --> E[Native generation worker]
-  E --> F[Canonical timeline JSON]
+  E --> P[Hardware profile and safe runtime]
+  P --> F[Canonical timeline JSON]
   F --> G[TTS per segment]
   G --> H[Audio assembly]
   H --> I[Mix and master]
@@ -62,15 +63,17 @@ Why it exists:
 - It keeps setup simple.
 - It captures enough job state to resume, inspect, and debug runs.
 
-### Native Generation Worker
+### Native Generation Worker And Runtime Selection
 
-The worker is where the actual model work happens. It runs natively on Apple Silicon so it can access the local ML stack that Docker cannot reach on macOS.
+The worker is where model work happens. It runs natively so it can use the best local CPU or accelerator without requiring Docker. Before model management acts, hardware inspection selects the highest safe Basic, Lite, Standard, High, or Studio profile.
 
 Why it exists:
 
-- The spec treats Metal and MLX access as a hard constraint.
-- A native worker avoids forcing the core pipeline into a container that cannot use the GPU path.
-- This separation keeps Docker useful for stateless services without blocking model execution.
+- llama.cpp/GGUF provides the universal local text path across CPU, Metal, CUDA, Vulkan, and other supported backends.
+- sherpa-onnx/Kokoro provides the universal local speech path.
+- Optional platform accelerators remain adapters rather than product requirements.
+- Basic mode keeps the product useful without a local LLM.
+- Unsafe machines are refused before a model download or load.
 
 ### Canonical Timeline
 
@@ -103,16 +106,28 @@ Why it exists:
 
 ## The Most Important Design Decisions
 
-### 1. Native worker on macOS
+### 1. Native worker on every supported operating system
 
-The core ML worker is not put inside Docker on macOS.
+The model worker is not put inside Docker. Windows, macOS, and Linux receive native processes built for their platform.
 
 Reason:
 
-- Docker on macOS does not provide the same access to Metal/MLX GPU execution.
-- If the worker cannot access the local acceleration path, the whole point of the local-first design is weakened.
+- Native execution allows llama.cpp and ONNX Runtime to use CPU, Metal, CUDA, Vulkan, and other available providers directly.
+- A single logical adapter path prevents users from choosing backends manually.
+- Container availability does not decide whether the local product works.
 
-### 2. Timeline first, audio second
+### 2. Hardware profiles before model selection
+
+The system selects capabilities before it selects a precise model artifact.
+
+Reason:
+
+- The same large model cannot run safely on every laptop.
+- Live available memory matters, not only installed memory.
+- Basic mode can still provide templates, pasted scripts, local TTS, and deterministic rendering.
+- Refusing early is safer than downloading a model and discovering an out-of-memory failure later.
+
+### 3. Timeline first, audio second
 
 The system treats the timeline as the source of truth.
 
@@ -122,7 +137,7 @@ Reason:
 - Audio files alone are hard to reason about.
 - A timeline makes the structure inspectable, resumable, and testable.
 
-### 3. Exact silence segments
+### 4. Exact silence segments
 
 Deliberate pauses are represented as explicit silence segments instead of being left to TTS timing.
 
@@ -132,7 +147,7 @@ Reason:
 - TTS is not reliable enough to guess exact timing.
 - Explicit silence makes the output reproducible.
 
-### 4. Ports and adapters
+### 5. Ports and adapters
 
 LLM, TTS, ambience, renderer, publisher, and moderation are all behind typed interfaces.
 
@@ -142,7 +157,7 @@ Reason:
 - Licensing and backend metadata can travel with each adapter.
 - Testing becomes easier because each port can be mocked.
 
-### 5. License-aware public sharing
+### 6. License-aware public sharing
 
 Anything that may enter the public platform has to be checked for redistribution rights.
 
@@ -184,6 +199,7 @@ When you question a design choice, ask these questions:
 - What breaks if we remove it?
 - What gets simpler if we replace it?
 - Does the new approach still preserve deterministic pauses and resumability?
-- Does it still work on one Apple Silicon Mac without cloud dependencies?
+- Does it still work natively on supported Windows, macOS, and Linux laptops without cloud dependencies?
+- Does Basic mode remain useful when a local LLM is unsafe?
 
 If a proposed change weakens those answers, the burden of proof is on the change.

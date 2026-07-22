@@ -1,34 +1,29 @@
-# Keep these commands as the stable contributor interface. CI calls `make check`
-# so local verification and pull-request verification cannot silently diverge.
-PYTHON ?= python3.11
-VENV ?= .venv
-BIN := $(VENV)/bin
+# Make is a convenience wrapper on Unix. uv and the Python check script are the
+# platform-neutral interface used by Windows, macOS, Linux, and CI.
+UV ?= uv
 
 .PHONY: setup test lint format format-check typecheck check clean
 
 setup:
-	$(PYTHON) -m venv $(VENV)
-	# --no-user makes setup reproducible even when a contributor has configured
-	# pip to install into their user site by default.
-	$(BIN)/python -m pip install --no-user --upgrade pip
-	$(BIN)/python -m pip install --no-user -e ".[dev]"
+	$(UV) sync --extra dev --locked
 
 test:
-	$(BIN)/pytest
+	$(UV) run --extra dev pytest
 
 lint:
-	$(BIN)/ruff check .
+	$(UV) run --extra dev ruff check .
 
 format:
-	$(BIN)/ruff format .
+	$(UV) run --extra dev ruff format .
 
 format-check:
-	$(BIN)/ruff format --check .
+	$(UV) run --extra dev ruff format --check .
 
 typecheck:
-	$(BIN)/mypy src tests
+	$(UV) run --extra dev mypy src tests scripts
 
-check: lint format-check typecheck test
+check:
+	$(UV) run --extra dev python scripts/check.py
 
 clean:
-	$(PYTHON) -c "import shutil; [shutil.rmtree(path, ignore_errors=True) for path in ('build', 'dist', '.pytest_cache', '.mypy_cache', '.ruff_cache')]"
+	$(UV) run python -c "import shutil; [shutil.rmtree(path, ignore_errors=True) for path in ('build', 'dist', '.pytest_cache', '.mypy_cache', '.ruff_cache')]"

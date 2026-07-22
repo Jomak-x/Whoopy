@@ -9,22 +9,32 @@ permissions:
   contents: read
 
 jobs:
-  python-quality:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  native-quality:
+    name: Native quality (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv and Python
+        # Pinned to setup-uv v8.1.0 so a mutable action tag cannot change CI.
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
+          version: "0.11.30"
           python-version: "3.11"
-          cache: pip
+          enable-cache: true
 
-      - name: Install project and development tools
-        run: make setup
+      - name: Install locked dependencies
+        run: uv sync --extra dev --locked
 
-      - name: Run the same checks contributors run locally
-        run: make check
+      - name: Run the platform-neutral quality gate
+        run: uv run --extra dev python scripts/check.py
+
+      - name: Prove native hardware inspection works
+        run: uv run serenity doctor --json

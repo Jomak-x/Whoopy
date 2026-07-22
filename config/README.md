@@ -18,12 +18,14 @@ Nested environment variables use two underscores. For example, `SERENITY_TTS__VO
 - `default.yaml` contains safe, versioned application defaults.
 - `models.yaml` is the future adapter registry. A model choice is metadata and configuration, not pipeline logic.
 - `pacing_profiles.yaml` contains product pacing presets.
+- `runtime_profiles.yaml` maps live RAM and disk safety margins to Basic, Lite, Standard, High, and Studio capabilities.
 - `prompts/` holds versioned system prompts once model-backed generation is added.
 
 Validate the resolved settings with:
 
 ```bash
 serenity config show
+serenity doctor
 ```
 
-The model and pacing registries are documented skeletons in Phase 0. Their runtime registries and contract validation arrive before real model adapters are connected.
+The model and pacing registries are documented skeletons in Phase 0. `runtime_profiles.yaml` is active: `serenity doctor` uses it without downloading or loading a model. Exact model artifacts and measured runtime benchmarks arrive with their adapters.

@@ -12,12 +12,12 @@ Serenity is built as a sequence of small, reviewable pull requests. A contributi
 ## Local Setup
 
 ```bash
-make setup
-source .venv/bin/activate
-make check
+uv sync --extra dev --locked
+uv run serenity doctor
+uv run --extra dev python scripts/check.py
 ```
 
-Python 3.11 is the reference version used by CI. Phase 0 has no Node, FFmpeg, Docker, or model-download step.
+`uv` supplies the reference Python 3.11 runtime on Windows, macOS, and Linux. Phase 0 has no Node, FFmpeg, Docker, or model-download step. Make targets are convenience wrappers, not the Windows interface.
 
 ## Pull Request Standard
 
@@ -63,7 +63,7 @@ Use this description:
 Run the full gate before requesting review:
 
 ```bash
-make check
+uv run --extra dev python scripts/check.py
 ```
 
 Also execute the manual verification steps named by the relevant roadmap PR. Large model and audio checks will be added only when those systems exist.

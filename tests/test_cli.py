@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from pytest import CaptureFixture
+import json
+
+from pytest import CaptureFixture, MonkeyPatch
 
 from serenity.cli import main
+from serenity.hardware import HardwareSnapshot
 
 
 def test_help_exits_successfully(capsys: CaptureFixture[str]) -> None:
@@ -15,3 +18,24 @@ def test_config_show_prints_resolved_settings(capsys: CaptureFixture[str]) -> No
 
     output = capsys.readouterr().out
     assert "voice: test_voice" in output
+
+
+def test_doctor_prints_machine_readable_recommendation(
+    capsys: CaptureFixture[str], monkeypatch: MonkeyPatch
+) -> None:
+    snapshot = HardwareSnapshot(
+        operating_system="linux",
+        architecture="x86_64",
+        cpu_count=8,
+        total_ram_gb=16,
+        available_ram_gb=9,
+        free_disk_gb=20,
+        accelerators=["cpu"],
+    )
+    monkeypatch.setattr("serenity.cli.inspect_hardware", lambda: snapshot)
+
+    assert main(["doctor", "--json"]) == 0
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["supported"] is True
+    assert output["selected_profile"]["name"] == "standard"

@@ -11,7 +11,9 @@ from serenity.config import ConfigError, load_settings
 def test_default_configuration_loads() -> None:
     settings = load_settings(environment={})
 
-    assert settings.tts.backend == "kokoro"
+    assert settings.llm.backend == "auto"
+    assert settings.tts.backend == "auto"
+    assert settings.hardware.profile == "auto"
     assert settings.pipeline.checkpoint_dir == Path("runs")
 
 
@@ -62,7 +64,19 @@ def test_unknown_environment_setting_is_rejected() -> None:
         load_settings(environment={"SERENITY_TTS__UNKNOWN": "value"})
 
 
-@pytest.mark.parametrize("path", ["config/models.yaml", "config/pacing_profiles.yaml"])
+def test_unknown_runtime_profile_is_rejected() -> None:
+    with pytest.raises(ConfigError, match=r"hardware\.profile"):
+        load_settings(environment={"SERENITY_HARDWARE__PROFILE": "impossible"})
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "config/models.yaml",
+        "config/pacing_profiles.yaml",
+        "config/runtime_profiles.yaml",
+    ],
+)
 def test_registry_skeletons_are_valid_yaml_mappings(path: str) -> None:
     document = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
 

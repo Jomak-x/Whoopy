@@ -25,7 +25,7 @@ Understood — this is me compiling everything from all the rounds into a single
 13. Roadmap (v0.1 → v1.0 → v2.0)
 14. Repository Structure
 15. Configuration Approach
-16. One-Command Setup (native macOS + Docker)
+16. One-Command Setup (native Windows, macOS, and Linux)
 17. Extension Points
 18. Appendix: Risks & Open Questions
 
@@ -35,12 +35,12 @@ Understood — this is me compiling everything from all the rounds into a single
 
 Serenity is two loosely-coupled products sharing one data contract:
 
-1. **`serenity-core`** (open source, self-hosted) — a fully-local pipeline on Apple Silicon (M4 Pro, 48 GB) that turns a prompt ("10-minute sleep meditation for anxiety, soft voice, rain") into a mastered audio file. Flow: **LLM script → compile to timeline → TTS per segment → assemble with exact pauses → ambient bed → mix/master**.
+1. **`serenity-core`** (open source, self-hosted) — a native local pipeline for Windows, macOS, and Linux that turns a prompt ("10-minute sleep meditation for anxiety, soft voice, rain") into a mastered audio file. Flow: **safe hardware profile → optional LLM script → compile to timeline → TTS per segment → assemble with exact pauses → ambient bed → mix/master**. Weak laptops retain template and pasted-script modes without a local LLM.
 2. **`serenity-commons`** (optional, public) — a web platform where self-hosted instances publish meditations and listeners browse/stream/download on mobile (PWA).
 
 **Non-negotiable design stance:** quality over speed (minutes per generation is fine); everything in the core is open-weights with self-host + redistribution-friendly licenses; the whole system is organized around a **timeline of segments**, generated **piece by piece**, because that is what gives deterministic pause control, bounded failure domains, and swappable models.
 
-**The headline picks:** LLM = **Qwen3-32B @ 6-bit MLX**; TTS = **Kokoro-82M** default (StyleTTS 2 expressive upgrade, OpenAudio S1 local-only, Piper fallback); Music = **CC0 loop library + procedural mixing** (Stable Audio Open swappable); Backbone = **canonical JSON timeline + typed swappable ports**; Local infra = **FastAPI + Huey/SQLite**, Commons infra = **Postgres/pgvector + object store/CDN**; **native ML worker on macOS, Docker for stateless infra only.**
+**The headline picks:** LLM runtime = **llama.cpp + profile-selected GGUF** (MLX optional); TTS runtime = **sherpa-onnx + Kokoro-82M** (other voices/models swappable); Music = **CC0 loop library + procedural mixing** (Stable Audio Open swappable); Backbone = **canonical JSON timeline + typed swappable ports**; Local infra = **FastAPI + Huey/SQLite**, Commons infra = **Postgres/pgvector + object store/CDN**; **native worker on Windows/macOS/Linux, no Docker required.**
 
 ---
 
@@ -48,15 +48,15 @@ Serenity is two loosely-coupled products sharing one data contract:
 
 | # | Decision | Rationale (WHY) |
 |---|---|---|
-| P1 | **No ML in Docker on macOS.** Native worker process; Docker only for stateless infra (Postgres/Redis/web). | Metal/MLX GPU is inaccessible inside Docker on macOS. This is the single most important operational constraint — document it front-and-center so nobody burns a day on GPU passthrough that doesn't exist. |
+| P1 | **No required Docker path.** The worker runs natively on Windows, macOS, and Linux; optional containers may host only support services. | Native llama.cpp and ONNX execution can use the laptop's CPU or accelerator directly. Installation must not depend on container support. |
 | P2 | **The atomic unit is a timeline segment**, not a script or an audio file. Canonical JSON timeline = single source of truth. | A guided meditation *is* an interleaving of speech and deliberate silence. Primitives `{SPEECH, SILENCE, BREATH, MUSIC_CUE}` losslessly encode it. Render, QC, resume, regenerate-one, and the breathing visualizer all read one structure. |
 | P3 | **Generate piece by piece at both stages** — LLM writes section-by-section; TTS renders segment-by-segment. | Long single-shot generation loses the thread and repeats ("notice your breath… notice your breath"); long single-shot TTS drifts. Small units → coherence, exact pause control, cheap partial regeneration. |
 | P4 | **Pauses are deterministic exact silence segments**, never model-guessed. LLM inline cues are compile-time input only. | Meditation lives or dies on pause precision; TTS timing is unreliable. |
 | P5 | **Swappable models via typed ports.** LLM/TTS/music/renderer/publisher/moderation are adapters behind stable interfaces. | The community can add models without touching the core; per-adapter `versioned_model_id` + `license_id` + error taxonomy give reproducibility, license gating, and correct retries. |
-| P6 | **LLM = Qwen3-32B @ 6-bit MLX** default; Llama-3.3-70B stage-isolated opt-in HQ; Mistral-24B lean. | Bottleneck is structure/pacing/editing, not parameter count. 32B co-resides with Kokoro; 70B is A/B-it-yourself, not default. |
-| P7 | **TTS = Kokoro-82M default** (non-AR consistency wins the 40–80-chunk stitch game + Apache-2.0); StyleTTS 2 expressive upgrade; OpenAudio S1 local-only license-gated; Piper fallback. | Per-segment stitched audio on headphones in silence is maximally unforgiving of AR timbre drift; non-AR determinism gives invisible stitches + reproducible caching. |
+| P6 | **Automatic Basic/Lite/Standard/High/Studio profiles.** llama.cpp/GGUF is the universal LLM path; Basic requires no LLM; MLX is optional. | One large model cannot fit every laptop. Live RAM/disk checks and later benchmarks choose the highest safe capability without asking users to select a backend. |
+| P7 | **sherpa-onnx + Kokoro-82M is the universal TTS baseline.** Other models remain license-gated adapters. | It provides a consistent TTS contract across Windows, macOS, and Linux while retaining Kokoro's small non-AR model and stitch consistency. |
 | P8 | **Music = CC0 loop library + procedural mixing** for v1; Stable Audio Open swappable. MusicGen out. | Meditation wants continuity, not novelty. Generative audio isn't reliably good/cleanly-licensed yet. MusicGen weights are CC-BY-NC (blocks the Commons). |
-| P9 | **Infra by phase.** v0.1–v1.0: Huey + SQLite (+sqlite-vec). v2.0 Commons: Postgres + pgvector, Temporal only if real DAGs emerge. One SQLAlchemy layer, Postgres-shaped from day one. | Keep the self-hosted core featherweight (its promise is "clone & run on one Mac"); requiring a Postgres/Temporal server locally kills self-host adoption. Let heavy infra arrive with the public platform. |
+| P9 | **Infra by phase.** v0.1–v1.0: Huey + SQLite (+sqlite-vec). v2.0 Commons: Postgres + pgvector, Temporal only if real DAGs emerge. One SQLAlchemy layer, Postgres-shaped from day one. | Keep the self-hosted core featherweight (its promise is "install and run on one laptop"); requiring a Postgres/Temporal server locally kills adoption. Let heavy infra arrive with the public platform. |
 | P10 | **Master to −16 LUFS / −1.5 dBTP; 48 kHz/24-bit FLAC master + AAC/Opus delivery.** | −16 LUFS is intentionally quieter than the −14 streaming norm (comfortable for sleep). FLAC preserves; AAC/Opus deliver efficiently to phones. |
 
 ---
@@ -65,23 +65,24 @@ Serenity is two loosely-coupled products sharing one data contract:
 
 ### 3.1 LLM — Script Writer
 
-| Model | License | Runtime / Quant | Footprint (weights+KV) | Quality notes |
-|---|---|---|---|---|
-| **Qwen3-32B** ⭐ *default* | Apache-2.0 | MLX 6-bit | ~26 GB | Excellent instruction-following & prose steering; co-resides with Kokoro; newest generation. |
-| **Llama-3.3-70B** *HQ opt-in* | Llama 3.3 Community (redistributable <700M MAU) | MLX 4-bit, **stage-isolated** | ~40 GB (load→gen→unload→then TTS) | Best raw prose, but diminishing returns once the 3-stage chain is good. A/B it; not default. |
-| **Mistral-Small-3.2-24B** *lean* | Apache-2.0 | MLX 4-bit | ~14 GB | Low-footprint / preview mode. |
-| **Gemma-3-27B** *alt (multilingual)* | Gemma | MLX 4-bit | ~16 GB | Gentle register; strong multilingual (languages extension). |
+| Profile | Initial resource floor | Runtime / model class | Product behavior |
+|---|---:|---|---|
+| **Basic** | 4 GB total / 1.5 GB available RAM | No LLM | Authored templates or pasted scripts; local TTS and rendering remain available. |
+| **Lite** | 8 GB total / 4 GB available RAM | llama.cpp, 1–2B GGUF | Small local writer with strict structured generation. |
+| **Standard** | 16 GB total / 8 GB available RAM | llama.cpp, 3–8B GGUF | Normal local generation target. |
+| **High** | 24 GB total / 14 GB available RAM | llama.cpp, 8–14B GGUF | Higher-quality local writing when benchmarks justify it. |
+| **Studio** | 48 GB total / 28 GB available RAM | llama.cpp, 30B-class GGUF | Large-model evaluation tier, never the universal default. |
 
-**Runtime:** MLX primary (Apple-native, best M-series throughput, cleanest Python API); llama.cpp/GGUF portable fallback for non-Apple hardware.
+**Runtime:** llama.cpp/GGUF is primary across CPU, Metal, CUDA, Vulkan, and other supported backends. MLX may accelerate Apple Silicon after it passes the same port contracts and quality tests. Exact model IDs are bound to profiles only after a blind quality/performance bakeoff.
 
 ### 3.2 TTS — Narration (LOCKED four-tier policy)
 
 | Tier | Model | License → Commons? | SR | AR? | Role & WHY |
 |---|---|---|---|---|---|
-| **Default (public-safe)** | **Kokoro-82M** | Apache-2.0 ✅ | 24 kHz | Non-AR | Identical, invisible stitches across all segments + reproducible caching; the automated narrator for all unattended generation. |
+| **Default (public-safe)** | **Kokoro-82M through sherpa-onnx** | Apache-2.0 ✅ | 24 kHz | Non-AR | One native Windows/macOS/Linux path, invisible stitches across segments, and reproducible caching. |
 | **Expressive upgrade (public-safe)** | **StyleTTS 2** | MIT-class (verify weights) ✅ | 24 kHz | Non-AR | Reference-audio style → soft/hushed delivery *deterministically*, Commons-legal, no AR drift. Covers most "softer than Kokoro" needs; makes Fish unnecessary for most. |
 | **Local-only HQ (license-gated)** | **OpenAudio S1 (Fish)** | CC-BY-NC-SA ❌ | 44.1 kHz | AR | Per-utterance expressive/whisper ceiling **under human curation** only; hard-gated by `license_id`, never reaches Commons. Runs PyTorch-MPS. |
-| **Fallback** | **Piper** | MIT ✅ | 22.05 kHz | Non-AR | CPU/ONNX robust degraded mode for non-Apple hardware. |
+| **Fallback** | **Piper** | GPL-3.0 code; per-voice review ⚠️ | 22.05 kHz | Non-AR | Lightweight fallback only after code and voice-license policy review. |
 
 *Rejected for default:* Chatterbox (MIT but AR-inconsistent), F5-TTS & XTTS-v2 (non-commercial licenses → local-only), OpenVoice V2 (a tone-color converter, use as a cloning *layer* not narrator).
 **Fidelity rule:** keep TTS at native SR; do not fake 48 kHz. The genuinely-48 kHz ambient bed sets the master container; upsample voice with `aresample=resampler=soxr`.
@@ -101,14 +102,14 @@ Serenity is two loosely-coupled products sharing one data contract:
 
 ```mermaid
 flowchart TB
-  subgraph Local["🖥️ serenity-core (native macOS, Metal/MLX)"]
+  subgraph Local["🖥️ serenity-core (native Windows / macOS / Linux)"]
     UI["Local Web UI (SvelteKit PWA)"]
     API["FastAPI control plane"]
     Q[("Huey + SQLite job queue")]
-    W["Generation Worker (native process)\n+ per-segment checkpoints/state machine"]
+    W["Generation Worker (native process)\n+ hardware profile + per-segment checkpoints"]
     subgraph Ports["Typed swappable ports (versioned_model_id + license_id + error taxonomy)"]
-      LLM["ScriptGenerator\nMLX: Qwen3-32B / Llama3.3-70B"]
-      TTS["SpeechSynthesizer\nKokoro / StyleTTS2 / OpenAudioS1 / Piper"]
+      LLM["ScriptGenerator\nllama.cpp + profile-selected GGUF\nMLX optional"]
+      TTS["SpeechSynthesizer\nsherpa-onnx + Kokoro\nother adapters optional"]
       MUS["AmbienceGenerator\nLoopLibrary / StableAudioOpen"]
       REN["Renderer\nffmpeg + pyloudnorm"]
       PUB["Publisher"]
@@ -118,7 +119,7 @@ flowchart TB
     FS[("Local FS: runs/<job_id>/ artifacts + masters")]
   end
 
-  subgraph Infra["🐳 docker compose (stateless infra only)"]
+  subgraph Infra["Optional support services (native or containers)"]
     RED[("Redis — optional scale-out")]
   end
 
@@ -140,7 +141,7 @@ flowchart TB
   CAPI --> CMOD
 ```
 
-**Deployment rule (P1) restated:** the worker + all model backends run as a **native macOS process** (`make worker` or a launchd plist). `docker compose up` starts only optional stateless infra + the web/API containers. Linux/NVIDIA users get an all-Docker path.
+**Deployment rule (P1) restated:** the worker and model backends run as native processes on Windows, macOS, and Linux. The same logical adapters automatically use CPU or available acceleration. Docker is optional for support services and never a prerequisite for local generation.
 
 ---
 
@@ -194,7 +195,7 @@ The JSON timeline is authoritative. Prose + inline cues are compile-time input o
 ## 6. Generation Pipeline (stage-by-stage)
 
 ### Stage 1 — PLAN
-LLM (Qwen3-32B) → structured outline. **Output = JSON**, not prose.
+Profile-selected LLM (or the Basic template planner) → structured outline. **Output = JSON**, not prose.
 ```jsonc
 { "sections": [
     {"name":"settle","goal":"arrive, release the day","target_ms":90000,"motifs":["weight","breath"]},
@@ -404,7 +405,7 @@ class ModerationScanner(Protocol):
 | Storage (local) | **Local FS** `runs/<job_id>/` + a `library/` for finished masters | Simple, inspectable, checkpointable. |
 | Storage (Commons) | **S3/R2 object store + CDN** | Audio is bandwidth-heavy and cacheable. |
 | Frontend | **SvelteKit PWA** (both local UI and Commons) | Lean bundles matter for a mobile-first, offline-caching PWA; SSR/SEO is fine for shareable pages. (Next.js is a defensible alternative for the Commons only.) |
-| ML runtime | **MLX** (LLM + Kokoro/StyleTTS2), **PyTorch-MPS** (Fish), **ONNX** (Piper) | Native Metal; MLX is Apple-first-party and fastest on M-series. |
+| ML runtime | **llama.cpp/GGUF** for text, **sherpa-onnx/Kokoro** for speech; MLX and other accelerators optional | One logical native path spans Windows, macOS, and Linux, while typed adapters preserve room for measured platform optimizations. |
 
 ---
 
@@ -468,8 +469,8 @@ class ModerationScanner(Protocol):
 
 | Phase | Scope & Milestones | Rough effort |
 |---|---|---|
-| **v0.1 — personal local pipeline** | CLI only. Qwen3-32B (MLX) 3-stage script → compiler → canonical timeline → Kokoro per-segment (edge-trim + per-seg loudness) → exact silences + join discipline → CC0 loop bed → ffmpeg duck/master → FLAC+AAC. Hard-coded config. **Goal: a good meditation from one command.** | ~2–4 weeks |
-| **v1.0 — polished self-hosted app** | FastAPI + Huey/SQLite + SvelteKit PWA; job progress UI; parameter presets; full QC gate; per-segment checkpoint/resume + content-addressed cache; StyleTTS 2, OpenAudio S1 (license-gated), Piper adapters; blind A/B/C TTS harness; one-command setup (native + Docker infra). | ~6–10 weeks |
+| **v0.1 — personal local pipeline** | CLI only. Automatic hardware profile → Basic template or llama.cpp/GGUF 3-stage script → compiler → canonical timeline → sherpa-onnx/Kokoro per segment → exact silences → CC0 loop bed → FFmpeg master. **Goal: a good meditation from one command on each supported OS.** | ~2–4 weeks |
+| **v1.0 — polished self-hosted app** | FastAPI + Huey/SQLite + SvelteKit PWA; job progress UI; parameter presets; full QC gate; checkpoint/resume + cache; model bakeoffs; signed native installers for Windows/macOS/Linux; optional support-service containers only. | ~6–10 weeks |
 | **v2.0 — public Commons** | Postgres+pgvector, S3/R2+CDN, signed-manifest publishing + license gate, accounts/auth, browse/search/stream, moderation queue, PWA offline caching + media-session controls. | ~8–12 weeks |
 
 ---
@@ -480,12 +481,15 @@ class ModerationScanner(Protocol):
 serenity/
 ├── README.md                      # includes the macOS-Docker-GPU warning up front
 ├── docker-compose.yml             # STATELESS INFRA + web/api ONLY (no ML)
-├── Makefile                       # `make setup`, `make worker` (native), `make dev`
+├── Makefile                       # optional Unix wrappers around uv/Python commands
 ├── pyproject.toml
+├── uv.lock                        # exact cross-platform Python resolution
+├── scripts/check.py               # Windows/macOS/Linux quality gate
 ├── config/
 │   ├── default.yaml               # layered config (see §15)
 │   ├── models.yaml                # adapter registry: name → class + versioned_model_id + license_id + runtime
 │   ├── pacing_profiles.yaml       # slow_sleep, focus, daytime → speed + silence scaling
+│   ├── runtime_profiles.yaml      # Basic/Lite/Standard/High/Studio safety margins
 │   └── prompts/
 │       ├── plan_system.md
 │       ├── script_system.md
@@ -494,13 +498,14 @@ serenity/
 │   └── serenity/                  # installable local-core Python package
 │       ├── ports/                 # base, script_generator, speech_synthesizer, ambience_generator, renderer, publisher, moderation_scanner
 │       ├── adapters/
-│       │   ├── llm/               # mlx_qwen3.py, mlx_llama3_hq.py, mlx_mistral.py, llamacpp.py
-│       │   ├── tts/               # kokoro.py, styletts2.py, openaudio_s1.py, piper.py
+│       │   ├── llm/               # llama_cpp.py universal; optional mlx accelerators
+│       │   ├── tts/               # sherpa_onnx.py universal; optional expressive adapters
 │       │   ├── ambience/          # loop_library.py, stable_audio_open.py, binaural_dsp.py
 │       │   └── renderer/          # ffmpeg_renderer.py
 │       ├── timeline/              # schema.py (JSON Schema + dataclasses), compiler.py (prose+cues → timeline)
 │       ├── pipeline/              # orchestrator.py, state_machine.py, checkpoint.py, cache.py, duration_fit.py
 │       ├── qc/                    # asr_roundtrip.py, audio_checks.py, gate.py
+│       ├── hardware.py            # native capability inspection + profile selection
 │       └── api/                   # fastapi app, huey_tasks.py, progress.py
 ├── db/                            # sqlalchemy models (Postgres-shaped), migrations (alembic)
 ├── assets/
@@ -520,13 +525,16 @@ Layered YAML + environment overrides (`SERENITY_*`). Precedence: `config/default
 ```yaml
 # config/default.yaml
 llm:
-  backend: mlx_qwen3            # from models.yaml
-  hq_backend: mlx_llama3_hq     # opt-in via --hq
+  backend: auto                # resolves through the safe runtime profile
+  hq_backend: auto
   max_context_tokens: 8192
 tts:
-  backend: kokoro               # default; expressive: styletts2; local_only: openaudio_s1; fallback: piper
+  backend: auto                # universal default resolves to sherpa-onnx/Kokoro
   voice: af_heart
   speed: 0.9
+hardware:
+  profile: auto
+  allow_remote_fallback: false
 ambience:
   backend: loop_library
   default_tags: [rain, drone]
@@ -549,22 +557,19 @@ storage:
 
 ## 16. One-Command Setup
 
-**The macOS reality (state this at the top of the README):** GPU/Metal is **not** accessible inside Docker on macOS, so the ML worker runs **natively**. Docker is used only for stateless infra + the web/API containers.
+**Native rule:** the model worker runs directly on Windows, macOS, and Linux. Docker is not required. The application selects CPU, Metal, CUDA, Vulkan, or another supported runtime backend automatically.
 
-**Apple Silicon (recommended):**
+**Developer foundation on every supported OS:**
 ```bash
 git clone https://github.com/you/serenity && cd serenity
-make setup          # creates a native venv, installs MLX + PyTorch(MPS) + ffmpeg (brew), downloads model weights
-make infra          # docker compose up -d  (optional: Redis; nothing ML)
-make worker         # starts the NATIVE ML worker (or install the launchd plist)
-make dev            # FastAPI + SvelteKit dev servers
-# CLI (v0.1):
-serenity generate --theme sleep --minutes 10 --voice af_heart --bed rain
+uv sync --extra dev --locked
+uv run serenity doctor
+uv run --extra dev python scripts/check.py
 ```
 
-**Linux + NVIDIA (community):** an all-Docker path is provided (`docker-compose.gpu.yml`) since GPU passthrough works there; the worker runs in-container with CUDA.
+`uv` installs the pinned Python runtime when needed. `serenity doctor` selects Basic, Lite, Standard, High, or Studio without downloading or loading a model. Make remains an optional Unix convenience layer.
 
-`make worker` optionally installs a **launchd plist** so the native worker restarts on boot/crash.
+**End-user target:** signed native installers bundle the application runtime and correct llama.cpp, sherpa-onnx, and FFmpeg binaries for their OS. Models are verified separate downloads selected only after the compatibility check. Users do not install Python, CMake, CUDA, or choose quantization manually.
 
 ---
 
@@ -586,7 +591,7 @@ serenity generate --theme sleep --minutes 10 --voice af_heart --bed rain
 
 1. **TTS is the one subjective, empirical call.** Render the same 10-min meditation through Kokoro (soft voice + DSP), StyleTTS 2 (hushed reference clip), and OpenAudio S1 (soft tags); blind headphone A/B/C for artifacts, timbre drift at stitch points, low-energy stability. The code supports all three regardless of outcome. Expected: Kokoro or StyleTTS 2 wins for unattended; Fish only under human curation.
 2. **License verification before anything reaches the Commons.** Confirm current SPDX for: OpenAudio S1 (CC-BY-NC-SA; flagship API-only, only S1-mini open) → local-only; StyleTTS 2 weights (MIT? verify); F5-TTS / XTTS-v2 (non-commercial) → local-only; every CC0 loop in `assets/ambience/`. License terms move — the `license_id` gate is the safety net.
-3. **HQ 70B mode viability.** Confirm load→unload→TTS stage isolation is fast enough to be usable, and A/B whether the quality gain over Qwen3-32B justifies keeping it. Honestly documented as "probably not worth it for most."
+3. **Profile calibration.** Measure memory, tokens per second, and meditation quality across representative Windows, macOS, and Linux hardware. Conservative YAML thresholds are a safety starting point, not evidence that one exact model is suitable.
 4. **Cross-segment consistency in practice.** Even with non-AR Kokoro, validate that 40–80-segment stitching is seamless; the boundary-artifact QC check + per-segment loudness norm are the safeguards.
 5. **Edge-silence trim correctness.** This is the linchpin of the "exact pauses" guarantee — write a golden-file test asserting trimmed segments end within the ±5 ms residual window before shipping.
 6. **ASR QC false-positives on soft/short segments.** Keep the CER threshold lenient; whisper.cpp is unreliable on 2-second hushed utterances — treat borderline as pass to avoid needless re-rolls.
@@ -594,6 +599,4 @@ serenity generate --theme sleep --minutes 10 --voice af_heart --bed rain
 
 ---
 
-That's the complete specification — data model, pipeline, audio recipes, port interfaces, tech stack, public platform, reliability, roadmap, repo layout, config, setup, and open questions, with the *why* attached throughout. Your coding agent can start at v0.1 (§13) building the timeline schema + compiler first (§5, §7), then the Kokoro `SpeechSynthesizer` adapter, then the assembler and QC gate.
-
-Want me to also generate the **literal starter files** — the JSON Schema for the timeline, the Python port stubs from §9, and the `models.yaml` / `default.yaml` configs — so the agent has real files to fill in rather than transcribe from this doc?
+That's the complete specification — native portability contract, hardware profiles, data model, pipeline, audio recipes, port interfaces, tech stack, public platform, reliability, roadmap, repository layout, configuration, setup, and open questions, with the *why* attached throughout. Implementation starts with the timeline schema and compiler, then fixture adapters, then the universal sherpa-onnx/Kokoro and llama.cpp/GGUF paths before optional platform accelerators.

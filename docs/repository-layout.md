@@ -33,6 +33,7 @@ API/CLI -> application services -> pipeline
 - `pipeline/` coordinates domain objects and ports; it does not inspect model names.
 - `qc/` evaluates artifacts and returns structured results.
 - `api/` translates local HTTP/queue input into application calls; it does not run models in-process.
+- `hardware.py` detects native resources and selects a safe user-facing runtime profile.
 
 ## Replaceable Models
 
@@ -43,6 +44,8 @@ A model replacement has three controlled surfaces:
 3. contract and quality tests establish whether it is a supported replacement.
 
 Changing a registry key must not change timeline, pipeline, API, or UI code. If a backend requires special prompt syntax, delivery controls, sample-rate handling, or error recovery, that behavior belongs inside its adapter.
+
+The default path resolves `auto` to llama.cpp/GGUF and sherpa-onnx/Kokoro. Optional MLX, CUDA-specific, or future runtimes implement the same ports and cannot become requirements of the domain package.
 
 ## Runtime Data
 

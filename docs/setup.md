@@ -1,133 +1,146 @@
 # Setup And Build Guide
 
-This guide separates what works in the repository today from the native ML, audio, and web tooling required by later phases.
+Serenity uses the same locked developer workflow on Windows, macOS, and Linux. Docker is not required. Actual end-user installers arrive after the native runtimes exist; Phase 0 proves that setup, hardware inspection, configuration, and quality checks are portable.
 
 ## Phase 0: Run The Foundation
 
-### Required Today
+### 1. Install Git And uv
 
-- Git
-- Python 3.11 (reference and CI version) or Python 3.12
-- Make
+Install Git through the operating system's normal installer or package manager. Install `uv` using its [official cross-platform instructions](https://docs.astral.sh/uv/getting-started/installation/).
 
-Create the environment and run every quality check:
+`uv` is the bootstrap dependency. It can install the Python version requested by `.python-version`, create the isolated environment, and reproduce `uv.lock`. A contributor does not need to configure a system Python manually.
+
+### 2. Install The Locked Environment
+
+Run the same command in PowerShell, Command Prompt, Terminal, or a Linux shell:
+
+```bash
+uv sync --extra dev --locked
+```
+
+This phase installs only lightweight configuration and development packages. It does not download a language model, TTS model, FFmpeg, CUDA toolkit, or MLX.
+
+### 3. Inspect The Laptop
+
+```bash
+uv run serenity doctor
+```
+
+The command reports the operating system, architecture, CPU threads, total and currently available RAM, free disk, detectable acceleration, and highest safe profile. JSON output is available to installers and the future UI:
+
+```bash
+uv run serenity doctor --json
+uv run serenity doctor --profile lite
+```
+
+Possible profiles:
+
+- Basic: templates or pasted scripts with local speech, no local LLM;
+- Lite: a 1–2B-class quantized local model;
+- Standard: a 3–8B-class quantized local model;
+- High: an 8–14B-class quantized local model;
+- Studio: a 30B-class quantized local model.
+
+Phase 0 makes no download based on this result. Later model management must repeat the live check and run a short runtime benchmark before selecting a precise artifact.
+
+### 4. Verify The Repository
+
+```bash
+uv run serenity --help
+uv run serenity config show
+uv run --extra dev python scripts/check.py
+```
+
+Unix contributors can optionally use:
 
 ```bash
 make setup
-source .venv/bin/activate
-serenity --help
-serenity config show
 make check
 ```
 
-If `python3.11` is installed under another name, override the Make variable:
+Make is not required on Windows. The Python check script is the shared contract used by every operating system in CI.
 
-```bash
-make setup PYTHON=/absolute/path/to/python3.11
-```
-
-`make setup` is intentionally lightweight in Phase 0. It installs configuration and development dependencies but no model runtime or weights.
-
-### Local Configuration
+## Local Configuration
 
 Defaults work without local files. Use process environment variables for temporary or secret overrides:
 
 ```bash
-export SERENITY_TTS__VOICE=af_heart
+export SERENITY_TTS__VOICE=af_heart       # macOS/Linux
+$env:SERENITY_TTS__VOICE = "af_heart"    # PowerShell
 ```
 
-`.env.example` documents the variable names. Phase 0 does not automatically load `.env`; if you create one, source it through your shell or process manager.
-
-Create `config/local.yaml` only when YAML is more convenient:
+Create `config/local.yaml` for durable non-secret machine overrides:
 
 ```yaml
 tts:
   voice: af_heart
+hardware:
+  profile: auto
 pipeline:
-  checkpoint_dir: /absolute/path/to/serenity-runs
+  checkpoint_dir: ./runs
 ```
 
-Do not commit `.env` or `config/local.yaml`. Verify precedence with:
+Do not commit `.env` or `config/local.yaml`. `.env.example` documents variable names, but Phase 0 does not automatically load `.env`.
 
-```bash
-SERENITY_TTS__VOICE=environment_voice serenity config show
-serenity config show --tts-voice cli_voice
-```
+## Native Runtime Strategy
 
-## Later Native Audio And ML Requirements
+The future normal path is:
 
-The primary local target is an Apple Silicon Mac. Before the first real model and renderer PRs, install or verify:
+- llama.cpp/GGUF for cross-platform local script generation;
+- sherpa-onnx/Kokoro for cross-platform local speech;
+- FFmpeg for deterministic rendering;
+- optional MLX or other accelerators behind the same typed ports.
 
-- Homebrew
-- FFmpeg
-- Xcode Command Line Tools
-- sufficient disk space for model weights and generated audio
+Users will not select Metal, CUDA, Vulkan, or CPU manually. Runtime inspection and benchmarks resolve the best available implementation. Apple Silicon remains well accelerated, but it is no longer a prerequisite.
 
-Example checks:
+## Later Native Requirements
 
-```bash
-xcode-select -p
-brew --version
-ffmpeg -version
-```
+The adapter and audio PRs will add verified downloads for the correct platform binaries. Developers working on those adapters may need native build tools, but normal users should not.
 
-The ML worker must run natively on macOS to use Metal/MLX or PyTorch MPS. Docker Desktop may be used later for web/API and stateless support services, but it is not the macOS ML execution path.
+The intended release artifacts are:
 
-## Later Web Requirements
+- a signed macOS application or installer;
+- a signed Windows installer;
+- a Linux AppImage or equivalent package.
 
-The SvelteKit phase will add:
-
-- Node 20 or newer
-- npm lockfile and scripts under `web/`
-- a local API-to-PWA development command
-
-Do not install frontend dependencies during Phase 0; the `web/` directory currently documents ownership only.
+Each artifact will bundle the application runtime and correct platform binaries. Model files download separately only after compatibility and license checks.
 
 ## Build Order
 
-Use the detailed PR plan rather than jumping directly to real models:
-
-1. repository and configuration foundation;
+1. portable repository, configuration, hardware doctor, and CI;
 2. canonical timeline types and validation;
 3. deterministic compiler and placeholder audio;
 4. renderer, cache, and quality checks;
-5. typed model ports and real adapters;
-6. script generation and recovery;
-7. local API, worker, database, and PWA;
-8. model bakeoff and product hardening;
-9. optional Commons platform.
-
-The first meaningful product milestone is one prompt producing one inspectable timeline and one correctly timed audio file through the CLI. A web UI is not required to prove that core.
-
-## Expected Runtime Paths
-
-Later phases create these ignored paths automatically:
-
-- `runs/` — manifests and intermediate artifacts for each generation;
-- `cache/` — content-addressed reusable results;
-- `models/` — optional repository-local model weights;
-- `serenity.db` — local persistence.
-
-Do not create or commit placeholders inside them. Tests use temporary directories so local data cannot influence their results.
+5. typed runtime ports and fixture adapters;
+6. universal llama.cpp and sherpa-onnx adapters;
+7. measured model profiles and artifact management;
+8. script generation and recovery;
+9. local API, worker, database, and PWA;
+10. native installers;
+11. optional Commons platform.
 
 ## Troubleshooting
 
-### `python3.11` is missing
+### `uv` is not found
 
-Install Python 3.11 with your preferred version manager or Homebrew, then pass its absolute path through `PYTHON` if necessary.
+Restart the terminal after installation or follow the PATH instructions printed by the official installer.
 
-### pip tries a user install inside `.venv`
+### The lockfile is out of date
 
-The Makefile passes `--no-user` to neutralize a global `user = true` pip setting. If setup still fails, inspect `python -m pip config list` for additional machine-specific overrides.
+`uv sync --locked` refuses dependency drift deliberately. Contributors changing `pyproject.toml` must run `uv lock` and commit the resulting lockfile.
 
-### `serenity` is not found
+### Doctor selects a lower profile than total RAM suggests
 
-Activate `.venv`, or invoke `.venv/bin/serenity` directly.
+Selection uses currently available RAM as well as total RAM. Close memory-heavy applications and run it again. This prevents a model that normally fits from causing an out-of-memory failure under current load.
 
-### Configuration reports an unknown field
+### Doctor selects Basic
 
-Serenity rejects unknown keys to catch misspellings. Compare the field with `config/default.yaml` and use exactly one `__` separator between the section and field in environment variables, for example `SERENITY_TTS__VOICE`.
+Basic is a supported product mode, not an error. It avoids a local LLM while retaining templates, pasted scripts, timeline compilation, local speech, and rendering once those features are implemented.
+
+### Doctor reports unsupported
+
+The laptop does not currently satisfy Basic's RAM or disk margin. Free resources and rerun the command. Serenity deliberately refuses to attempt a model load.
 
 ### A model named in `models.yaml` cannot run
 
-That is expected in Phase 0: entries are provisional adapter declarations with `status: planned`. Real model loading is added only after typed ports and fixture adapters exist.
+Expected in Phase 0: entries remain `status: planned`. Hardware detection is active; model adapters and downloads are not.

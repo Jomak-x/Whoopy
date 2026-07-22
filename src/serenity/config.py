@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -42,6 +42,11 @@ class TTSSettings(StrictSettings):
     backend: str
     voice: str
     speed: float = Field(gt=0)
+
+
+class HardwareSettings(StrictSettings):
+    profile: Literal["auto", "basic", "lite", "standard", "high", "studio"] = "auto"
+    allow_remote_fallback: bool = False
 
 
 class AmbienceSettings(StrictSettings):
@@ -75,6 +80,7 @@ class Settings(StrictSettings):
 
     llm: LLMSettings
     tts: TTSSettings
+    hardware: HardwareSettings
     ambience: AmbienceSettings
     render: RenderSettings
     pauses: PauseSettings

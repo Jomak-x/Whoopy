@@ -26,11 +26,14 @@ Done when:
 - the directory structure exists
 - the baseline config files exist
 - the package installs and its foundation quality gate passes
+- native hardware inspection chooses a safe profile or refuses before model loading
+- the same locked quality gate passes on Windows, macOS, and Linux
 
 Evidence:
 
 - `serenity --help` and `serenity config show` run successfully
-- `make check` runs linting, formatting, strict typing, and tests
+- `serenity doctor` reports structured capabilities without loading a model
+- `uv run python scripts/check.py` runs linting, formatting, strict typing, and tests
 - configuration precedence is covered by automated tests
 
 ## Phase 1: Local Core Skeleton

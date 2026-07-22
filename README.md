@@ -1,19 +1,20 @@
 # Serenity
 
-Serenity is a local-first, timeline-driven system for generating guided meditation audio. The project will first prove a deterministic local CLI on Apple Silicon, then add a local web application, and only later add the optional public Serenity Commons.
+Serenity is a local-first, timeline-driven system for generating guided meditation audio. The project will first prove a deterministic native CLI across ordinary Windows, macOS, and Linux laptops, then add a local web application, and only later add the optional public Serenity Commons.
 
 > [!IMPORTANT]
-> The ML worker will run **natively on macOS**. Docker Desktop on macOS does not expose Metal/MLX acceleration to Linux containers, so Docker will be reserved for stateless support services and web/API processes.
+> The model worker runs **natively, without Docker**. Serenity uses one automatic runtime path across Windows, macOS, and Linux: llama.cpp/GGUF for local text generation and sherpa-onnx/Kokoro for speech. Metal, CUDA, Vulkan, and CPU execution are runtime details selected for the user.
 
 ## Current Status
 
-Phase 0 establishes the repository foundation. It includes documentation, the Python package and CLI skeleton, typed layered configuration, ownership markers for future components, tests, and CI. It intentionally does **not** implement timelines, generation, audio, APIs, queues, or user interfaces.
+Phase 0 establishes the repository foundation. It includes documentation, the Python package and CLI skeleton, typed layered configuration, automatic hardware profiling, ownership markers for future components, tests, and native CI on Windows, macOS, and Linux. It intentionally does **not** implement timelines, model inference, audio rendering, APIs, queues, or user interfaces.
 
 The only functional commands in this phase are:
 
 ```bash
 serenity --help
 serenity config show
+serenity doctor
 ```
 
 ## Design In One Minute
@@ -26,30 +27,31 @@ prompt -> plan -> script -> canonical timeline -> segment audio -> mix/master ->
 
 That timeline is the source of truth. Deliberate pauses become exact `SILENCE` events rather than timing guesses left to a TTS model. LLM, TTS, ambience, rendering, and publishing capabilities sit behind typed ports so a supported model can be replaced through an adapter and configuration instead of a pipeline rewrite.
 
-Model entries in [`config/models.yaml`](./config/models.yaml) are provisional starting points. A registry entry records its adapter, exact model identifier, license, runtime, and publication policy. Real adapters and their contract tests arrive in later PRs.
+Model entries in [`config/models.yaml`](./config/models.yaml) are provisional starting points. The default `auto` path selects a safe profile from [`config/runtime_profiles.yaml`](./config/runtime_profiles.yaml). A registry entry records its adapter, model identifier, license, runtime, supported platforms, and publication policy. Real adapters and their contract tests arrive in later PRs.
+
+Weak laptops do not need a local LLM. Basic mode supports authored templates or pasted scripts plus local TTS. If even Basic is unsafe, Serenity refuses before downloading or loading a model and explains which resource is insufficient.
 
 ## Quick Start
 
 ### Requirements
 
-- macOS on Apple Silicon for the primary local ML path
-- Python 3.11 (3.12 is supported for foundation tooling)
+- Windows, macOS, or Linux on x64 or ARM64
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/), which installs the required Python automatically
 - Git
 - FFmpeg for later audio phases
 - Node 20 or newer for the later SvelteKit UI
-- Xcode Command Line Tools and Homebrew for later native dependencies
 
 ### Install And Verify
 
 ```bash
-make setup
-source .venv/bin/activate
-serenity --help
-serenity config show
-make check
+uv sync --extra dev --locked
+uv run serenity --help
+uv run serenity config show
+uv run serenity doctor
+uv run --extra dev python scripts/check.py
 ```
 
-`make setup` currently creates a Python environment and installs only lightweight foundation dependencies. It does not download model weights or install an ML runtime.
+`uv` reads `.python-version`, installs Python 3.11 when needed, and reproduces `uv.lock`. The setup installs only lightweight foundation dependencies; it does not download model weights or install an ML runtime. Unix contributors may use the equivalent `make setup` and `make check` wrappers.
 
 ## Configuration
 
@@ -62,8 +64,8 @@ config/default.yaml < config/local.yaml < SERENITY_* environment < CLI flags
 Use `config/local.yaml` for machine-local non-secret overrides and process environment variables for secrets. `.env` is ignored by Git but is not automatically loaded in Phase 0; source it through your shell or process manager. Nested environment variables use two underscores:
 
 ```bash
-SERENITY_TTS__VOICE=test_voice serenity config show
-serenity config show --tts-voice cli_voice
+SERENITY_TTS__VOICE=test_voice uv run serenity config show
+uv run serenity config show --tts-voice cli_voice
 ```
 
 See [`config/README.md`](./config/README.md) for the contract.
@@ -72,7 +74,9 @@ See [`config/README.md`](./config/README.md) for the contract.
 
 ```text
 config/                versioned settings, model registry, pacing, prompts
+scripts/check.py        platform-neutral lint, format, type, and test gate
 src/serenity/          Python domain package and future local control plane
+  hardware.py          native capability inspection and safe profile selection
   ports/               typed capability contracts
   adapters/            model and infrastructure integrations
   timeline/            canonical timeline schema and compiler
@@ -85,6 +89,7 @@ web/                    future local SvelteKit PWA
 commons/                future optional public platform
 tests/                  unit, contract, golden, and integration tests
 docs/                   architecture, setup, roadmap, and contribution docs
+uv.lock                 exact cross-platform dependency resolution
 ```
 
 The `src/` layout prevents tests from accidentally importing an uninstalled working copy. See [`docs/repository-layout.md`](./docs/repository-layout.md) for component boundaries and placement rules.
@@ -98,32 +103,36 @@ Read in this order:
 3. [`docs/repository-layout.md`](./docs/repository-layout.md) — where code belongs
 4. [`docs/setup.md`](./docs/setup.md) — machine and build sequence
 5. [`docs/roadmap.md`](./docs/roadmap.md) — implementation phases
-6. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-7. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-8. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+6. [`docs/native-portability.md`](./docs/native-portability.md) — automatic cross-platform runtime and weak-laptop behavior
+7. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+8. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+9. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 
 ## Non-Negotiable Design Rules
 
 - The local core must remain useful without a cloud dependency.
+- Basic mode must remain useful without a local LLM.
 - The canonical timeline, not generated prose or audio, is the source of truth.
 - Deliberate silence is explicit and deterministic.
 - Model-specific behavior stays inside adapters.
 - A failed segment must not require regenerating a complete meditation.
 - Public artifacts require explicit license and provenance checks.
 - Commons must never become a dependency of local generation.
+- No installer or model manager may load an artifact that fails the live-resource safety check.
 
 ## Development Commands
 
 ```bash
-make setup          # create .venv and install the package with dev tools
-make test           # run unit tests
-make lint           # run Ruff lint checks
-make format         # format Python files
-make format-check   # verify formatting without changing files
-make typecheck      # run strict mypy checks
-make check          # run the complete local/CI quality gate
+uv sync --extra dev --locked                 # exact cross-platform setup
+uv run serenity doctor                       # select a safe native profile
+uv run --extra dev python scripts/check.py   # complete local/CI quality gate
+
+make setup          # optional Unix wrapper for uv sync
+make test           # optional Unix test wrapper
+make format         # optional Unix formatting wrapper
+make check          # optional Unix wrapper for the same Python check script
 ```
 
 Commands such as `make worker`, `make dev`, and `serenity generate` are documented target interfaces, not Phase 0 features.
