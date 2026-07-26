@@ -1,6 +1,6 @@
 # Setup And Build Guide
 
-Serenity uses the same locked developer workflow on Windows, macOS, and Linux. Docker is not required. Actual end-user installers arrive after the native runtimes exist; Phase 0 proves that setup, hardware inspection, configuration, and quality checks are portable.
+Whoopy uses the same locked developer workflow on Windows, macOS, and Linux. Docker is not required. Actual end-user installers arrive after the native runtimes exist; Phase 0 proves that setup, hardware inspection, configuration, and quality checks are portable.
 
 ## Phase 0: Run The Foundation
 
@@ -23,14 +23,14 @@ This phase installs only lightweight configuration and development packages. It 
 ### 3. Inspect The Laptop
 
 ```bash
-uv run serenity doctor
+uv run whoopy doctor
 ```
 
 The command reports the operating system, architecture, CPU threads, total and currently available RAM, free disk, detectable acceleration, and highest safe profile. JSON output is available to installers and the future UI:
 
 ```bash
-uv run serenity doctor --json
-uv run serenity doctor --profile lite
+uv run whoopy doctor --json
+uv run whoopy doctor --profile lite
 ```
 
 Possible profiles:
@@ -46,8 +46,8 @@ Phase 0 makes no download based on this result. Later model management must repe
 ### 4. Verify The Repository
 
 ```bash
-uv run serenity --help
-uv run serenity config show
+uv run whoopy --help
+uv run whoopy config show
 uv run --extra dev python scripts/check.py
 ```
 
@@ -65,8 +65,8 @@ Make is not required on Windows. The Python check script is the shared contract 
 Defaults work without local files. Use process environment variables for temporary or secret overrides:
 
 ```bash
-export SERENITY_TTS__VOICE=af_heart       # macOS/Linux
-$env:SERENITY_TTS__VOICE = "af_heart"    # PowerShell
+export WHOOPY_TTS__VOICE=af_heart       # macOS/Linux
+$env:WHOOPY_TTS__VOICE = "af_heart"    # PowerShell
 ```
 
 Create `config/local.yaml` for durable non-secret machine overrides:
@@ -139,7 +139,7 @@ Basic is a supported product mode, not an error. It avoids a local LLM while ret
 
 ### Doctor reports unsupported
 
-The laptop does not currently satisfy Basic's RAM or disk margin. Free resources and rerun the command. Serenity deliberately refuses to attempt a model load.
+The laptop does not currently satisfy Basic's RAM or disk margin. Free resources and rerun the command. Whoopy deliberately refuses to attempt a model load.
 
 ### A model named in `models.yaml` cannot run
 

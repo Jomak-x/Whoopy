@@ -1,4 +1,4 @@
-"""Run Serenity's platform-neutral quality gate.
+"""Run Whoopy's platform-neutral quality gate.
 
 Make remains a convenience wrapper for Unix contributors; CI and Windows call
 this script through uv so the actual verification contract is identical.

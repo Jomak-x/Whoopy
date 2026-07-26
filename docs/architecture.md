@@ -2,7 +2,7 @@
 
 ## Big Picture
 
-Serenity is built as a local generation engine plus an optional public distribution layer.
+Whoopy is built as a local generation engine plus an optional public distribution layer.
 
 The local engine exists to solve the hard problem first: generate a deterministic meditation audio file natively on an ordinary Windows, macOS, or Linux laptop. The public platform comes later because it adds network, moderation, storage, and license complexity that should not block the core experience.
 

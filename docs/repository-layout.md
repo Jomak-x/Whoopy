@@ -7,7 +7,7 @@ This document is the placement guide for new code. It turns the conceptual archi
 | Path | Owns | Must not own |
 |---|---|---|
 | `config/` | versioned defaults, registries, pacing data, prompts | secrets, machine-local values, model weights |
-| `src/serenity/` | local domain logic, ports, adapters, pipeline, QC, control plane | Commons-only publishing UI or generated artifacts |
+| `src/whoopy/` | local domain logic, ports, adapters, pipeline, QC, control plane | Commons-only publishing UI or generated artifacts |
 | `assets/` | source assets with redistribution provenance | generated runs, untracked downloads |
 | `db/` | persistence models and migrations | domain decisions tied directly to an ORM session |
 | `web/` | local SvelteKit control and inspection UI | generation or audio rules |
@@ -17,7 +17,7 @@ This document is the placement guide for new code. It turns the conceptual archi
 
 ## Python Package Boundaries
 
-`src/serenity` uses a source layout so importing `serenity` means the installed package is being tested. Future modules follow these dependency rules:
+`src/whoopy` uses a source layout so importing `whoopy` means the installed package is being tested. Future modules follow these dependency rules:
 
 ```text
 timeline/domain <- pipeline -> ports <- adapters

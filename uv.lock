@@ -294,7 +294,7 @@ wheels = [
 ]
 
 [[package]]
-name = "serenity"
+name = "whoopy"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [

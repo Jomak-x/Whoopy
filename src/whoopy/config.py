@@ -1,10 +1,10 @@
-"""Typed, layered configuration loading for all Serenity entry points.
+"""Typed, layered configuration loading for all Whoopy entry points.
 
 The precedence is deliberately centralized here:
 
 1. `config/default.yaml`
 2. `config/local.yaml` when present
-3. `SERENITY_*` environment variables
+3. `WHOOPY_*` environment variables
 4. explicit CLI overrides
 
 Future API and worker processes should call this module instead of inventing
@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 class ConfigError(ValueError):
-    """Raised when Serenity configuration cannot be loaded or validated."""
+    """Raised when Whoopy configuration cannot be loaded or validated."""
 
 
 class StrictSettings(BaseModel):
@@ -120,7 +120,7 @@ def _deep_merge(base: dict[str, Any], override: Mapping[str, Any]) -> dict[str, 
 
 
 def _environment_overrides(environment: Mapping[str, str]) -> dict[str, Any]:
-    prefix = "SERENITY_"
+    prefix = "WHOOPY_"
     overrides: dict[str, Any] = {}
 
     for name, raw_value in environment.items():
@@ -128,7 +128,7 @@ def _environment_overrides(environment: Mapping[str, str]) -> dict[str, Any]:
             continue
         path = [part.lower() for part in name[len(prefix) :].split("__") if part]
         if len(path) != 2:
-            raise ConfigError(f"Environment setting {name} must use SERENITY_<SECTION>__<FIELD>")
+            raise ConfigError(f"Environment setting {name} must use WHOOPY_<SECTION>__<FIELD>")
 
         # YAML scalar parsing makes `false`, `12`, and `[rain, drone]` useful
         # without maintaining a separate type-conversion table.
@@ -158,4 +158,4 @@ def load_settings(
     try:
         return Settings.model_validate(values)
     except ValidationError as error:
-        raise ConfigError(f"Invalid Serenity configuration:\n{error}") from error
+        raise ConfigError(f"Invalid Whoopy configuration:\n{error}") from error

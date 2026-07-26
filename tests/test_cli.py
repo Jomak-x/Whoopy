@@ -4,8 +4,8 @@ import json
 
 from pytest import CaptureFixture, MonkeyPatch
 
-from serenity.cli import main
-from serenity.hardware import HardwareSnapshot
+from whoopy.cli import main
+from whoopy.hardware import HardwareSnapshot
 
 
 def test_help_exits_successfully(capsys: CaptureFixture[str]) -> None:
@@ -32,7 +32,7 @@ def test_doctor_prints_machine_readable_recommendation(
         free_disk_gb=20,
         accelerators=["cpu"],
     )
-    monkeypatch.setattr("serenity.cli.inspect_hardware", lambda: snapshot)
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda: snapshot)
 
     assert main(["doctor", "--json"]) == 0
 

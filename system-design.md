@@ -2,7 +2,7 @@ Understood — this is me compiling everything from all the rounds into a single
 
 ---
 
-# Serenity — Complete Build Specification
+# Whoopy — Complete Build Specification
 ### AI Meditation Generator (self-hosted core) + Community Platform
 **Version:** 1.0 (handoff) · **Date:** 2026-07-07 · **Status:** All architecture & model decisions locked
 **Audience:** the implementing coding agent. This document is self-contained — build directly from it.
@@ -33,10 +33,10 @@ Understood — this is me compiling everything from all the rounds into a single
 
 ## 1. Executive Summary
 
-Serenity is two loosely-coupled products sharing one data contract:
+Whoopy is two loosely-coupled products sharing one data contract:
 
-1. **`serenity-core`** (open source, self-hosted) — a native local pipeline for Windows, macOS, and Linux that turns a prompt ("10-minute sleep meditation for anxiety, soft voice, rain") into a mastered audio file. Flow: **safe hardware profile → optional LLM script → compile to timeline → TTS per segment → assemble with exact pauses → ambient bed → mix/master**. Weak laptops retain template and pasted-script modes without a local LLM.
-2. **`serenity-commons`** (optional, public) — a web platform where self-hosted instances publish meditations and listeners browse/stream/download on mobile (PWA).
+1. **`whoopy-core`** (open source, self-hosted) — a native local pipeline for Windows, macOS, and Linux that turns a prompt ("10-minute sleep meditation for anxiety, soft voice, rain") into a mastered audio file. Flow: **safe hardware profile → optional LLM script → compile to timeline → TTS per segment → assemble with exact pauses → ambient bed → mix/master**. Weak laptops retain template and pasted-script modes without a local LLM.
+2. **`whoopy-commons`** (optional, public) — a web platform where self-hosted instances publish meditations and listeners browse/stream/download on mobile (PWA).
 
 **Non-negotiable design stance:** quality over speed (minutes per generation is fine); everything in the core is open-weights with self-host + redistribution-friendly licenses; the whole system is organized around a **timeline of segments**, generated **piece by piece**, because that is what gives deterministic pause control, bounded failure domains, and swappable models.
 
@@ -102,7 +102,7 @@ Serenity is two loosely-coupled products sharing one data contract:
 
 ```mermaid
 flowchart TB
-  subgraph Local["🖥️ serenity-core (native Windows / macOS / Linux)"]
+  subgraph Local["🖥️ whoopy-core (native Windows / macOS / Linux)"]
     UI["Local Web UI (SvelteKit PWA)"]
     API["FastAPI control plane"]
     Q[("Huey + SQLite job queue")]
@@ -123,7 +123,7 @@ flowchart TB
     RED[("Redis — optional scale-out")]
   end
 
-  subgraph Commons["☁️ serenity-commons (public, v2.0)"]
+  subgraph Commons["☁️ whoopy-commons (public, v2.0)"]
     CAPI["Public API (FastAPI + JWT/API keys)"]
     CDB[("Postgres + pgvector")]
     OBJ[("S3/R2 object store")]
@@ -313,10 +313,10 @@ ffmpeg -i master.flac -c:a libopus -b:a 96k delivery.opus  # Opus delivery
 
 ## 9. Swappable Backend Interfaces (Python port signatures)
 
-All ports live in `src/serenity/ports/`. Every adapter carries `versioned_model_id`, `license_id`, deterministic `seed`, and classifies errors as `TransientError` (retryable) vs `FatalError`.
+All ports live in `src/whoopy/ports/`. Every adapter carries `versioned_model_id`, `license_id`, deterministic `seed`, and classifies errors as `TransientError` (retryable) vs `FatalError`.
 
 ```python
-# src/serenity/ports/base.py
+# src/whoopy/ports/base.py
 from dataclasses import dataclass
 from enum import Enum
 
@@ -336,7 +336,7 @@ class BackendInfo:
 ```
 
 ```python
-# src/serenity/ports/script_generator.py
+# src/whoopy/ports/script_generator.py
 from typing import Protocol
 
 class ScriptGenerator(Protocol):
@@ -348,7 +348,7 @@ class ScriptGenerator(Protocol):
 ```
 
 ```python
-# src/serenity/ports/speech_synthesizer.py
+# src/whoopy/ports/speech_synthesizer.py
 from typing import Protocol
 
 class SpeechSynthesizer(Protocol):
@@ -360,7 +360,7 @@ class SpeechSynthesizer(Protocol):
 ```
 
 ```python
-# src/serenity/ports/ambience_generator.py
+# src/whoopy/ports/ambience_generator.py
 class AmbienceGenerator(Protocol):
     info: "BackendInfo"
     def tags(self) -> list[str]: ...                 # rain, ocean, drone, forest, brown_noise, ...
@@ -368,7 +368,7 @@ class AmbienceGenerator(Protocol):
 ```
 
 ```python
-# src/serenity/ports/renderer.py
+# src/whoopy/ports/renderer.py
 class Renderer(Protocol):
     def assemble_narration(self, segments: list["RenderedSegment"]) -> "AudioBuffer": ...
     def mix(self, narration: "AudioBuffer", bed: "AudioBuffer", cues: list["MusicCue"]) -> "AudioBuffer": ...
@@ -377,12 +377,12 @@ class Renderer(Protocol):
 ```
 
 ```python
-# src/serenity/ports/publisher.py
+# src/whoopy/ports/publisher.py
 class Publisher(Protocol):
     def publish(self, manifest: "PublishManifest", files: "DeliveryFiles") -> "PublishResult":
         """MUST reject if manifest.license_id is non-redistributable (license gate)."""
 
-# src/serenity/ports/moderation_scanner.py
+# src/whoopy/ports/moderation_scanner.py
 class ModerationScanner(Protocol):
     def scan_text(self, script: str) -> "ModerationResult": ...
     def scan_audio(self, master_flac: "Path") -> "ModerationResult": ...
@@ -409,7 +409,7 @@ class ModerationScanner(Protocol):
 
 ---
 
-## 11. Public Community Platform (`serenity-commons`, v2.0)
+## 11. Public Community Platform (`whoopy-commons`, v2.0)
 
 **Publishing flow (self-hosted → Commons):**
 1. User authenticates their instance to the Commons (API key or instance token; OAuth device flow for first pairing).
@@ -478,7 +478,7 @@ class ModerationScanner(Protocol):
 ## 14. Repository Structure
 
 ```
-serenity/
+whoopy/
 ├── README.md                      # includes the macOS-Docker-GPU warning up front
 ├── docker-compose.yml             # STATELESS INFRA + web/api ONLY (no ML)
 ├── Makefile                       # optional Unix wrappers around uv/Python commands
@@ -495,7 +495,7 @@ serenity/
 │       ├── script_system.md
 │       └── editorial_system.md
 ├── src/
-│   └── serenity/                  # installable local-core Python package
+│   └── whoopy/                  # installable local-core Python package
 │       ├── ports/                 # base, script_generator, speech_synthesizer, ambience_generator, renderer, publisher, moderation_scanner
 │       ├── adapters/
 │       │   ├── llm/               # llama_cpp.py universal; optional mlx accelerators
@@ -520,7 +520,7 @@ serenity/
 
 ## 15. Configuration Approach
 
-Layered YAML + environment overrides (`SERENITY_*`). Precedence: `config/default.yaml` < `config/local.yaml` (gitignored) < env vars < CLI flags.
+Layered YAML + environment overrides (`WHOOPY_*`). Precedence: `config/default.yaml` < `config/local.yaml` (gitignored) < env vars < CLI flags.
 
 ```yaml
 # config/default.yaml
@@ -550,7 +550,7 @@ pipeline:
   checkpoint_dir: ./runs
   cache: content_addressed
 storage:
-  db_url: sqlite:///./serenity.db   # Commons: postgresql+psycopg://...
+  db_url: sqlite:///./whoopy.db   # Commons: postgresql+psycopg://...
 ```
 
 ---
@@ -561,13 +561,13 @@ storage:
 
 **Developer foundation on every supported OS:**
 ```bash
-git clone https://github.com/you/serenity && cd serenity
+git clone https://github.com/you/whoopy && cd whoopy
 uv sync --extra dev --locked
-uv run serenity doctor
+uv run whoopy doctor
 uv run --extra dev python scripts/check.py
 ```
 
-`uv` installs the pinned Python runtime when needed. `serenity doctor` selects Basic, Lite, Standard, High, or Studio without downloading or loading a model. Make remains an optional Unix convenience layer.
+`uv` installs the pinned Python runtime when needed. `whoopy doctor` selects Basic, Lite, Standard, High, or Studio without downloading or loading a model. Make remains an optional Unix convenience layer.
 
 **End-user target:** signed native installers bundle the application runtime and correct llama.cpp, sherpa-onnx, and FFmpeg binaries for their OS. Models are verified separate downloads selected only after the compatibility check. Users do not install Python, CMake, CUDA, or choose quantization manually.
 

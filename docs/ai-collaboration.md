@@ -131,4 +131,4 @@ These are patterns worth remembering beyond this project:
 - Make outputs reproducible before making them scalable.
 - Optimize for the path you will actually run every day.
 
-This is why the Serenity design keeps returning to timelines, adapters, and local execution.
+This is why the Whoopy design keeps returning to timelines, adapters, and local execution.

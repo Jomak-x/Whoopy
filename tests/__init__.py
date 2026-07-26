@@ -1,1 +1,1 @@
-"""Serenity test suite."""
+"""Whoopy test suite."""

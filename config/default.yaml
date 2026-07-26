@@ -42,4 +42,4 @@ pipeline:
 
 storage:
   # The local core starts with SQLite. Commons moves to PostgreSQL later.
-  db_url: sqlite:///./serenity.db
+  db_url: sqlite:///./whoopy.db

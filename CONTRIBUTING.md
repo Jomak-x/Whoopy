@@ -1,6 +1,6 @@
-# Contributing To Serenity
+# Contributing To Whoopy
 
-Serenity is built as a sequence of small, reviewable pull requests. A contribution should preserve the local-first, timeline-first, adapter-driven architecture unless it explicitly proposes and justifies a design change.
+Whoopy is built as a sequence of small, reviewable pull requests. A contribution should preserve the local-first, timeline-first, adapter-driven architecture unless it explicitly proposes and justifies a design change.
 
 ## Before Starting
 
@@ -13,7 +13,7 @@ Serenity is built as a sequence of small, reviewable pull requests. A contributi
 
 ```bash
 uv sync --extra dev --locked
-uv run serenity doctor
+uv run whoopy doctor
 uv run --extra dev python scripts/check.py
 ```
 
@@ -51,7 +51,7 @@ Use this description:
 
 ## Code Placement Rules
 
-- Domain behavior belongs in `src/serenity`, not the API or web UI.
+- Domain behavior belongs in `src/whoopy`, not the API or web UI.
 - Pipeline code depends on ports, never concrete model adapters.
 - Model quirks, prompt templates, sampling, and error translation stay in adapters.
 - Timeline changes require validation tests and migration thinking.

@@ -48,7 +48,7 @@ I'll end my turn here and let the inbox wake me as each one finishes. Once both 
 
 
 See 1 step
-Claude's design is in (a detailed "Serenity" document). GPT is still working. I'll end my turn and let the inbox wake me when GPT finishes — then I'll present both side by side. I'll also pull the full text of both when I lay them out.
+Claude's design is in (a detailed "Whoopy" document). GPT is still working. I'll end my turn and let the inbox wake me when GPT finishes — then I'll present both side by side. I'll also pull the full text of both when I lay them out.
 
 
 See 1 step
@@ -68,7 +68,7 @@ GPT is back. Let me collect its result and pull the full text of both designs so
 See 1 step
 Both designs are in. They're strikingly convergent on the hard infrastructure calls and genuinely split on a few tooling choices. Here's how my two partners landed.
 
-🟠 Claude — "Serenity"
+🟠 Claude — "Whoopy"
 Five load-bearing decisions:
 
 
@@ -246,14 +246,14 @@ Decision: Kokoro-82M is the default. But Claude surfaced the genuinely better an
 
 Now, here's everything put together into the consolidated build-ready doc.
 
-Serenity — AI Meditation Platform: Consolidated Design Document
+Whoopy — AI Meditation Platform: Consolidated Design Document
 Self-hosted open-source meditation generator + public community platform. v2 of this doc — incorporates the Claude×GPT debate synthesis and the final TTS decision.
 
 Executive Summary
-Serenity is two loosely-coupled products sharing one data contract:
+Whoopy is two loosely-coupled products sharing one data contract:
 
-serenity-core (open source) — a fully-local generation pipeline on your M4 Pro that turns a prompt ("10-minute sleep meditation for anxiety, soft voice, rain") into a mastered audio file: LLM script → TTS narration → ambient bed → mix/master.
-serenity-commons (public) — an optional web platform where any self-hosted instance publishes meditations, and listeners browse/stream/download on mobile.
+whoopy-core (open source) — a fully-local generation pipeline on your M4 Pro that turns a prompt ("10-minute sleep meditation for anxiety, soft voice, rain") into a mastered audio file: LLM script → TTS narration → ambient bed → mix/master.
+whoopy-commons (public) — an optional web platform where any self-hosted instance publishes meditations, and listeners browse/stream/download on mobile.
 The load-bearing decisions (settled by two independent designs converging):
 
 
@@ -360,7 +360,7 @@ v1.0 — polished self-hosted app	FastAPI + Huey/SQLite + SvelteKit PWA; job pro
 v2.0 — public Commons	Postgres+pgvector, S3/R2+CDN, signed-manifest publishing, accounts/auth, browse/search/stream, moderation queue, license gating, PWA offline caching.	~8–12 weeks
 7. Repo Structure, Config & Setup
 
-serenity/
+whoopy/
 ├── core/            # generation pipeline
 │   ├── ports/       # ScriptGenerator, SpeechSynthesizer, AmbienceGenerator, Renderer, Publisher, ModerationScanner
 │   ├── adapters/    # mlx_qwen, kokoro, styletts2, openaudio_s1, piper, loop_library, stable_audio, ffmpeg_renderer
@@ -431,7 +431,7 @@ GPT moved: "Yes, I concede the architecture changes the ranking… cross-segment
 Claude conceded the symmetric point: under human curation (private, hand-curated, re-rolled), Fish's per-utterance expressive ceiling is real and worth offering as a gated local mode — "I concede that cleanly." It only holds that Fish is a "ceiling under human curation," not a better unattended narrator.
 Both independently promoted StyleTTS 2 to the primary expressive upgrade slot: non-AR (no drift), redistributable, reference-audio style control — "makes Fish largely unnecessary for most."
 The entire segment-oriented architecture is ratified by both, including refinements they reached independently (don't crossfade speech into silence; deterministic exact silences; per-segment QC/regenerate).
-Serenity — Meditation Generation Core: Locked Handoff Specification
+Whoopy — Meditation Generation Core: Locked Handoff Specification
 Fully agreed by both design partners. Written for a coding agent to implement directly, with the WHY behind every decision.
 
 0. Design Verdict (both partners, locked)
@@ -518,7 +518,7 @@ Now write me everything down to give to the coding agent be as detailed as possi
 Thought for 9.6 seconds
 Understood — this is me compiling everything from all the rounds into a single, exhaustive build specification for your coding agent. No partner consultation needed; it's all decided. Here it is.
 
-Serenity — Complete Build Specification
+Whoopy — Complete Build Specification
 AI Meditation Generator (self-hosted core) + Community Platform
 Version: 1.0 (handoff) · Date: 2026-07-07 · Status: All architecture & model decisions locked Audience: the implementing coding agent. This document is self-contained — build directly from it.
 
@@ -542,10 +542,10 @@ One-Command Setup (native macOS + Docker)
 Extension Points
 Appendix: Risks & Open Questions
 1. Executive Summary
-Serenity is two loosely-coupled products sharing one data contract:
+Whoopy is two loosely-coupled products sharing one data contract:
 
-serenity-core (open source, self-hosted) — a fully-local pipeline on Apple Silicon (M4 Pro, 48 GB) that turns a prompt ("10-minute sleep meditation for anxiety, soft voice, rain") into a mastered audio file. Flow: LLM script → compile to timeline → TTS per segment → assemble with exact pauses → ambient bed → mix/master.
-serenity-commons (optional, public) — a web platform where self-hosted instances publish meditations and listeners browse/stream/download on mobile (PWA).
+whoopy-core (open source, self-hosted) — a fully-local pipeline on Apple Silicon (M4 Pro, 48 GB) that turns a prompt ("10-minute sleep meditation for anxiety, soft voice, rain") into a mastered audio file. Flow: LLM script → compile to timeline → TTS per segment → assemble with exact pauses → ambient bed → mix/master.
+whoopy-commons (optional, public) — a web platform where self-hosted instances publish meditations and listeners browse/stream/download on mobile (PWA).
 Non-negotiable design stance: quality over speed (minutes per generation is fine); everything in the core is open-weights with self-host + redistribution-friendly licenses; the whole system is organized around a timeline of segments, generated piece by piece, because that is what gives deterministic pause control, bounded failure domains, and swappable models.
 
 The headline picks: LLM = Qwen3-32B @ 6-bit MLX; TTS = Kokoro-82M default (StyleTTS 2 expressive upgrade, OpenAudio S1 local-only, Piper fallback); Music = CC0 loop library + procedural mixing (Stable Audio Open swappable); Backbone = canonical JSON timeline + typed swappable ports; Local infra = FastAPI + Huey/SQLite, Commons infra = Postgres/pgvector + object store/CDN; native ML worker on macOS, Docker for stateless infra only.
@@ -605,9 +605,9 @@ mermaid
 
 
 
-☁️ serenity-commons (public, v2.0)
+☁️ whoopy-commons (public, v2.0)
 
-🖥️ serenity-core (native macOS, Metal/MLX)
+🖥️ whoopy-core (native macOS, Metal/MLX)
 
 Typed swappable ports (versioned_model_id + license_id + error taxonomy)
 
@@ -900,7 +900,7 @@ Storage (local)	Local FS runs/<job_id>/ + a library/ for finished masters	Simple
 Storage (Commons)	S3/R2 object store + CDN	Audio is bandwidth-heavy and cacheable.
 Frontend	SvelteKit PWA (both local UI and Commons)	Lean bundles matter for a mobile-first, offline-caching PWA; SSR/SEO is fine for shareable pages. (Next.js is a defensible alternative for the Commons only.)
 ML runtime	MLX (LLM + Kokoro/StyleTTS2), PyTorch-MPS (Fish), ONNX (Piper)	Native Metal; MLX is Apple-first-party and fastest on M-series.
-11. Public Community Platform (serenity-commons, v2.0)
+11. Public Community Platform (whoopy-commons, v2.0)
 Publishing flow (self-hosted → Commons):
 
 User authenticates their instance to the Commons (API key or instance token; OAuth device flow for first pairing).
@@ -962,7 +962,7 @@ v1.0 — polished self-hosted app	FastAPI + Huey/SQLite + SvelteKit PWA; job pro
 v2.0 — public Commons	Postgres+pgvector, S3/R2+CDN, signed-manifest publishing + license gate, accounts/auth, browse/search/stream, moderation queue, PWA offline caching + media-session controls.	~8–12 weeks
 14. Repository Structure
 
-serenity/
+whoopy/
 ├── README.md                      # includes the macOS-Docker-GPU warning up front
 ├── docker-compose.yml             # STATELESS INFRA + web/api ONLY (no ML)
 ├── Makefile                       # `make setup`, `make worker` (native), `make dev`
@@ -994,7 +994,7 @@ serenity/
 ├── tests/                         # unit, contract, golden-file, integration
 └── docs/                          # this spec + generated "why we do what" docs
 15. Configuration Approach
-Layered YAML + environment overrides (SERENITY_*). Precedence: config/default.yaml < config/local.yaml (gitignored) < env vars < CLI flags.
+Layered YAML + environment overrides (WHOOPY_*). Precedence: config/default.yaml < config/local.yaml (gitignored) < env vars < CLI flags.
 
 yaml
 
@@ -1022,7 +1022,7 @@ pipeline:
   checkpoint_dir: ./runs
   cache: content_addressed
 storage:
-  db_url: sqlite:///./serenity.db   # Commons: postgresql+psycopg://...
+  db_url: sqlite:///./whoopy.db   # Commons: postgresql+psycopg://...
 16. One-Command Setup
 The macOS reality (state this at the top of the README): GPU/Metal is not accessible inside Docker on macOS, so the ML worker runs natively. Docker is used only for stateless infra + the web/API containers.
 
@@ -1030,13 +1030,13 @@ Apple Silicon (recommended):
 
 bash
 
-git clone https://github.com/you/serenity && cd serenity
+git clone https://github.com/you/whoopy && cd whoopy
 make setup          # creates a native venv, installs MLX + PyTorch(MPS) + ffmpeg (brew), downloads model weights
 make infra          # docker compose up -d  (optional: Redis; nothing ML)
 make worker         # starts the NATIVE ML worker (or install the launchd plist)
 make dev            # FastAPI + SvelteKit dev servers
 # CLI (v0.1):
-serenity generate --theme sleep --minutes 10 --voice af_heart --bed rain
+whoopy generate --theme sleep --minutes 10 --voice af_heart --bed rain
 Linux + NVIDIA (community): an all-Docker path is provided (docker-compose.gpu.yml) since GPU passthrough works there; the worker runs in-container with CUDA.
 
 make worker optionally installs a launchd plist so the native worker restarts on boot/crash.

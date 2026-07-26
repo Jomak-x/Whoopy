@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from serenity.hardware import HardwareSnapshot, diagnose, load_runtime_profiles
+from whoopy.hardware import HardwareSnapshot, diagnose, load_runtime_profiles
 
 
 def _snapshot(*, total: float, available: float, disk: float) -> HardwareSnapshot:

@@ -31,8 +31,8 @@ Done when:
 
 Evidence:
 
-- `serenity --help` and `serenity config show` run successfully
-- `serenity doctor` reports structured capabilities without loading a model
+- `whoopy --help` and `whoopy config show` run successfully
+- `whoopy doctor` reports structured capabilities without loading a model
 - `uv run python scripts/check.py` runs linting, formatting, strict typing, and tests
 - configuration precedence is covered by automated tests
 

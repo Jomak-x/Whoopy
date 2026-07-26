@@ -37,4 +37,4 @@ jobs:
         run: uv run --extra dev python scripts/check.py
 
       - name: Prove native hardware inspection works
-        run: uv run serenity doctor --json
+        run: uv run whoopy doctor --json

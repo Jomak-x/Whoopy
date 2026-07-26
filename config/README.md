@@ -1,6 +1,6 @@
 # Configuration
 
-Serenity uses one configuration path for the CLI, worker, and future API. Keep machine-specific values in `local.yaml` or environment variables; both `.env` and `local.yaml` are ignored by Git. Phase 0 does not automatically load `.env`, so source one through a shell or process manager when needed.
+Whoopy uses one configuration path for the CLI, worker, and future API. Keep machine-specific values in `local.yaml` or environment variables; both `.env` and `local.yaml` are ignored by Git. Phase 0 does not automatically load `.env`, so source one through a shell or process manager when needed.
 
 ## Precedence
 
@@ -8,10 +8,10 @@ Settings are resolved from lowest to highest priority:
 
 1. `default.yaml`
 2. optional `local.yaml`
-3. `SERENITY_*` environment variables
+3. `WHOOPY_*` environment variables
 4. CLI flags
 
-Nested environment variables use two underscores. For example, `SERENITY_TTS__VOICE=af_heart` overrides `tts.voice`.
+Nested environment variables use two underscores. For example, `WHOOPY_TTS__VOICE=af_heart` overrides `tts.voice`.
 
 ## Files
 
@@ -24,8 +24,8 @@ Nested environment variables use two underscores. For example, `SERENITY_TTS__VO
 Validate the resolved settings with:
 
 ```bash
-serenity config show
-serenity doctor
+whoopy config show
+whoopy doctor
 ```
 
-The model and pacing registries are documented skeletons in Phase 0. `runtime_profiles.yaml` is active: `serenity doctor` uses it without downloading or loading a model. Exact model artifacts and measured runtime benchmarks arrive with their adapters.
+The model and pacing registries are documented skeletons in Phase 0. `runtime_profiles.yaml` is active: `whoopy doctor` uses it without downloading or loading a model. Exact model artifacts and measured runtime benchmarks arrive with their adapters.

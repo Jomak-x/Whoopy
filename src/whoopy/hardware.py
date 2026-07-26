@@ -17,7 +17,7 @@ import psutil
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from serenity.config import ConfigError
+from whoopy.config import ConfigError
 
 DEFAULT_INSPECTION_PATH = Path.cwd()
 SUPPORTED_TARGETS = {
@@ -164,7 +164,7 @@ def diagnose(
                     f"No native release target is defined for {snapshot.operating_system} "
                     f"{snapshot.architecture}."
                 ),
-                "Serenity will not download or load a model on an untested target.",
+                "Whoopy will not download or load a model on an untested target.",
             ],
         )
 
@@ -208,7 +208,7 @@ def diagnose(
         ),
         (
             "Free memory or disk space and run the check again; "
-            "Serenity will not attempt a model load."
+            "Whoopy will not attempt a model load."
         ),
     ]
     return DoctorResult(

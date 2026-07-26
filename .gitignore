@@ -18,7 +18,7 @@ build/
 !.env.example
 config/local.yaml
 
-# Serenity runtime state (created by later phases)
+# Whoopy runtime state (created by later phases)
 runs/
 cache/
 models/

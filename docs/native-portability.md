@@ -1,13 +1,13 @@
 # Native Portability Contract
 
-Serenity aims for one user experience across ordinary Windows, macOS, and Linux laptops without requiring Docker or asking users to understand inference backends. The promise is not that every machine can run the same large model. The promise is that Serenity detects what is safe, selects an appropriate local mode, and refuses unsafe model loads before downloading gigabytes of data.
+Whoopy aims for one user experience across ordinary Windows, macOS, and Linux laptops without requiring Docker or asking users to understand inference backends. The promise is not that every machine can run the same large model. The promise is that Whoopy detects what is safe, selects an appropriate local mode, and refuses unsafe model loads before downloading gigabytes of data.
 
 ## One Logical Runtime Path
 
 The default model configuration is `auto`:
 
 ```text
-Serenity pipeline
+Whoopy pipeline
     |
     +-- capability inspection
     |
@@ -18,7 +18,7 @@ Serenity pipeline
             +-- FFmpeg for deterministic rendering
 ```
 
-`llama.cpp` is the default text runtime because its official project supports CPU execution plus Metal, CUDA, HIP, Vulkan, and SYCL backends across broad hardware. `sherpa-onnx` is the default speech runtime because its official project supports TTS on Windows, macOS, and Linux across x64 and ARM64. MLX remains an optional Apple Silicon optimization behind the same ports; it is not a requirement for using Serenity.
+`llama.cpp` is the default text runtime because its official project supports CPU execution plus Metal, CUDA, HIP, Vulkan, and SYCL backends across broad hardware. `sherpa-onnx` is the default speech runtime because its official project supports TTS on Windows, macOS, and Linux across x64 and ARM64. MLX remains an optional Apple Silicon optimization behind the same ports; it is not a requirement for using Whoopy.
 
 Primary technical references:
 
@@ -52,13 +52,13 @@ Basic mode makes the LLM optional. A weak but otherwise supported laptop can:
 - synthesize speech locally;
 - render exact pauses and final audio.
 
-If the Basic floor is not met, `serenity doctor` returns a non-zero status and explains which resource is insufficient. No model is loaded. Later download management must run this check before selecting or fetching an artifact.
+If the Basic floor is not met, `whoopy doctor` returns a non-zero status and explains which resource is insufficient. No model is loaded. Later download management must run this check before selecting or fetching an artifact.
 
 Remote script generation may be added as an explicit opt-in, but `hardware.allow_remote_fallback` defaults to `false`. Local audio generation must not silently upload prompts or scripts.
 
 ## What Phase 0 Detects
 
-`serenity doctor` currently reports:
+`whoopy doctor` currently reports:
 
 - operating system and architecture;
 - logical CPU count;
@@ -69,7 +69,7 @@ Remote script generation may be added as an explicit opt-in, but `hardware.allow
 - NVIDIA CUDA presence when `nvidia-smi` works;
 - the highest profile meeting every live-resource margin.
 
-`serenity doctor --profile lite` checks a specific tier without making it the global default. Normal users keep `hardware.profile: auto`.
+`whoopy doctor --profile lite` checks a specific tier without making it the global default. Normal users keep `hardware.profile: auto`.
 
 Runtime PRs will extend the check with llama.cpp device enumeration, model memory fitting, measured tokens per second, TTS real-time factor, FFmpeg validation, and signed artifact checksums.
 

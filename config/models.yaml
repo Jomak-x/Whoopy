@@ -6,7 +6,7 @@
 # that adapter rather than branching on model names in the pipeline.
 llm:
   llama_cpp_qwen3_1_7b:
-    adapter: serenity.adapters.llm.llama_cpp:LlamaCppAdapter
+    adapter: whoopy.adapters.llm.llama_cpp:LlamaCppAdapter
     versioned_model_id: Qwen/Qwen3-1.7B-GGUF
     license_id: Apache-2.0
     runtime: llama_cpp
@@ -14,14 +14,14 @@ llm:
     profile_candidates: [lite]
     status: planned
   mlx_qwen3:
-    adapter: serenity.adapters.llm.mlx_qwen3:MLXQwen3Adapter
+    adapter: whoopy.adapters.llm.mlx_qwen3:MLXQwen3Adapter
     versioned_model_id: Qwen/Qwen3-32B
     license_id: Apache-2.0
     runtime: mlx
     platforms: [macos-arm64]
     status: planned
   mlx_llama3_hq:
-    adapter: serenity.adapters.llm.mlx_llama3_hq:MLXLlama3HQAdapter
+    adapter: whoopy.adapters.llm.mlx_llama3_hq:MLXLlama3HQAdapter
     versioned_model_id: meta-llama/Llama-3.3-70B-Instruct
     license_id: Llama-3.3-Community
     runtime: mlx
@@ -30,7 +30,7 @@ llm:
 
 tts:
   sherpa_onnx_kokoro:
-    adapter: serenity.adapters.tts.sherpa_onnx:SherpaOnnxKokoroAdapter
+    adapter: whoopy.adapters.tts.sherpa_onnx:SherpaOnnxKokoroAdapter
     versioned_model_id: hexgrad/Kokoro-82M
     license_id: Apache-2.0
     runtime: sherpa_onnx
@@ -38,7 +38,7 @@ tts:
     publication_policy: allowed_after_asset_check
     status: planned
   kokoro:
-    adapter: serenity.adapters.tts.kokoro:KokoroAdapter
+    adapter: whoopy.adapters.tts.kokoro:KokoroAdapter
     versioned_model_id: hexgrad/Kokoro-82M
     license_id: Apache-2.0
     runtime: native
@@ -46,21 +46,21 @@ tts:
     publication_policy: allowed_after_asset_check
     status: planned
   styletts2:
-    adapter: serenity.adapters.tts.styletts2:StyleTTS2Adapter
+    adapter: whoopy.adapters.tts.styletts2:StyleTTS2Adapter
     versioned_model_id: yl4579/StyleTTS2
     license_id: MIT
     runtime: pytorch_mps
     publication_policy: license_review_required
     status: planned
   openaudio_s1:
-    adapter: serenity.adapters.tts.openaudio_s1:OpenAudioS1Adapter
+    adapter: whoopy.adapters.tts.openaudio_s1:OpenAudioS1Adapter
     versioned_model_id: fishaudio/openaudio-s1-mini
     license_id: Fish-Audio-Research
     runtime: pytorch_mps
     publication_policy: local_only
     status: planned
   piper:
-    adapter: serenity.adapters.tts.piper:PiperAdapter
+    adapter: whoopy.adapters.tts.piper:PiperAdapter
     versioned_model_id: OHF-Voice/piper1-gpl
     license_id: GPL-3.0
     runtime: native
@@ -69,14 +69,14 @@ tts:
 
 ambience:
   loop_library:
-    adapter: serenity.adapters.ambience.loop_library:LoopLibraryAdapter
-    versioned_model_id: serenity-cc0-loop-library-v1
+    adapter: whoopy.adapters.ambience.loop_library:LoopLibraryAdapter
+    versioned_model_id: whoopy-cc0-loop-library-v1
     license_id: CC0-1.0
     runtime: native
     publication_policy: allowed_after_asset_check
     status: planned
   stable_audio_open:
-    adapter: serenity.adapters.ambience.stable_audio_open:StableAudioOpenAdapter
+    adapter: whoopy.adapters.ambience.stable_audio_open:StableAudioOpenAdapter
     versioned_model_id: stabilityai/stable-audio-open-1.0
     license_id: Stability-AI-Community
     runtime: pytorch_mps

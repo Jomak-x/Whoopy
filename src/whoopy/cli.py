@@ -1,4 +1,4 @@
-"""Command-line entry point for Serenity's foundation commands."""
+"""Command-line entry point for Whoopy's foundation commands."""
 
 from __future__ import annotations
 
@@ -10,18 +10,18 @@ from typing import Any
 
 import yaml
 
-from serenity.config import ConfigError, load_settings
-from serenity.hardware import diagnose, inspect_hardware, load_runtime_profiles
+from whoopy.config import ConfigError, load_settings
+from whoopy.hardware import diagnose, inspect_hardware, load_runtime_profiles
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="serenity",
+        prog="whoopy",
         description="Local-first, timeline-driven meditation generation.",
     )
     subcommands = parser.add_subparsers(dest="command")
 
-    config_parser = subcommands.add_parser("config", help="Inspect Serenity configuration.")
+    config_parser = subcommands.add_parser("config", help="Inspect Whoopy configuration.")
     config_commands = config_parser.add_subparsers(dest="config_command")
     show_parser = config_commands.add_parser(
         "show",
@@ -102,7 +102,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(result.model_dump(mode="json"), indent=2))
         else:
             snapshot = result.snapshot
-            print("Serenity native compatibility check")
+            print("Whoopy native compatibility check")
             print(f"  System: {snapshot.operating_system} {snapshot.architecture}")
             print(f"  CPU threads: {snapshot.cpu_count}")
             print(

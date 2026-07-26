@@ -1,6 +1,6 @@
-# Serenity Step-by-Step PR Plan
+# Whoopy Step-by-Step PR Plan
 
-This document turns the Serenity specification into a sequence of small pull requests. Each numbered step is one PR. Complete and merge them in order unless a PR explicitly says it can run in parallel.
+This document turns the Whoopy specification into a sequence of small pull requests. Each numbered step is one PR. Complete and merge them in order unless a PR explicitly says it can run in parallel.
 
 The initial repository is the one documented exception: Milestone 0's PR 1–3 review slices are delivered together in a single Phase 0 foundation PR because there was no committed base to branch them from. The PR keeps those slices visible in its description and verification checklist. Beginning with PR 4, every numbered step is a separate pull request.
 
@@ -46,15 +46,15 @@ Goal: Create the smallest installable Python project without implementing produc
 Changes:
 
 - Add `pyproject.toml`, `.python-version`, and a cross-platform `uv.lock` with Python 3.11 support.
-- Add the `serenity` package and an empty `tests/` package.
+- Add the `whoopy` package and an empty `tests/` package.
 - Add `.gitignore` entries for virtual environments, Python caches, generated runs, model weights, local databases, and local configuration.
 - Add a platform-neutral Python quality script plus optional Unix Make wrappers.
-- Add a placeholder CLI that supports `serenity --help`.
+- Add a placeholder CLI that supports `whoopy --help`.
 
 Acceptance criteria:
 
 - `uv` installs the project reproducibly on Windows, macOS, and Linux.
-- `serenity --help` exits successfully.
+- `whoopy --help` exits successfully.
 - the platform-neutral quality script succeeds.
 - A new contributor can find the supported Python version in the README.
 
@@ -62,7 +62,7 @@ Verification:
 
 ```bash
 uv sync --extra dev --locked
-uv run serenity --help
+uv run whoopy --help
 uv run --extra dev python scripts/check.py
 ```
 
@@ -80,9 +80,9 @@ Changes:
 - Add `config/runtime_profiles.yaml`.
 - Add `.env.example`.
 - Implement layered configuration loading with this precedence:
-  `default.yaml` < `local.yaml` < `SERENITY_*` environment variables < CLI arguments.
+  `default.yaml` < `local.yaml` < `WHOOPY_*` environment variables < CLI arguments.
 - Add tests for defaults, overrides, missing files, and invalid values.
-- Add `serenity doctor` with cross-platform RAM, disk, CPU, and accelerator inspection.
+- Add `whoopy doctor` with cross-platform RAM, disk, CPU, and accelerator inspection.
 - Select the highest safe Basic, Lite, Standard, High, or Studio profile without loading a model.
 
 Acceptance criteria:
@@ -97,8 +97,8 @@ Acceptance criteria:
 Verification:
 
 ```bash
-uv run serenity config show
-uv run serenity doctor
+uv run whoopy config show
+uv run whoopy doctor
 uv run --extra dev pytest
 ```
 
@@ -180,7 +180,7 @@ Verification:
 
 ```bash
 make test
-serenity timeline validate tests/fixtures/minimal_timeline.json
+whoopy timeline validate tests/fixtures/minimal_timeline.json
 ```
 
 Out of scope: migrations between schema versions.
@@ -221,7 +221,7 @@ Changes:
 - Emit alternating speech and silence segments.
 - Assign stable segment IDs.
 - Populate timeline metadata.
-- Expose `serenity timeline compile INPUT --output OUTPUT`.
+- Expose `whoopy timeline compile INPUT --output OUTPUT`.
 
 Acceptance criteria:
 
@@ -233,8 +233,8 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity timeline compile tests/fixtures/sample_script.txt --output /tmp/timeline.json
-serenity timeline validate /tmp/timeline.json
+whoopy timeline compile tests/fixtures/sample_script.txt --output /tmp/timeline.json
+whoopy timeline validate /tmp/timeline.json
 make test
 ```
 
@@ -289,7 +289,7 @@ Verification:
 
 ```bash
 make test
-serenity run create
+whoopy run create
 ```
 
 Out of scope: database persistence and job queues.
@@ -316,7 +316,7 @@ Verification:
 
 ```bash
 make test
-serenity doctor
+whoopy doctor
 ```
 
 Out of scope: generating or combining audio.
@@ -342,7 +342,7 @@ Verification:
 
 ```bash
 make test
-serenity audio silence --milliseconds 3000 --output /tmp/silence.wav
+whoopy audio silence --milliseconds 3000 --output /tmp/silence.wav
 ffprobe /tmp/silence.wav
 ```
 
@@ -405,7 +405,7 @@ Goal: Produce a correctly timed lossless meditation from a text script using onl
 
 Changes:
 
-- Add `serenity generate SCRIPT`.
+- Add `whoopy generate SCRIPT`.
 - Connect run creation, compilation, segment rendering, assembly, and artifact recording.
 - Print concise stage progress and the final output path.
 - Add an example sleep script.
@@ -420,7 +420,7 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity generate examples/sleep.txt --tts fixture
+whoopy generate examples/sleep.txt --tts fixture
 make test
 ```
 
@@ -451,7 +451,7 @@ Verification:
 
 ```bash
 make check
-serenity generate examples/sleep.txt --tts fixture
+whoopy generate examples/sleep.txt --tts fixture
 ```
 
 Out of scope: automatic retries and real model adapters.
@@ -465,7 +465,7 @@ Changes:
 - Load adapter declarations from `config/models.yaml`.
 - Validate adapter class, runtime, version, and license metadata.
 - Construct only the selected adapter.
-- Add `serenity models list` and `serenity models inspect NAME`.
+- Add `whoopy models list` and `whoopy models inspect NAME`.
 
 Acceptance criteria:
 
@@ -476,8 +476,8 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity models list
-serenity models inspect fixture
+whoopy models list
+whoopy models inspect fixture
 make test
 ```
 
@@ -507,8 +507,8 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity models doctor sherpa_onnx_kokoro
-serenity generate examples/sleep.txt --tts sherpa_onnx_kokoro
+whoopy models doctor sherpa_onnx_kokoro
+whoopy generate examples/sleep.txt --tts sherpa_onnx_kokoro
 make test
 ```
 
@@ -536,7 +536,7 @@ Verification:
 
 ```bash
 make test
-serenity generate examples/sleep.txt --tts sherpa_onnx_kokoro
+whoopy generate examples/sleep.txt --tts sherpa_onnx_kokoro
 ```
 
 Out of scope: final program loudness mastering.
@@ -562,9 +562,9 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity generate examples/sleep.txt --tts fixture
-serenity generate examples/sleep.txt --tts fixture
-serenity cache stats
+whoopy generate examples/sleep.txt --tts fixture
+whoopy generate examples/sleep.txt --tts fixture
+whoopy cache stats
 make test
 ```
 
@@ -591,8 +591,8 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity ambience list
-serenity ambience verify
+whoopy ambience list
+whoopy ambience verify
 make test
 ```
 
@@ -620,7 +620,7 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity generate examples/sleep.txt --tts fixture --bed test_rain
+whoopy generate examples/sleep.txt --tts fixture --bed test_rain
 make test
 ```
 
@@ -648,8 +648,8 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity generate examples/sleep.txt --tts fixture --bed test_rain
-serenity audio inspect runs/<run-id>/master.flac
+whoopy generate examples/sleep.txt --tts fixture --bed test_rain
+whoopy audio inspect runs/<run-id>/master.flac
 make test
 ```
 
@@ -677,7 +677,7 @@ Verification:
 
 ```bash
 make test
-serenity qc runs/<run-id>/master.flac
+whoopy qc runs/<run-id>/master.flac
 ```
 
 Out of scope: round-trip ASR text comparison.
@@ -704,7 +704,7 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity generate --theme sleep --minutes 5 --llm fixture --tts fixture
+whoopy generate --theme sleep --minutes 5 --llm fixture --tts fixture
 make test
 ```
 
@@ -733,8 +733,8 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity models doctor <gguf-model>
-serenity generate --theme sleep --minutes 5 --llm auto --tts fixture
+whoopy models doctor <gguf-model>
+whoopy generate --theme sleep --minutes 5 --llm auto --tts fixture
 make test
 ```
 
@@ -762,7 +762,7 @@ Verification:
 
 ```bash
 make test
-serenity run inspect <run-id>
+whoopy run inspect <run-id>
 ```
 
 Out of scope: automatic background execution.
@@ -773,7 +773,7 @@ Goal: Recover from one failed segment without restarting the entire meditation.
 
 Changes:
 
-- Add `serenity run resume RUN_ID`.
+- Add `whoopy run resume RUN_ID`.
 - Retry transient errors with bounded exponential backoff.
 - Surface fatal errors immediately.
 - Add targeted speech-segment regeneration.
@@ -790,8 +790,8 @@ Verification:
 
 ```bash
 make test
-serenity run resume <run-id>
-serenity segment regenerate <run-id> <segment-id>
+whoopy run resume <run-id>
+whoopy segment regenerate <run-id> <segment-id>
 ```
 
 Out of scope: distributed workers.
@@ -818,7 +818,7 @@ Verification:
 
 ```bash
 make test
-serenity qc --with-asr <run-id>
+whoopy qc --with-asr <run-id>
 ```
 
 Out of scope: transcript publication.
@@ -846,7 +846,7 @@ Acceptance criteria:
 Verification:
 
 ```bash
-serenity db upgrade
+whoopy db upgrade
 make test
 ```
 
@@ -998,7 +998,7 @@ Goal: Make the polished local product reproducible on clean Windows, macOS, and 
 
 Changes:
 
-- Finalize cross-platform `uv` setup plus `serenity worker`, `serenity dev`, and `serenity doctor` commands.
+- Finalize cross-platform `uv` setup plus `whoopy worker`, `whoopy dev`, and `whoopy doctor` commands.
 - Build native installer artifacts on each target operating system so end users do not install Python or build tools.
 - Add an optional Docker Compose file only for appropriate non-ML services.
 - Document native worker startup and platform service integration only where optional.
@@ -1017,9 +1017,9 @@ Verification:
 
 ```bash
 uv sync --locked
-uv run serenity doctor
-uv run serenity worker
-uv run serenity dev
+uv run whoopy doctor
+uv run whoopy worker
+uv run whoopy dev
 ```
 
 Out of scope: the public Commons platform.
@@ -1104,7 +1104,7 @@ Do not start this milestone until local artifacts, licenses, and manifests are s
 
 ### PR 40: Define and sign the publish manifest
 
-Goal: Establish the exact contract between a local Serenity instance and Commons.
+Goal: Establish the exact contract between a local Whoopy instance and Commons.
 
 Changes:
 
@@ -1271,7 +1271,7 @@ PRs 40–47 are complete. The release is ready when:
 - uploads are hash-verified and safely stored;
 - approved meditations can be browsed and streamed;
 - reporting, removal, audit, and credential-revocation paths work;
-- local Serenity remains fully useful without Commons.
+- local Whoopy remains fully useful without Commons.
 
 ## The First PR To Open
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from serenity.config import ConfigError, load_settings
+from whoopy.config import ConfigError, load_settings
 
 
 def test_default_configuration_loads() -> None:
@@ -27,11 +27,11 @@ def test_local_environment_and_cli_precedence(tmp_path: Path) -> None:
     local_settings = load_settings(tmp_path, environment={})
     environment_settings = load_settings(
         tmp_path,
-        environment={"SERENITY_TTS__VOICE": "environment_voice"},
+        environment={"WHOOPY_TTS__VOICE": "environment_voice"},
     )
     cli_settings = load_settings(
         tmp_path,
-        environment={"SERENITY_TTS__VOICE": "environment_voice"},
+        environment={"WHOOPY_TTS__VOICE": "environment_voice"},
         cli_overrides={"tts": {"voice": "cli_voice"}},
     )
 
@@ -56,17 +56,17 @@ def test_missing_default_file_has_readable_error(tmp_path: Path) -> None:
 
 def test_invalid_setting_has_readable_error() -> None:
     with pytest.raises(ConfigError, match=r"tts\.speed"):
-        load_settings(environment={"SERENITY_TTS__SPEED": "0"})
+        load_settings(environment={"WHOOPY_TTS__SPEED": "0"})
 
 
 def test_unknown_environment_setting_is_rejected() -> None:
     with pytest.raises(ConfigError, match="unknown"):
-        load_settings(environment={"SERENITY_TTS__UNKNOWN": "value"})
+        load_settings(environment={"WHOOPY_TTS__UNKNOWN": "value"})
 
 
 def test_unknown_runtime_profile_is_rejected() -> None:
     with pytest.raises(ConfigError, match=r"hardware\.profile"):
-        load_settings(environment={"SERENITY_HARDWARE__PROFILE": "impossible"})
+        load_settings(environment={"WHOOPY_HARDWARE__PROFILE": "impossible"})
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,4 @@
-# Serenity Commons
+# Whoopy Commons
 
 The optional public API, web application, publishing flow, moderation, and storage integrations will live here after the local core is stable.
 
