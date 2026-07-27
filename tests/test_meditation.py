@@ -14,6 +14,8 @@ from whoopy.meditation import (
     LocalMeditationGenerator,
     load_prompt_bundle,
 )
+from whoopy.meditation.generator import _allocate_plan
+from whoopy.meditation.models import ProposedPlan
 from whoopy.meditation.prompts import PromptLoadError
 from whoopy.ports import (
     AdapterMetadata,
@@ -244,3 +246,31 @@ def test_workspace_resume_reuses_validated_plan_and_sections(tmp_path: Path) -> 
     assert (tmp_path / "draft" / "plan.json").is_file()
     assert len(list((tmp_path / "draft" / "sections").glob("*.json"))) == 3
     assert (tmp_path / "draft" / "timeline.json").is_file()
+
+
+def test_six_section_short_plan_never_rounds_below_minimum() -> None:
+    proposed = ProposedPlan.model_validate(
+        {
+            "title": "Short Practice",
+            "intention": "Fit a valid short practice.",
+            "sections": [
+                {
+                    "id": f"part-{index}",
+                    "title": f"Part {index}",
+                    "purpose": "Guide one brief step.",
+                    "weight": 5 if index == 1 else 1,
+                    "pause_seconds": 1,
+                }
+                for index in range(1, 7)
+            ],
+        }
+    )
+
+    plan = _allocate_plan(proposed, 60)
+
+    assert min(section.target_speech_seconds for section in plan.sections) >= 8
+    assert (
+        sum(section.target_speech_seconds for section in plan.sections)
+        + sum(section.pause_after_ms for section in plan.sections) // 1_000
+        == 60
+    )
