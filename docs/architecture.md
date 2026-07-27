@@ -18,7 +18,7 @@ This is a common pattern in system design: keep the expensive, failure-prone, or
 
 ## Current Executable Slice
 
-Phase 1 implements a small vertical slice of the future architecture:
+Phases 1 and 2 implement a small vertical slice of the future architecture:
 
 ```text
 CLI -> LocalControlPlane -> run.json (queued)
@@ -26,14 +26,18 @@ CLI -> LocalControlPlane -> run.json (queued)
 CLI -> LocalWorker -----------+
         |
         +-> run.json (running)
-        +-> timeline.json
+        +-> timeline.json (SPEECH / SILENCE)
+        +-> narration.wav
+        +-> audio-manifest.json
+        +-> quality.json
         +-> run.json (completed or failed)
 ```
 
 The control plane only accepts and records work. The worker alone processes it.
 Both use an inspectable filesystem store today; future FastAPI and queue layers
-can call the same boundaries. The timeline currently contains one
-prompt-passthrough speech segment, not an AI-generated script.
+can call the same boundaries. Speech is currently an audible fixture tone, not
+an AI-generated voice. Silence is already exact PCM and the completed WAV is
+read back through a basic quality gate.
 
 ## Core Components
 

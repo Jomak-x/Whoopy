@@ -85,6 +85,27 @@ the control-plane, persistence, worker, and artifact boundaries; it does not
 generate a script or audio. See
 [`phase-1-local-core.md`](./phase-1-local-core.md) for the complete walkthrough.
 
+## Phase 2: Render Deterministic Fixture Audio
+
+The same worker command now writes:
+
+```text
+runs/<run-id>/
+├── run.json
+├── timeline.json
+├── narration.wav
+├── audio-manifest.json
+└── quality.json
+```
+
+Open `narration.wav` in any normal audio player. You will hear deterministic
+tones, not speech, separated by an exact 1.5-second silence. Inspect
+`audio-manifest.json` for frame ranges and `quality.json` for the read-back
+checks.
+
+No FFmpeg or model is required in this phase. See
+[`phase-2-deterministic-audio.md`](./phase-2-deterministic-audio.md).
+
 ## Local Configuration
 
 Defaults work without local files. Use process environment variables for temporary or secret overrides:

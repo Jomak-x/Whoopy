@@ -6,14 +6,18 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
+from whoopy.audio import TimelineWaveRenderer
 from whoopy.pipeline.runs import (
+    AUDIO_FILENAME,
+    AUDIO_MANIFEST_FILENAME,
+    QUALITY_FILENAME,
     TIMELINE_FILENAME,
     RunRecord,
     RunStatus,
     RunStore,
     RunStoreError,
 )
-from whoopy.timeline import Timeline, build_prompt_timeline
+from whoopy.timeline import Timeline, build_fixture_timeline
 
 Clock = Callable[[], datetime]
 TimelineBuilder = Callable[[RunRecord, datetime], Timeline]
@@ -28,7 +32,7 @@ def _utc_now() -> datetime:
 
 
 def _default_timeline_builder(record: RunRecord, created_at: datetime) -> Timeline:
-    return build_prompt_timeline(
+    return build_fixture_timeline(
         run_id=record.run_id,
         prompt=record.prompt,
         created_at=created_at,
@@ -49,10 +53,12 @@ class LocalWorker:
         *,
         clock: Clock = _utc_now,
         timeline_builder: TimelineBuilder = _default_timeline_builder,
+        renderer: TimelineWaveRenderer | None = None,
     ) -> None:
         self.store = store
         self.clock = clock
         self.timeline_builder = timeline_builder
+        self.renderer = renderer or TimelineWaveRenderer()
 
     def process(self, run_id: UUID | str) -> RunRecord:
         """Move one queued run through running to completed or failed."""
@@ -72,11 +78,18 @@ class LocalWorker:
         try:
             completed_at = self.clock()
             timeline = self.timeline_builder(running, completed_at)
+            rendered = self.renderer.render(timeline)
             self.store.write_timeline(running.run_id, timeline)
+            self.store.write_audio(running.run_id, rendered.wave_bytes)
+            self.store.write_audio_manifest(running.run_id, rendered.manifest)
+            self.store.write_quality(running.run_id, rendered.quality)
             completed = running.transition(
                 RunStatus.COMPLETED,
                 updated_at=completed_at,
                 timeline_artifact=TIMELINE_FILENAME,
+                audio_artifact=AUDIO_FILENAME,
+                audio_manifest_artifact=AUDIO_MANIFEST_FILENAME,
+                quality_artifact=QUALITY_FILENAME,
             )
             self.store.save(completed)
         except Exception as error:

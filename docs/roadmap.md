@@ -5,8 +5,9 @@ This roadmap turns the spec into implementation phases. Each phase has a reason 
 Implementation status:
 
 - **Phase 0 — complete:** the portable foundation is merged.
-- **Phase 1 — in progress:** the local-core slice is implemented on its review branch.
-- **Phases 2–6 — planned:** audio and product behavior are not implemented yet.
+- **Phase 1 — complete:** the local-core run and worker slice is merged.
+- **Phase 2 — in progress:** deterministic fixture audio is implemented on its review branch.
+- **Phases 3–6 — planned:** models and product behavior are not implemented yet.
 
 ## Phase 0: Documentation And Repo Foundation
 
@@ -89,6 +90,16 @@ Done when:
 - a short meditation renders end-to-end
 - pause timing is stable
 - basic audio quality checks pass
+
+Evidence:
+
+- schema-v2 timelines contain validated `SPEECH` and exact `SILENCE` segments
+- a dependency-free fixture produces audible deterministic speech markers
+- the renderer writes a playable mono 24 kHz 16-bit PCM WAV
+- an audio manifest records exact frame ranges for every segment
+- the quality gate verifies format, frame count, duration, joins, silence, audibility, and clipping
+- a corruption test proves nonzero data inside silence is rejected
+- Phase 1 schema-v1 records and timelines remain readable
 
 ## Phase 3: Quality, Caching, And Recovery
 

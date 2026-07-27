@@ -7,12 +7,11 @@ Whoopy is a local-first, timeline-driven system for generating guided meditation
 
 ## Current Status
 
-Phase 0 established the portable repository foundation. Phase 1 adds the first
-executable local-core slice: a prompt can be saved as a queued run, a separate
-foreground worker can process that run, and the worker writes a validated
-`timeline.json` artifact. This intentionally uses the prompt itself as one
-placeholder `SPEECH` segment; it does **not** claim that script generation,
-speech synthesis, audio rendering, a background queue, or a UI exists yet.
+Phase 0 established the portable repository foundation, and Phase 1 added
+durable runs plus a worker boundary. Phase 2 now turns the worker's canonical
+`SPEECH`/`SILENCE` timeline into a real, playable `narration.wav`. Speech is an
+audible deterministic fixture tone—not a human voice—so pause timing, joins,
+container integrity, and quality checks can be proven before adding TTS.
 
 The functional commands are:
 
@@ -70,9 +69,11 @@ uv run whoopy worker process <run-id>
 uv run whoopy run show <run-id>
 ```
 
-This creates `runs/<run-id>/run.json`, then `timeline.json`. See
-[`docs/phase-1-local-core.md`](./docs/phase-1-local-core.md) for a beginner-level
-explanation of every state and file.
+This creates `runs/<run-id>/run.json`, `timeline.json`, `narration.wav`,
+`audio-manifest.json`, and `quality.json`. See
+[`docs/phase-2-deterministic-audio.md`](./docs/phase-2-deterministic-audio.md)
+for a beginner-level explanation of the audio format, exact pause calculation,
+assembly, and quality gate.
 
 ## Configuration
 
@@ -97,6 +98,7 @@ See [`config/README.md`](./config/README.md) for the contract.
 config/                versioned settings, model registry, pacing, prompts
 scripts/check.py        platform-neutral lint, format, type, and test gate
 src/whoopy/            Python domain package and future local control plane
+  audio/               fixture synthesis, WAV assembly, and audio quality checks
   control.py           prompt submission and run inspection service
   hardware.py          native capability inspection and safe profile selection
   ports/               typed capability contracts
@@ -127,9 +129,10 @@ Read in this order:
 5. [`docs/roadmap.md`](./docs/roadmap.md) — implementation phases
 6. [`docs/native-portability.md`](./docs/native-portability.md) — automatic cross-platform runtime and weak-laptop behavior
 7. [`docs/phase-1-local-core.md`](./docs/phase-1-local-core.md) — the first executable flow
-8. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-9. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-10. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+8. [`docs/phase-2-deterministic-audio.md`](./docs/phase-2-deterministic-audio.md) — exact audio assembly
+9. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+10. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+11. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 
@@ -160,7 +163,7 @@ make check          # optional Unix wrapper for the same Python check script
 ```
 
 Commands such as `make worker`, `make dev`, and `whoopy generate` remain future
-target interfaces. Phase 1's worker processes one explicitly named run in the
+target interfaces. Phase 2's worker processes one explicitly named run in the
 foreground; it is not a polling background service.
 
 ## License

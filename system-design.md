@@ -503,6 +503,7 @@ whoopy/
 │       │   ├── ambience/          # loop_library.py, stable_audio_open.py, binaural_dsp.py
 │       │   └── renderer/          # ffmpeg_renderer.py
 │       ├── timeline/              # current minimal models; future compiler and migrations
+│       ├── audio/                 # current fixture PCM/WAV/quality; future production renderer
 │       ├── pipeline/              # current run store/worker; future cache, recovery, duration fitting
 │       ├── qc/                    # asr_roundtrip.py, audio_checks.py, gate.py
 │       ├── hardware.py            # native capability inspection + profile selection
