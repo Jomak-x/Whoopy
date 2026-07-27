@@ -479,8 +479,7 @@ class ModerationScanner(Protocol):
 
 ```
 whoopy/
-├── README.md                      # includes the macOS-Docker-GPU warning up front
-├── docker-compose.yml             # STATELESS INFRA + web/api ONLY (no ML)
+├── README.md                      # project entry point and honest current scope
 ├── Makefile                       # optional Unix wrappers around uv/Python commands
 ├── pyproject.toml
 ├── uv.lock                        # exact cross-platform Python resolution
@@ -495,15 +494,16 @@ whoopy/
 │       ├── script_system.md
 │       └── editorial_system.md
 ├── src/
-│   └── whoopy/                  # installable local-core Python package
+│   └── whoopy/                    # installable local-core Python package
+│       ├── control.py             # current prompt submission and run lookup service
 │       ├── ports/                 # base, script_generator, speech_synthesizer, ambience_generator, renderer, publisher, moderation_scanner
 │       ├── adapters/
 │       │   ├── llm/               # llama_cpp.py universal; optional mlx accelerators
 │       │   ├── tts/               # sherpa_onnx.py universal; optional expressive adapters
 │       │   ├── ambience/          # loop_library.py, stable_audio_open.py, binaural_dsp.py
 │       │   └── renderer/          # ffmpeg_renderer.py
-│       ├── timeline/              # schema.py (JSON Schema + dataclasses), compiler.py (prose+cues → timeline)
-│       ├── pipeline/              # orchestrator.py, state_machine.py, checkpoint.py, cache.py, duration_fit.py
+│       ├── timeline/              # current minimal models; future compiler and migrations
+│       ├── pipeline/              # current run store/worker; future cache, recovery, duration fitting
 │       ├── qc/                    # asr_roundtrip.py, audio_checks.py, gate.py
 │       ├── hardware.py            # native capability inspection + profile selection
 │       └── api/                   # fastapi app, huey_tasks.py, progress.py

@@ -37,6 +37,8 @@ pauses:
   deliberate_min_ms: 1500
 
 pipeline:
+  # Phase 1 stores each durable run under this root. Future checkpoints, logs,
+  # cached segments, and rendered artifacts remain inside the same run boundary.
   checkpoint_dir: ./runs
   cache: content_addressed
 

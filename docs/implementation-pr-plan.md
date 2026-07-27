@@ -2,7 +2,13 @@
 
 This document turns the Whoopy specification into a sequence of small pull requests. Each numbered step is one PR. Complete and merge them in order unless a PR explicitly says it can run in parallel.
 
-The initial repository is the one documented exception: Milestone 0's PR 1–3 review slices are delivered together in a single Phase 0 foundation PR because there was no committed base to branch them from. The PR keeps those slices visible in its description and verification checklist. Beginning with PR 4, every numbered step is a separate pull request.
+The initial repository is one documented exception: Milestone 0's PR 1–3 review
+slices were delivered together in the Phase 0 foundation PR because there was no
+committed base. The Phase 1 local-core skeleton is a second deliberate vertical
+slice: it implements only the minimum portions of the timeline, run-directory,
+and CLI boundaries needed to prove `prompt -> saved run -> worker -> timeline`.
+The numbered PRs below still own the production-grade expansion of those
+contracts and should remain bounded review units.
 
 The first major objective is not the web application. It is a dependable local CLI that converts a script into a canonical timeline and then into correctly timed audio. Real models, background ambience, the local web UI, and the public Commons platform are layered on only after that foundation works.
 
@@ -132,6 +138,10 @@ Out of scope: real ML runtime tests and large model downloads in CI.
 ## Milestone 1: Canonical Timeline
 
 ### PR 4: Define the timeline segment models
+
+Phase 1 status: a provisional versioned timeline with one minimal `SPEECH`
+segment is executable. This PR still owns the complete speech/silence contract,
+fields, union validation, duplicate-ID rules, and migration-quality tests.
 
 Goal: Introduce the canonical data contract that every later stage will consume.
 
@@ -269,6 +279,10 @@ Out of scope: rendering breath visuals or applying music automation.
 
 ### PR 9: Add run directories and artifact manifests
 
+Phase 1 status: UUID run directories, `run.json`, `timeline.json`, and atomic
+JSON replacement exist. This PR still owns the full artifact manifest, copied
+inputs, resolved configuration, logs, segment paths, and interruption tests.
+
 Goal: Give every generation a predictable, inspectable workspace.
 
 Changes:
@@ -400,6 +414,10 @@ make test
 Out of scope: ambience, mastering, and delivery codecs.
 
 ### PR 14: Add the first end-to-end CLI generation path
+
+Phase 1 status: separate `run create` and `worker process` commands prove the
+control-plane/worker boundary. This PR still owns the real offline fixture-audio
+generation path and its complete artifact set.
 
 Goal: Produce a correctly timed lossless meditation from a text script using only fixture speech.
 
@@ -1273,6 +1291,9 @@ PRs 40–47 are complete. The release is ready when:
 - reporting, removal, audit, and credential-revocation paths work;
 - local Whoopy remains fully useful without Commons.
 
-## The First PR To Open
+## Next Detailed PR After The Phase 1 Skeleton
 
-The empty-repository exception combines Milestone 0's three foundation slices in PR #1 so every later branch has a portable, tested base. After that PR merges, start only with **PR 4: Define the timeline segment models** and return to one numbered step per pull request.
+After the Phase 1 vertical slice merges, return to the bounded plan by hardening
+**PR 4: Define the timeline segment models**. Extend the provisional speech-only
+artifact into the full initial `SPEECH`/`SILENCE` domain contract without adding
+audio rendering.
