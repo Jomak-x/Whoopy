@@ -8,7 +8,7 @@ Implementation status:
 - **Phase 1 — complete:** the local-core run and worker slice is merged.
 - **Phase 2 — complete:** deterministic fixture audio is merged.
 - **Phase 3 — in review:** segment caching, retry, recovery, and stronger integrity checks are implemented.
-- **Phase 3.5 — planned:** install verified local models and generate the first real spoken meditation.
+- **Phase 3.5 — in progress:** its verified offline artifact manager is implemented; runtime adapters and real generation are next.
 - **Phases 4–6 — planned:** product UI and platform behavior are not implemented yet.
 
 ## Phase 0: Documentation And Repo Foundation
@@ -153,7 +153,7 @@ Why this phase exists:
 
 Implementation order:
 
-1. add a verified, resumable offline artifact manager
+1. add a verified, resumable offline artifact manager — implemented
 2. add typed llama.cpp and sherpa-onnx adapters
 3. render a pasted script with real Kokoro speech
 4. generate and validate a meditation locally with Qwen3-4B

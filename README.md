@@ -15,6 +15,8 @@ fixture tone—not a human voice—so reliability can be proven before adding TT
 Phase 3.5 is now the explicit next milestone: verified local model installation,
 real Kokoro speech, validated local script generation, and the first complete
 offline meditation before Phase 4 UI work.
+Its first PR implements the immutable artifact lock and safe native installer;
+the installed files are not connected to generation until the adapter PR.
 
 The functional commands are:
 
@@ -22,6 +24,9 @@ The functional commands are:
 whoopy --help
 whoopy config show
 whoopy doctor
+whoopy models list
+whoopy models doctor
+whoopy models install --profile auto
 whoopy run create "A short grounding meditation."
 whoopy run show <run-id>
 whoopy run resume <run-id>
@@ -64,6 +69,17 @@ uv run --extra dev python scripts/check.py
 ```
 
 `uv` reads `.python-version`, installs Python 3.11 when needed, and reproduces `uv.lock`. The setup installs only lightweight foundation dependencies; it does not download model weights or install an ML runtime. Unix contributors may use the equivalent `make setup` and `make check` wrappers.
+
+Model installation is a separate, explicit operation. Inspect the exact plan
+without loading anything, then install only if desired:
+
+```bash
+uv run whoopy models doctor
+uv run whoopy models install --profile auto
+```
+
+Every file is pinned by version, size, SHA-256 digest, license, operating
+system, and architecture in [`config/artifacts.yaml`](./config/artifacts.yaml).
 
 ### Try The Current Flow
 
@@ -110,6 +126,7 @@ See [`config/README.md`](./config/README.md) for the contract.
 config/                versioned settings, model registry, pacing, prompts
 scripts/check.py        platform-neutral lint, format, type, and test gate
 src/whoopy/            Python domain package and future local control plane
+  artifacts.py         verified, resumable, platform-aware artifact installer
   audio/               fixture synthesis, WAV assembly, and audio quality checks
   control.py           prompt submission and run inspection service
   hardware.py          native capability inspection and safe profile selection
@@ -167,6 +184,8 @@ Read in this order:
 ```bash
 uv sync --extra dev --locked                 # exact cross-platform setup
 uv run whoopy doctor                         # select a safe native profile
+uv run whoopy models doctor                  # inspect its immutable artifact plan
+uv run whoopy models install --profile auto  # explicitly install verified artifacts
 uv run whoopy run create "A calm pause."     # save a queued local run
 uv run --extra dev python scripts/check.py   # complete local/CI quality gate
 

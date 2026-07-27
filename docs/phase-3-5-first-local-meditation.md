@@ -130,6 +130,8 @@ keeps fixture tests fast and keeps all large artifacts outside Git.
 
 ### Phase 3.5 PR 1: Add The Offline Artifact Manager
 
+Status: implemented on the `phase-3-5-offline-artifact-manager` branch.
+
 Goal: make native runtimes and models reproducible, verifiable, and easy to
 prepare before travel.
 
