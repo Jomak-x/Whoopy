@@ -162,6 +162,9 @@ Out of scope: generating text or speech.
 
 ### Phase 3.5 PR 2: Add Stable Runtime Ports And Native Adapters
 
+Status: implemented on the `phase-3-5-runtime-adapters` stacked branch. See
+[`phase-3-5-runtime-adapters.md`](./phase-3-5-runtime-adapters.md).
+
 Goal: prevent concrete model code from leaking into the worker.
 
 Changes:

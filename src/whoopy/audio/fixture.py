@@ -6,6 +6,7 @@ from array import array
 from sys import byteorder
 
 from whoopy.audio.models import SAMPLE_RATE, PcmAudio
+from whoopy.ports import AdapterMetadata
 from whoopy.timeline import SpeechSegment
 
 FIXTURE_AMPLITUDE = 5_000
@@ -34,9 +35,17 @@ class FixtureSpeechSynthesizer:
     boundaries audible and testable without adding a model dependency.
     """
 
-    # Changing synthesis behavior must change this identity. It is included in
-    # every cache key, preventing older bytes from masquerading as new output.
-    cache_identity: str = "whoopy.fixture_triangle@1"
+    metadata = AdapterMetadata(
+        adapter_id="whoopy.fixture_triangle",
+        versioned_model_id="whoopy/fixture-triangle@1",
+        runtime_id="python",
+        runtime_version="3.11",
+        license_id="Whoopy-test-fixture",
+        device="cpu",
+        settings=("amplitude=5000", "milliseconds_per_word=220"),
+    )
+    # Metadata is the single cache identity source for fixture and real models.
+    cache_identity: str = metadata.cache_identity
     sample_rate: int = SAMPLE_RATE
 
     def synthesize(self, segment: SpeechSegment) -> PcmAudio:

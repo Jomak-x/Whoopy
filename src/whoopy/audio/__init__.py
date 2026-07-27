@@ -10,6 +10,7 @@ from whoopy.audio.models import (
 from whoopy.audio.renderer import AudioRenderError, TimelineWaveRenderer
 from whoopy.audio.synthesis import (
     FatalSynthesisError,
+    InvalidSynthesisOutput,
     SpeechSynthesizer,
     SynthesisError,
     TransientSynthesisError,
@@ -20,6 +21,7 @@ __all__ = [
     "AudioQualityReport",
     "AudioRenderError",
     "FatalSynthesisError",
+    "InvalidSynthesisOutput",
     "QualityCheck",
     "RenderedWave",
     "SegmentAudioSpan",

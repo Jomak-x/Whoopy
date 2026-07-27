@@ -319,6 +319,19 @@ class ArtifactStore:
             return self.download_path(artifact)
         return self.installed / artifact.artifact_id
 
+    def require(self, artifact: ArtifactSpec) -> Path:
+        """Return a fully reverified path or refuse before a runtime can load it."""
+
+        status = self.inspect(artifact, verify_digest=True)
+        if status.state is not ArtifactState.INSTALLED:
+            raise ArtifactError(
+                f"Artifact {artifact.artifact_id} is not safe to load: {status.message}"
+            )
+        installed_path = self.installed_path(artifact)
+        if installed_path is None:
+            raise ArtifactError(f"Artifact {artifact.artifact_id} has no installed path.")
+        return installed_path
+
     def _record_path(self, artifact: ArtifactSpec) -> Path:
         return self.records / f"{artifact.artifact_id}.json"
 

@@ -18,7 +18,10 @@ SECOND_RUN_ID = UUID("55555555-5555-4555-8555-555555555555")
 
 
 class CountingSynthesizer:
-    cache_identity: str = "tests.counting_fixture@1"
+    metadata = FixtureSpeechSynthesizer.metadata.model_copy(
+        update={"adapter_id": "tests.counting_fixture"}
+    )
+    cache_identity: str = metadata.cache_identity
     sample_rate: int = 24_000
 
     def __init__(self) -> None:

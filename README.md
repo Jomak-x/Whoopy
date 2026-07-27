@@ -16,7 +16,8 @@ Phase 3.5 is now the explicit next milestone: verified local model installation,
 real Kokoro speech, validated local script generation, and the first complete
 offline meditation before Phase 4 UI work.
 Its first PR implements the immutable artifact lock and safe native installer;
-the installed files are not connected to generation until the adapter PR.
+its second implements typed llama.cpp and sherpa/Kokoro adapters. The normal
+worker still uses fixture tones until the script-file integration PR.
 
 The functional commands are:
 
@@ -161,9 +162,10 @@ Read in this order:
 8. [`docs/phase-2-deterministic-audio.md`](./docs/phase-2-deterministic-audio.md) — exact audio assembly
 9. [`docs/phase-3-quality-caching-recovery.md`](./docs/phase-3-quality-caching-recovery.md) — cache, retry, and resume
 10. [`docs/phase-3-5-first-local-meditation.md`](./docs/phase-3-5-first-local-meditation.md) — real local models and the first offline meditation
-11. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-12. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-13. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+11. [`docs/phase-3-5-runtime-adapters.md`](./docs/phase-3-5-runtime-adapters.md) — ports, metadata, error taxonomy, and native adapters
+12. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+13. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+14. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 

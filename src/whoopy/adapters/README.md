@@ -1,3 +1,12 @@
 # Adapters
 
-Concrete LLM, TTS, ambience, renderer, storage, and publishing integrations belong here. The universal baseline will use llama.cpp/GGUF for text and sherpa-onnx/Kokoro for speech. MLX and other accelerators remain optional adapters. Model-specific prompts and behavior must not leak into the pipeline.
+Concrete integrations implement the stable contracts from `whoopy.ports`.
+
+- `llm/llama_cpp.py` invokes the verified native CLI in a bounded subprocess.
+- `tts/sherpa_onnx.py` lazily loads the verified Kokoro model through
+  sherpa-onnx.
+
+Neither module loads a model during import or adapter listing. Model-specific
+prompts, subprocess flags, voice controls, and runtime errors stay inside these
+implementations. MLX and future alternatives remain optional adapters behind
+the same ports.
