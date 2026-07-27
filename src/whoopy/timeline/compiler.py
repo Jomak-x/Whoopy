@@ -18,7 +18,7 @@ MARKDOWN_LINK = re.compile(r"!?\[([^\]]+)\]\([^)]+\)")
 MARKDOWN_PREFIX = re.compile(r"^(?:>\s*|[-*+]\s+|\d+[.)]\s+)")
 MAX_SCRIPT_CHARACTERS = 200_000
 MAX_SPEECH_CHARACTERS = 600
-MAX_SEGMENTS = 500
+MAX_SEGMENTS = 1_000
 
 
 class ScriptCompileError(ValueError):

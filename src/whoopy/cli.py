@@ -974,6 +974,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             artifact_lock = load_artifact_lock(_artifact_lock_path(args))
             voice_name = args.voice or settings.tts.voice
             speed = args.speed if args.speed is not None else settings.tts.speed
+            if not 0.5 <= speed <= 1.2:
+                raise GenerationError("--speed must be between 0.5 and 1.2")
             tts_settings = SherpaOnnxSettings(
                 voice_name=voice_name,
                 speaker_id=kokoro_speaker_id(voice_name),
@@ -1023,6 +1025,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     llm,
                     prompts,
                     max_parallel_sections=args.parallel_sections,
+                    # Kokoro's speech rate scales approximately with this input.
+                    # Real-device calibration measured about 122 WPM at 0.6.
+                    articulation_words_per_minute=max(80, round(205 * speed)),
                     workspace=workspace,
                 ).generate(
                     prompt=args.prompt,

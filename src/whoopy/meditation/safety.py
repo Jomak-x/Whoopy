@@ -16,8 +16,32 @@ UNSAFE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bguarantee(?:d|s)?\b", re.I), "guaranteed outcome"),
     (re.compile(r"\bhold (?:in |your )?breath\b", re.I), "required breath holding"),
     (
-        re.compile(r"\b(?:inhale|breathe in)\b.{0,60}\bhold (?:it|that)\b", re.I),
+        re.compile(
+            r"\b(?:inhale|breathe in|breath in)\b.{0,100}"
+            r"\bhold(?:ing)? (?:it|that|the breath)\b",
+            re.I,
+        ),
         "required breath holding",
+    ),
+    (
+        re.compile(r"\bhold(?:ing)? (?:it|the breath) for (?:a|one|the)\b", re.I),
+        "required breath holding",
+    ),
+    (
+        re.compile(
+            r"\b(?:take|draw|breathe in) (?:a |one )?(?:slow,? )?deep breath\b",
+            re.I,
+        ),
+        "prescribed deep breathing",
+    ),
+    (re.compile(r"\bfill your lungs\b", re.I), "prescribed deep breathing"),
+    (
+        re.compile(r"\b(?:breathe in|inhale|exhale|breathe out) (?:slowly|deeply|for)\b", re.I),
+        "prescribed breath timing",
+    ),
+    (
+        re.compile(r"\blet each (?:inhale|exhale)\b", re.I),
+        "prescribed breath control",
     ),
     (re.compile(r"\byou (?:should|must) (?:not )?feel\b", re.I), "prescriptive emotional claim"),
 )

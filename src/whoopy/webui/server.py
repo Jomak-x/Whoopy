@@ -208,11 +208,11 @@ class LocalWebApplication:
         if voice not in KOKORO_ENGLISH_VOICES:
             raise ValueError("Choose one of Whoopy's reviewed voices.")
         try:
-            speed = float(payload.get("speed", 0.9))
+            speed = float(payload.get("speed", 0.6))
         except (TypeError, ValueError) as error:
             raise ValueError("Speech speed must be a number.") from error
-        if not 0.7 <= speed <= 1.2:
-            raise ValueError("Speech speed must be between 0.7 and 1.2.")
+        if not 0.5 <= speed <= 1.2:
+            raise ValueError("Speech speed must be between 0.5 and 1.2.")
         try:
             minutes = float(payload.get("minutes", 3))
         except (TypeError, ValueError) as error:
@@ -410,6 +410,11 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
             if path.startswith("/api/runs/"):
                 self._serve_run_path(path)
                 return
+            if path == "/favicon.ico":
+                # Browsers request this automatically. An empty success keeps
+                # the local log focused on actual application problems.
+                self._send_bytes(b"", "image/x-icon", status=HTTPStatus.NO_CONTENT)
+                return
             static_name = {"/": "index.html", "/styles.css": "styles.css", "/app.js": "app.js"}.get(
                 path
             )
@@ -452,7 +457,7 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
                 if audio is None:
                     self._send_error(HTTPStatus.NOT_FOUND, "Audio not found.")
                 else:
-                    self._send_bytes(audio.read_bytes(), "audio/wav")
+                    self._send_audio(audio)
                 return
             if len(parts) == 5 and parts[:2] == ["api", "runs"] and parts[3] == "artifact":
                 artifact = application.artifact_path(parts[2], parts[4])
@@ -463,6 +468,65 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
                     self._send_bytes(artifact.read_bytes(), content_type)
                 return
             self._send_error(HTTPStatus.NOT_FOUND, "Run resource not found.")
+
+        def _send_audio(self, path: Path) -> None:
+            """Stream a WAV with byte-range support for browser seek/cancel behavior."""
+
+            size = path.stat().st_size
+            start = 0
+            end = size - 1
+            status = HTTPStatus.OK
+            range_header = self.headers.get("Range")
+            if range_header:
+                try:
+                    unit, requested = range_header.split("=", 1)
+                    first, last = requested.split("-", 1)
+                    if unit.strip().lower() != "bytes" or "," in requested:
+                        raise ValueError
+                    if first:
+                        start = int(first)
+                        end = int(last) if last else end
+                    elif last:
+                        suffix_length = int(last)
+                        if suffix_length <= 0:
+                            raise ValueError
+                        start = max(0, size - suffix_length)
+                    if start < 0 or start >= size or end < start:
+                        raise ValueError
+                    end = min(end, size - 1)
+                except ValueError:
+                    self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    self.send_header("Content-Range", f"bytes */{size}")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                status = HTTPStatus.PARTIAL_CONTENT
+
+            length = end - start + 1
+            self.send_response(status)
+            self.send_header("Content-Type", "audio/wav")
+            self.send_header("Content-Length", str(length))
+            self.send_header("Accept-Ranges", "bytes")
+            if status == HTTPStatus.PARTIAL_CONTENT:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+
+            try:
+                with path.open("rb") as stream:
+                    stream.seek(start)
+                    remaining = length
+                    while remaining:
+                        chunk = stream.read(min(64 * 1_024, remaining))
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        remaining -= len(chunk)
+            except (BrokenPipeError, ConnectionResetError):
+                # Seeking or closing the browser player legitimately cancels a
+                # request. It is not a failed Whoopy generation.
+                return
 
         def _read_json(self) -> Any:
             content_type = self.headers.get_content_type()
@@ -515,7 +579,10 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Security-Policy", "default-src 'self'; media-src 'self'")
             self.end_headers()
-            self.wfile.write(payload)
+            try:
+                self.wfile.write(payload)
+            except (BrokenPipeError, ConnectionResetError):
+                return
 
         def log_message(self, format: str, *args: object) -> None:
             print(f"[whoopy web] {self.address_string()} {format % args}", file=sys.stderr)

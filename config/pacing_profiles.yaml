@@ -1,16 +1,16 @@
 # Product-level pacing presets. Values are data rather than model-specific
 # instructions so every TTS adapter receives the same intent.
 slow_sleep:
-  speech_speed: 0.85
-  silence_scale: 1.25
-  breath_pattern_seconds: [4, 7, 8]
+  speech_speed: 0.55
+  silence_scale: 1.35
+  breath_pattern_seconds: [4, 6, 8]
 
 focus:
-  speech_speed: 0.95
-  silence_scale: 0.9
+  speech_speed: 0.65
+  silence_scale: 1.0
   breath_pattern_seconds: [4, 4, 4]
 
 daytime:
-  speech_speed: 1.0
-  silence_scale: 0.8
+  speech_speed: 0.7
+  silence_scale: 0.9
   breath_pattern_seconds: [4, 2, 6]

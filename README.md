@@ -17,7 +17,9 @@ audio checkpoints, final WAV, manifest, and quality report. The first recorded
 bake-off keeps Standard Qwen3-4B for prompt mode, rejects
 the current Lite model as a dependable fallback after a 0/6 strict result, and
 keeps Basic authored-script mode as the lower-resource path. Human voice review
-remains deliberately pending.
+remains deliberately pending. Phase 3.6 adds sentence-level deterministic
+pauses, a calibrated `0.6` meditation pace, stricter natural-breathing safety,
+browser audio range streaming, and a documented Fish Speech feasibility trial.
 
 The functional commands are:
 
@@ -218,9 +220,10 @@ Read in this order:
 15. [`docs/phase-3-5-end-to-end.md`](./docs/phase-3-5-end-to-end.md) — one-command prompt/script audio flow and recovery
 16. [`docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md`](./docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md) — Lite/Standard measurements, failures, and decision
 17. [`docs/evaluations/voice-listening-rubric.md`](./docs/evaluations/voice-listening-rubric.md) — anonymous voice samples and human review
-18. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-19. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-20. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+18. [`docs/phase-3-6-meditation-pacing-and-fish-evaluation.md`](./docs/phase-3-6-meditation-pacing-and-fish-evaluation.md) — slower narration, deterministic sentence rests, log fix, and Fish trial
+19. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+20. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+21. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 

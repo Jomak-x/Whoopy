@@ -12,7 +12,10 @@ tts:
   # optional implementation details behind the same typed speech port.
   backend: auto
   voice: af_heart
-  speed: 0.9
+  # Real-device calibration found 0.6 to be about 122 articulated words/minute.
+  # Sentence rests are separate timeline events, so this controls the voice
+  # itself rather than trying to simulate calmness with one large pause.
+  speed: 0.6
 
 hardware:
   # `auto` chooses the highest profile that meets conservative RAM and disk

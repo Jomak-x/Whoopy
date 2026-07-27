@@ -33,7 +33,7 @@ class ProposedSection(BaseModel):
     title: ShortText
     purpose: ShortText
     weight: int = Field(ge=1, le=5)
-    pause_seconds: float = Field(ge=1, le=12)
+    pause_seconds: float = Field(ge=6, le=20)
 
 
 class ProposedPlan(BaseModel):
@@ -62,7 +62,9 @@ class PlannedSection(BaseModel):
     title: ShortText
     purpose: ShortText
     target_speech_seconds: int = Field(ge=8)
-    pause_after_ms: int = Field(ge=1_000, le=12_000)
+    # Very short requests with many sections may scale the model's generous
+    # proposal down, while normal practices retain the requested 6-20 seconds.
+    pause_after_ms: int = Field(ge=1_000, le=20_000)
     minimum_words: int = Field(ge=8)
     maximum_words: int = Field(ge=8)
 

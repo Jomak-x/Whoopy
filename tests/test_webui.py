@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import http.client
 import json
+import threading
 import time
+from http.server import ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -10,7 +13,7 @@ import pytest
 from pytest import MonkeyPatch
 
 from whoopy.pipeline import RunStore
-from whoopy.webui.server import LocalWebApplication
+from whoopy.webui.server import LocalWebApplication, _handler_factory
 
 
 def _application(tmp_path: Path) -> LocalWebApplication:
@@ -57,7 +60,7 @@ def test_recent_runs_ignore_non_uuid_directories_and_expose_safe_artifacts(
         ({"mode": "prompt", "text": ""}, "Please enter"),
         ({"mode": "prompt", "text": "calm", "minutes": 0}, "between 1 and 30"),
         ({"mode": "script", "text": "calm", "voice": "unknown"}, "reviewed voices"),
-        ({"mode": "script", "text": "calm", "speed": 3}, "between 0.7 and 1.2"),
+        ({"mode": "script", "text": "calm", "speed": 3}, "between 0.5 and 1.2"),
     ],
 )
 def test_generation_request_validation(
@@ -140,3 +143,33 @@ def test_web_cli_passes_local_paths_without_starting_a_real_server(
     assert captured["port"] == 9001
     assert captured["project_root"] == tmp_path
     assert captured["runs_directory"] == Path("runs")
+
+
+def test_audio_endpoint_supports_browser_byte_ranges(tmp_path: Path) -> None:
+    application = _application(tmp_path)
+    run_id = "23d079b0-5fe0-46d1-ae11-04038ef9d802"
+    audio = tmp_path / "runs" / run_id / "narration.wav"
+    audio.parent.mkdir(parents=True)
+    audio.write_bytes(b"0123456789")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_factory(application))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "GET",
+            f"/api/runs/{run_id}/audio",
+            headers={"Range": "bytes=2-5"},
+        )
+        response = connection.getresponse()
+
+        assert response.status == 206
+        assert response.getheader("Accept-Ranges") == "bytes"
+        assert response.getheader("Content-Range") == "bytes 2-5/10"
+        assert response.read() == b"2345"
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
