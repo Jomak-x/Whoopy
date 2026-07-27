@@ -13,7 +13,7 @@ import yaml
 from whoopy.config import ConfigError, load_settings
 from whoopy.control import LocalControlPlane
 from whoopy.hardware import diagnose, inspect_hardware, load_runtime_profiles
-from whoopy.pipeline import LocalWorker, RunRecord, RunStore
+from whoopy.pipeline import LocalWorker, RunRecord, RunStore, SegmentCache
 from whoopy.pipeline.runs import RunStoreError
 from whoopy.pipeline.worker import WorkerError
 
@@ -43,6 +43,12 @@ def _run_store(args: argparse.Namespace) -> RunStore:
     return RunStore(settings.pipeline.checkpoint_dir)
 
 
+def _segment_cache(store: RunStore) -> SegmentCache:
+    """Share cached speech across every run stored beneath this root."""
+
+    return SegmentCache(store.root / ".cache" / "segments")
+
+
 def _print_run(record: RunRecord, store: RunStore, *, as_json: bool) -> None:
     if as_json:
         print(record.model_dump_json(indent=2))
@@ -61,6 +67,15 @@ def _print_run(record: RunRecord, store: RunStore, *, as_json: bool) -> None:
         print(f"Quality report: {store.quality_path(record.run_id)}")
     if record.error is not None:
         print(f"Error: {record.error}")
+    if record.recovery is not None:
+        recovery = record.recovery
+        print(
+            "Recovery: "
+            f"{recovery.speech_segments_completed}/{recovery.speech_segments_total} speech, "
+            f"{recovery.cache_hits} cache hits, "
+            f"{recovery.checkpoint_reuses} checkpoint reuses, "
+            f"{recovery.resume_count} resumes"
+        )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -131,6 +146,34 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Print only the machine-readable run record.",
     )
     _add_run_location_arguments(run_show_parser)
+
+    run_resume_parser = run_commands.add_parser(
+        "resume",
+        help="Resume a failed or interrupted run from verified segment checkpoints.",
+    )
+    run_resume_parser.add_argument("run_id", help="UUID of a failed or running run.")
+    run_resume_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print only the machine-readable completed run record.",
+    )
+    _add_run_location_arguments(run_resume_parser)
+
+    cache_parser = subcommands.add_parser(
+        "cache",
+        help="Inspect the local content-addressed speech cache.",
+    )
+    cache_commands = cache_parser.add_subparsers(dest="cache_command")
+    cache_stats_parser = cache_commands.add_parser(
+        "stats",
+        help="Count valid and corrupt entries without changing the cache.",
+    )
+    cache_stats_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print only machine-readable cache statistics.",
+    )
+    _add_run_location_arguments(cache_stats_parser)
 
     worker_parser = subcommands.add_parser(
         "worker",
@@ -232,10 +275,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_run(record, store, as_json=args.json)
         return 0
 
+    if args.command == "run" and args.run_command == "resume":
+        try:
+            store = _run_store(args)
+            record = LocalWorker(store, cache=_segment_cache(store)).resume(args.run_id)
+        except (ConfigError, RunStoreError, WorkerError) as error:
+            parser.error(str(error))
+        _print_run(record, store, as_json=args.json)
+        return 0
+
+    if args.command == "cache" and args.cache_command == "stats":
+        try:
+            store = _run_store(args)
+            stats = _segment_cache(store).stats()
+        except (ConfigError, RunStoreError) as error:
+            parser.error(str(error))
+        if args.json:
+            print(stats.model_dump_json(indent=2))
+        else:
+            print("Whoopy speech cache")
+            print(f"  Entries: {stats.entries}")
+            print(f"  Valid: {stats.valid_entries}")
+            print(f"  Corrupt: {stats.corrupt_entries}")
+            print(f"  Audio bytes: {stats.audio_bytes}")
+        return 0
+
     if args.command == "worker" and args.worker_command == "process":
         try:
             store = _run_store(args)
-            record = LocalWorker(store).process(args.run_id)
+            record = LocalWorker(store, cache=_segment_cache(store)).process(args.run_id)
         except (ConfigError, RunStoreError, WorkerError) as error:
             parser.error(str(error))
         _print_run(record, store, as_json=args.json)

@@ -28,7 +28,7 @@ API/CLI -> application services -> pipeline
 ```
 
 - `timeline/` owns the canonical segment types and compilation rules.
-- `audio/` owns dependency-free fixture PCM, WAV assembly, manifests, and basic read-back checks.
+- `audio/` owns the synthesis protocol, dependency-free fixture PCM, WAV assembly, manifests, and read-back checks.
 - `ports/` owns typed behavior contracts and shared adapter errors.
 - `adapters/` implements ports for concrete models and infrastructure.
 - `pipeline/` coordinates domain objects and ports; it does not inspect model names.
@@ -37,7 +37,9 @@ API/CLI -> application services -> pipeline
 - `hardware.py` detects native resources and selects a safe user-facing runtime profile.
 - `control.py` submits prompts and reads run state without performing worker work.
 - `pipeline/runs.py` owns durable records, UUID-safe paths, and atomic artifact writes.
-- `pipeline/worker.py` owns lifecycle transitions and processing behind the worker boundary.
+- `pipeline/cache.py` owns content-addressed reusable speech and its integrity metadata.
+- `pipeline/checkpoints.py` owns per-run segment progress and verified PCM checkpoints.
+- `pipeline/worker.py` owns lifecycle transitions, retry, resume, and processing behind the worker boundary.
 
 ## Replaceable Models
 
@@ -53,10 +55,10 @@ The default path resolves `auto` to llama.cpp/GGUF and sherpa-onnx/Kokoro. Optio
 
 ## Runtime Data
 
-Phase 1 creates the first of these ignored runtime paths:
+The current phases create these ignored runtime paths:
 
-- `runs/` for per-generation records and timeline artifacts;
-- `cache/` for content-addressed reusable work;
+- `runs/` for per-generation records, segment checkpoints, and final artifacts;
+- `runs/.cache/segments/` for content-addressed reusable speech;
 - `models/` for optional repository-local weights;
 - SQLite database and sidecar files.
 

@@ -10,7 +10,16 @@ Phase 1 introduced the first executable slice:
 - every run lives in `runs/<run-id>/`;
 - the worker writes `timeline.json` before marking the run completed.
 
-Phase 2 extends worker completion to require a validated timeline, PCM WAV,
-frame-range manifest, and passing quality report. There is intentionally no
-daemon, concurrent claim/lease, retry loop, model, or production audio behavior
-yet.
+Phase 2 extended completion to a validated timeline, PCM WAV, frame-range
+manifest, and passing quality report.
+
+Phase 3 adds:
+
+- `cache.py` for content-addressed speech shared by runs;
+- `checkpoints.py` for verified per-run speech progress;
+- bounded transient retries and immediate fatal failures;
+- resume from failed or interrupted runs;
+- recovery/cache counters in schema-v3 run records.
+
+There is still no daemon, concurrent claim/lease, real model, or production
+audio adapter.

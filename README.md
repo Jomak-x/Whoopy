@@ -7,11 +7,11 @@ Whoopy is a local-first, timeline-driven system for generating guided meditation
 
 ## Current Status
 
-Phase 0 established the portable repository foundation, and Phase 1 added
-durable runs plus a worker boundary. Phase 2 now turns the worker's canonical
-`SPEECH`/`SILENCE` timeline into a real, playable `narration.wav`. Speech is an
-audible deterministic fixture tone—not a human voice—so pause timing, joins,
-container integrity, and quality checks can be proven before adding TTS.
+Phases 0–2 established the portable repository, durable worker boundary, and
+deterministic WAV assembly. Phase 3 adds content-addressed speech caching,
+per-run segment checkpoints, bounded retry, resumable failed or interrupted
+runs, and stronger integrity checks. Speech remains an audible deterministic
+fixture tone—not a human voice—so reliability can be proven before adding TTS.
 
 The functional commands are:
 
@@ -21,7 +21,9 @@ whoopy config show
 whoopy doctor
 whoopy run create "A short grounding meditation."
 whoopy run show <run-id>
+whoopy run resume <run-id>
 whoopy worker process <run-id>
+whoopy cache stats
 ```
 
 ## Design In One Minute
@@ -60,7 +62,7 @@ uv run --extra dev python scripts/check.py
 
 `uv` reads `.python-version`, installs Python 3.11 when needed, and reproduces `uv.lock`. The setup installs only lightweight foundation dependencies; it does not download model weights or install an ML runtime. Unix contributors may use the equivalent `make setup` and `make check` wrappers.
 
-### Try The Phase 1 Flow
+### Try The Current Flow
 
 ```bash
 uv run whoopy run create "A short grounding meditation."
@@ -74,6 +76,13 @@ This creates `runs/<run-id>/run.json`, `timeline.json`, `narration.wav`,
 [`docs/phase-2-deterministic-audio.md`](./docs/phase-2-deterministic-audio.md)
 for a beginner-level explanation of the audio format, exact pause calculation,
 assembly, and quality gate.
+
+Phase 3 also creates verified speech checkpoints beneath
+`runs/<run-id>/segments/` and a shared cache beneath `runs/.cache/segments/`.
+Repeat the same prompt to observe cache hits in `run.json`, inspect them with
+`whoopy cache stats`, or recover a failed/interrupted run with
+`whoopy run resume <run-id>`. See
+[`docs/phase-3-quality-caching-recovery.md`](./docs/phase-3-quality-caching-recovery.md).
 
 ## Configuration
 
@@ -104,7 +113,7 @@ src/whoopy/            Python domain package and future local control plane
   ports/               typed capability contracts
   adapters/            model and infrastructure integrations
   timeline/            current minimal timeline models; future compiler
-  pipeline/            run storage and worker; future cache and recovery
+  pipeline/            run storage, segment cache/checkpoints, retry, and recovery
   qc/                  audio and content quality gates
   api/                 future local FastAPI control plane
 assets/                 redistributable, provenance-tracked source assets
@@ -130,9 +139,10 @@ Read in this order:
 6. [`docs/native-portability.md`](./docs/native-portability.md) — automatic cross-platform runtime and weak-laptop behavior
 7. [`docs/phase-1-local-core.md`](./docs/phase-1-local-core.md) — the first executable flow
 8. [`docs/phase-2-deterministic-audio.md`](./docs/phase-2-deterministic-audio.md) — exact audio assembly
-9. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-10. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-11. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+9. [`docs/phase-3-quality-caching-recovery.md`](./docs/phase-3-quality-caching-recovery.md) — cache, retry, and resume
+10. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+11. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+12. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 
@@ -163,8 +173,8 @@ make check          # optional Unix wrapper for the same Python check script
 ```
 
 Commands such as `make worker`, `make dev`, and `whoopy generate` remain future
-target interfaces. Phase 2's worker processes one explicitly named run in the
-foreground; it is not a polling background service.
+target interfaces. Phase 3's worker still processes one explicitly named run in
+the foreground; it is not a polling or concurrent background service.
 
 ## License
 

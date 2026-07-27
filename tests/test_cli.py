@@ -42,7 +42,7 @@ def test_doctor_prints_machine_readable_recommendation(
     assert output["selected_profile"]["name"] == "standard"
 
 
-def test_run_and_worker_commands_write_the_phase_two_artifacts(
+def test_run_and_worker_commands_write_the_phase_three_artifacts(
     tmp_path: Path, capsys: CaptureFixture[str]
 ) -> None:
     assert (
@@ -80,6 +80,8 @@ def test_run_and_worker_commands_write_the_phase_two_artifacts(
     assert completed["audio_artifact"] == "narration.wav"
     assert completed["audio_manifest_artifact"] == "audio-manifest.json"
     assert completed["quality_artifact"] == "quality.json"
+    assert completed["schema_version"] == 3
+    assert completed["recovery"]["speech_segments_completed"] == 2
 
     run_directory = tmp_path / queued["run_id"]
     assert (run_directory / "run.json").is_file()
@@ -94,3 +96,20 @@ def test_run_and_worker_commands_write_the_phase_two_artifacts(
     ]
     quality = json.loads((run_directory / "quality.json").read_text(encoding="utf-8"))
     assert quality["passed"] is True
+
+    assert (
+        main(
+            [
+                "cache",
+                "stats",
+                "--runs-dir",
+                str(tmp_path),
+                "--json",
+            ]
+        )
+        == 0
+    )
+    cache_stats = json.loads(capsys.readouterr().out)
+    assert cache_stats["entries"] == 2
+    assert cache_stats["valid_entries"] == 2
+    assert cache_stats["corrupt_entries"] == 0

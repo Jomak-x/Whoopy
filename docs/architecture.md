@@ -18,7 +18,7 @@ This is a common pattern in system design: keep the expensive, failure-prone, or
 
 ## Current Executable Slice
 
-Phases 1 and 2 implement a small vertical slice of the future architecture:
+Phases 1–3 implement a small vertical slice of the future architecture:
 
 ```text
 CLI -> LocalControlPlane -> run.json (queued)
@@ -27,6 +27,8 @@ CLI -> LocalWorker -----------+
         |
         +-> run.json (running)
         +-> timeline.json (SPEECH / SILENCE)
+        +-> segments/<speech-id>/checkpoint.json + audio.pcm
+        +-> runs/.cache/segments/<sha256>/metadata.json + audio.pcm
         +-> narration.wav
         +-> audio-manifest.json
         +-> quality.json
@@ -36,8 +38,15 @@ CLI -> LocalWorker -----------+
 The control plane only accepts and records work. The worker alone processes it.
 Both use an inspectable filesystem store today; future FastAPI and queue layers
 can call the same boundaries. Speech is currently an audible fixture tone, not
-an AI-generated voice. Silence is already exact PCM and the completed WAV is
-read back through a basic quality gate.
+an AI-generated voice. Silence is exact PCM. Speech segments are cached by
+synthesis-input hash, checkpointed per run, retried only for classified
+transient/quality failures, and reusable during resume. The completed WAV is
+read back through an integrity gate.
+
+If a process stops during segment N, `whoopy run resume RUN_ID` revalidates the
+saved timeline and completed checkpoints, then restarts at the first unhealthy
+segment. Identical work in another run can use the shared content-addressed
+cache.
 
 ## Core Components
 

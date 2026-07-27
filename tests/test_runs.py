@@ -33,9 +33,10 @@ def test_control_plane_saves_a_queued_run_without_processing_it(tmp_path: Path) 
     assert not store.timeline_path(record.run_id).exists()
 
     document = json.loads(store.record_path(record.run_id).read_text(encoding="utf-8"))
-    assert document["schema_version"] == 2
+    assert document["schema_version"] == 3
     assert document["run_id"] == str(record.run_id)
     assert document["status"] == "queued"
+    assert document["recovery"]["process_attempts"] == 0
     assert control.get_run(str(record.run_id)) == record
 
 
@@ -57,6 +58,27 @@ def test_phase_one_completed_record_remains_readable() -> None:
     assert record.audio_artifact is None
     assert record.audio_manifest_artifact is None
     assert record.quality_artifact is None
+
+
+def test_phase_two_completed_record_remains_readable() -> None:
+    record = RunRecord.model_validate(
+        {
+            "schema_version": 2,
+            "run_id": RUN_ID,
+            "status": "completed",
+            "prompt": "A Phase 2 run.",
+            "created_at": CREATED_AT,
+            "updated_at": CREATED_AT,
+            "timeline_artifact": "timeline.json",
+            "audio_artifact": "narration.wav",
+            "audio_manifest_artifact": "audio-manifest.json",
+            "quality_artifact": "quality.json",
+            "error": None,
+        }
+    )
+
+    assert record.schema_version == 2
+    assert record.recovery is None
 
 
 def test_empty_prompt_is_rejected_before_a_directory_is_created(tmp_path: Path) -> None:

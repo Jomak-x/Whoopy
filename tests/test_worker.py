@@ -22,8 +22,7 @@ def _clock(values: Iterator[datetime]) -> datetime:
 def test_worker_completes_run_and_writes_valid_timeline(tmp_path: Path) -> None:
     store = RunStore(tmp_path)
     store.create("Breathe slowly.", run_id=RUN_ID, created_at=START)
-    timestamps = iter([START + timedelta(seconds=1), START + timedelta(seconds=2)])
-    worker = LocalWorker(store, clock=lambda: _clock(timestamps))
+    worker = LocalWorker(store, clock=lambda: START + timedelta(seconds=1))
 
     completed = worker.process(RUN_ID)
 
@@ -32,6 +31,9 @@ def test_worker_completes_run_and_writes_valid_timeline(tmp_path: Path) -> None:
     assert completed.audio_artifact == "narration.wav"
     assert completed.audio_manifest_artifact == "audio-manifest.json"
     assert completed.quality_artifact == "quality.json"
+    assert completed.recovery is not None
+    assert completed.recovery.speech_segments_completed == 2
+    assert completed.recovery.cache_misses == 2
     assert completed.error is None
     assert store.load(RUN_ID) == completed
 

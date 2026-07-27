@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from io import BytesIO
 from uuid import UUID
 
-from whoopy.audio import TimelineWaveRenderer
+from whoopy.audio import AudioManifest, TimelineWaveRenderer
 from whoopy.audio.fixture import frames_for_milliseconds
 from whoopy.audio.quality import inspect_wave
 from whoopy.timeline import SilenceSegment, SpeechSegment, Timeline
@@ -52,6 +52,20 @@ def test_renderer_is_reproducible_and_preserves_exact_silence() -> None:
     assert silence_bytes == b"\x00\x00" * silence_span.frame_count
 
 
+def test_phase_two_audio_manifest_remains_readable() -> None:
+    phase_two = TimelineWaveRenderer().render(_timeline()).manifest.model_dump()
+    phase_two["schema_version"] = 1
+    phase_two.pop("pcm_sha256")
+    for span in phase_two["segments"]:
+        span.pop("cache_key")
+        span.pop("pcm_sha256")
+
+    manifest = AudioManifest.model_validate(phase_two)
+
+    assert manifest.schema_version == 1
+    assert manifest.pcm_sha256 is None
+
+
 def test_quality_gate_detects_nonzero_samples_inside_silence() -> None:
     rendered = TimelineWaveRenderer().render(_timeline())
     silence_span = rendered.manifest.segments[1]
@@ -72,3 +86,46 @@ def test_quality_gate_detects_nonzero_samples_inside_silence() -> None:
     assert report.passed is False
     exact_silence = next(check for check in report.checks if check.name == "exact_silence")
     assert exact_silence.passed is False
+
+
+def test_quality_gate_detects_requested_pause_timing_regression() -> None:
+    rendered = TimelineWaveRenderer().render(_timeline())
+    silence_span = rendered.manifest.segments[1].model_copy(update={"requested_duration_ms": 1_235})
+    manifest = rendered.manifest.model_copy(
+        update={
+            "segments": [
+                rendered.manifest.segments[0],
+                silence_span,
+                rendered.manifest.segments[2],
+            ]
+        }
+    )
+
+    report = inspect_wave(rendered.wave_bytes, manifest)
+
+    timing = next(check for check in report.checks if check.name == "requested_silence_timing")
+    assert timing.passed is False
+
+
+def test_quality_gate_detects_peak_headroom_regression_before_full_clipping() -> None:
+    rendered = TimelineWaveRenderer().render(_timeline())
+    speech_span = rendered.manifest.segments[0]
+
+    with wave.open(BytesIO(rendered.wave_bytes), "rb") as source:
+        parameters = source.getparams()
+        frames = bytearray(source.readframes(source.getnframes()))
+    byte_offset = (speech_span.start_frame + 100) * parameters.sampwidth
+    frames[byte_offset : byte_offset + 2] = (32_000).to_bytes(2, "little", signed=True)
+
+    output = BytesIO()
+    with wave.open(output, "wb") as destination:
+        destination.setparams(parameters)
+        destination.writeframes(frames)
+
+    report = inspect_wave(output.getvalue(), rendered.manifest)
+
+    headroom = next(check for check in report.checks if check.name == "peak_headroom")
+    no_clipping = next(check for check in report.checks if check.name == "no_clipping")
+    assert report.passed is False
+    assert headroom.passed is False
+    assert no_clipping.passed is True

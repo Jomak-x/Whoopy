@@ -106,6 +106,51 @@ checks.
 No FFmpeg or model is required in this phase. See
 [`phase-2-deterministic-audio.md`](./phase-2-deterministic-audio.md).
 
+## Phase 3: Inspect Cache And Resume
+
+Phase 3 adds two ignored storage layers:
+
+```text
+runs/.cache/segments/<key>/       shared verified speech
+runs/<run-id>/segments/<id>/      this run's verified checkpoint
+```
+
+Render the same prompt twice and inspect reuse:
+
+```bash
+uv run whoopy run create "A short grounding meditation."
+uv run whoopy worker process <first-run-id>
+uv run whoopy run create "A short grounding meditation."
+uv run whoopy worker process <second-run-id>
+uv run whoopy cache stats
+```
+
+The second run's `run.json` reports two cache hits for the current two-speech
+fixture timeline. Recover a run left in `failed` or `running`:
+
+```bash
+uv run whoopy run resume <run-id>
+```
+
+Whoopy revalidates completed segment PCM before reusing it. Corrupt cache or
+checkpoint bytes are never trusted. See
+[`phase-3-quality-caching-recovery.md`](./phase-3-quality-caching-recovery.md)
+for retry classification, directory layout, and integrity checks.
+
+### Prepare For Offline Development
+
+No model or new dependency is needed for Phase 3. While internet is available,
+run:
+
+```bash
+uv sync --extra dev --locked
+uv run --offline --extra dev python scripts/check.py
+```
+
+The second command proves the current environment and local `uv` cache can run
+the full quality gate without a network request. Do not delete `.venv` or clear
+the `uv` cache before traveling.
+
 ## Local Configuration
 
 Defaults work without local files. Use process environment variables for temporary or secret overrides:

@@ -34,7 +34,10 @@ class FixtureSpeechSynthesizer:
     boundaries audible and testable without adding a model dependency.
     """
 
-    sample_rate = SAMPLE_RATE
+    # Changing synthesis behavior must change this identity. It is included in
+    # every cache key, preventing older bytes from masquerading as new output.
+    cache_identity: str = "whoopy.fixture_triangle@1"
+    sample_rate: int = SAMPLE_RATE
 
     def synthesize(self, segment: SpeechSegment) -> PcmAudio:
         words = max(1, len(segment.text.split()))

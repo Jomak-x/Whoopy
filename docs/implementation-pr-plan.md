@@ -10,6 +10,10 @@ and CLI boundaries needed to prove `prompt -> saved run -> worker -> timeline`.
 The Phase 2 deterministic-audio PR is a third vertical slice: it combines the
 minimum silence, fixture-speech, assembly, artifact, and quality behavior needed
 to prove `timeline -> WAV` without adding FFmpeg or a real TTS model.
+The Phase 3 reliability PR is a fourth vertical slice: it combines the minimum
+parts of content-addressed caching, per-segment checkpoints, retry taxonomy,
+resume behavior, and output-integrity checks needed to prove that work survives
+partial failure.
 The numbered PRs below still own the production-grade expansion of those
 contracts and should remain bounded review units.
 
@@ -580,6 +584,12 @@ Out of scope: final program loudness mastering.
 
 ### PR 19: Add content-addressed segment caching
 
+Phase 3 status: the fixture synthesis path now uses canonical SHA-256 keys,
+metadata-last atomic commits, read-time checksum/format/quality validation,
+corrupt-entry regeneration, isolated temporary test caches, and
+`whoopy cache stats`. Production model fields and explicit cache pruning remain
+owned by this later bounded PR.
+
 Goal: Avoid regenerating identical speech and enable cheap partial reruns.
 
 Changes:
@@ -779,6 +789,11 @@ Out of scope: comparing several LLMs or making Qwen3-32B mandatory before the in
 
 ### PR 26: Add pipeline checkpoints and run state
 
+Phase 3 status: schema-v3 run records and per-speech-segment checkpoint files
+record attempts, timestamps, failure history, cache provenance, PCM integrity,
+and resumable progress. A future database/queue stage still owns leases and
+multi-worker coordination.
+
 Goal: Persist enough state to inspect and resume long-running generations.
 
 Changes:
@@ -805,6 +820,11 @@ whoopy run inspect <run-id>
 Out of scope: automatic background execution.
 
 ### PR 27: Add resume, retry, and partial regeneration
+
+Phase 3 status: `whoopy run resume RUN_ID` recovers failed or interrupted
+foreground runs, reuses verified checkpoints, retries transient/quality errors
+with bounded exponential backoff, and surfaces fatal errors immediately.
+Manual regeneration of an otherwise healthy selected segment remains deferred.
 
 Goal: Recover from one failed segment without restarting the entire meditation.
 
