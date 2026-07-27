@@ -3,8 +3,8 @@
 The canonical timeline schema, validation, and prose-to-timeline compiler belong
 here. The timeline remains the source of truth for deterministic rendering.
 
-Phase 1 implements a deliberately small schema: a versioned timeline containing
-one or more `SPEECH` segments. Its worker writes one prompt-passthrough segment
-so storage and orchestration are real without pretending script generation has
-been implemented. Later PRs add silence, breath, music cues, serialization
-migrations, and the deterministic cue compiler.
+Phase 1 implemented a deliberately small speech-only schema. Phase 2 adds
+versioned `SILENCE` segments with exact positive millisecond durations and keeps
+schema-v1 timelines readable. The fixture worker writes
+`SPEECH -> SILENCE -> SPEECH`; later PRs add voice metadata, breath, music cues,
+serialization migrations, and the deterministic cue compiler.

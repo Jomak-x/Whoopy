@@ -42,7 +42,7 @@ def test_doctor_prints_machine_readable_recommendation(
     assert output["selected_profile"]["name"] == "standard"
 
 
-def test_run_and_worker_commands_write_the_phase_one_artifacts(
+def test_run_and_worker_commands_write_the_phase_two_artifacts(
     tmp_path: Path, capsys: CaptureFixture[str]
 ) -> None:
     assert (
@@ -77,14 +77,20 @@ def test_run_and_worker_commands_write_the_phase_one_artifacts(
     completed = json.loads(capsys.readouterr().out)
     assert completed["status"] == "completed"
     assert completed["timeline_artifact"] == "timeline.json"
+    assert completed["audio_artifact"] == "narration.wav"
+    assert completed["audio_manifest_artifact"] == "audio-manifest.json"
+    assert completed["quality_artifact"] == "quality.json"
 
     run_directory = tmp_path / queued["run_id"]
     assert (run_directory / "run.json").is_file()
+    assert (run_directory / "narration.wav").is_file()
+    assert (run_directory / "audio-manifest.json").is_file()
+    assert (run_directory / "quality.json").is_file()
     timeline = json.loads((run_directory / "timeline.json").read_text(encoding="utf-8"))
-    assert timeline["segments"] == [
-        {
-            "id": "speech-0001",
-            "type": "SPEECH",
-            "text": "A calm one-minute pause.",
-        }
+    assert [segment["type"] for segment in timeline["segments"]] == [
+        "SPEECH",
+        "SILENCE",
+        "SPEECH",
     ]
+    quality = json.loads((run_directory / "quality.json").read_text(encoding="utf-8"))
+    assert quality["passed"] is True

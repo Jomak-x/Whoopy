@@ -29,14 +29,23 @@ def test_worker_completes_run_and_writes_valid_timeline(tmp_path: Path) -> None:
 
     assert completed.status is RunStatus.COMPLETED
     assert completed.timeline_artifact == "timeline.json"
+    assert completed.audio_artifact == "narration.wav"
+    assert completed.audio_manifest_artifact == "audio-manifest.json"
+    assert completed.quality_artifact == "quality.json"
     assert completed.error is None
     assert store.load(RUN_ID) == completed
 
     timeline = store.load_timeline(RUN_ID)
     assert timeline.run_id == RUN_ID
-    assert timeline.source == "phase_1_prompt_passthrough"
+    assert timeline.source == "phase_2_fixture_meditation"
     assert timeline.segments[0].type == "SPEECH"
     assert timeline.segments[0].text == "Breathe slowly."
+    assert timeline.segments[1].type == "SILENCE"
+
+    assert store.audio_path(RUN_ID).is_file()
+    assert store.audio_manifest_path(RUN_ID).is_file()
+    assert store.quality_path(RUN_ID).is_file()
+    assert store.audio_path(RUN_ID).read_bytes().startswith(b"RIFF")
 
 
 def test_worker_refuses_to_process_a_completed_run_twice(tmp_path: Path) -> None:

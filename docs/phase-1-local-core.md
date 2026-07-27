@@ -1,5 +1,10 @@
 # Phase 1: The First Local-Core Flow
 
+> [!NOTE]
+> This document describes the Phase 1 contract. Phase 2 keeps schema-v1 records
+> readable and adds silence plus audio artifacts; see
+> [`phase-2-deterministic-audio.md`](./phase-2-deterministic-audio.md).
+
 Phase 1 makes Whoopy's architecture executable without pretending that models
 or audio already exist. A prompt becomes a saved run, a separate worker
 processes the run, and a canonical timeline artifact appears on disk.

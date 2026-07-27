@@ -5,6 +5,20 @@ extend this package with silence, breath, music, cue compilation, and schema
 migrations without changing the run/worker boundary established here.
 """
 
-from whoopy.timeline.models import SpeechSegment, Timeline, build_prompt_timeline
+from whoopy.timeline.models import (
+    SilenceSegment,
+    SpeechSegment,
+    Timeline,
+    TimelineSegment,
+    build_fixture_timeline,
+    build_prompt_timeline,
+)
 
-__all__ = ["SpeechSegment", "Timeline", "build_prompt_timeline"]
+__all__ = [
+    "SilenceSegment",
+    "SpeechSegment",
+    "Timeline",
+    "TimelineSegment",
+    "build_fixture_timeline",
+    "build_prompt_timeline",
+]

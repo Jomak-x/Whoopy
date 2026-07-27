@@ -53,6 +53,12 @@ def _print_run(record: RunRecord, store: RunStore, *, as_json: bool) -> None:
     print(f"Record: {store.record_path(record.run_id)}")
     if record.timeline_artifact is not None:
         print(f"Timeline: {store.timeline_path(record.run_id)}")
+    if record.audio_artifact is not None:
+        print(f"Audio: {store.audio_path(record.run_id)}")
+    if record.audio_manifest_artifact is not None:
+        print(f"Audio manifest: {store.audio_manifest_path(record.run_id)}")
+    if record.quality_artifact is not None:
+        print(f"Quality report: {store.quality_path(record.run_id)}")
     if record.error is not None:
         print(f"Error: {record.error}")
 
@@ -133,7 +139,7 @@ def _build_parser() -> argparse.ArgumentParser:
     worker_commands = worker_parser.add_subparsers(dest="worker_command")
     process_parser = worker_commands.add_parser(
         "process",
-        help="Process one queued run and write its timeline artifact.",
+        help="Process one queued run and write its timeline and WAV artifacts.",
     )
     process_parser.add_argument("run_id", help="UUID printed by `whoopy run create`.")
     process_parser.add_argument(

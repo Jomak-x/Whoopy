@@ -7,6 +7,9 @@ slices were delivered together in the Phase 0 foundation PR because there was no
 committed base. The Phase 1 local-core skeleton is a second deliberate vertical
 slice: it implements only the minimum portions of the timeline, run-directory,
 and CLI boundaries needed to prove `prompt -> saved run -> worker -> timeline`.
+The Phase 2 deterministic-audio PR is a third vertical slice: it combines the
+minimum silence, fixture-speech, assembly, artifact, and quality behavior needed
+to prove `timeline -> WAV` without adding FFmpeg or a real TTS model.
 The numbered PRs below still own the production-grade expansion of those
 contracts and should remain bounded review units.
 
@@ -337,6 +340,10 @@ Out of scope: generating or combining audio.
 
 ### PR 11: Render exact silence segments
 
+Phase 2 status: exact zero-valued 24 kHz mono PCM silence is implemented and
+verified inside the final WAV. This PR still owns a standalone production
+renderer path and FFprobe-based duration tolerance.
+
 Goal: Render timeline silence as deterministic PCM audio.
 
 Changes:
@@ -364,6 +371,10 @@ Out of scope: speech and concatenation.
 
 ### PR 12: Add the fixture speech synthesizer
 
+Phase 2 status: a dependency-free deterministic triangle-tone synthesizer is
+implemented and tested. This PR still owns its future adapter metadata and the
+final typed speech port contract.
+
 Goal: Make the full pipeline testable without models, downloads, or network access.
 
 Changes:
@@ -388,6 +399,10 @@ make test
 Out of scope: the final public `SpeechSynthesizer` port and Kokoro.
 
 ### PR 13: Assemble timeline segments into narration
+
+Phase 2 status: in-memory speech/silence assembly writes `narration.wav`, exact
+frame spans, and a quality report. This PR still owns normalized segment files
+and the production FFmpeg concatenation path.
 
 Goal: Concatenate speech and silence in exact timeline order.
 
@@ -418,6 +433,10 @@ Out of scope: ambience, mastering, and delivery codecs.
 Phase 1 status: separate `run create` and `worker process` commands prove the
 control-plane/worker boundary. This PR still owns the real offline fixture-audio
 generation path and its complete artifact set.
+
+Phase 2 status: `worker process` now produces fixture narration and a complete
+minimal audio artifact set. This PR still owns the script-file-oriented
+`whoopy generate` command and progress reporting.
 
 Goal: Produce a correctly timed lossless meditation from a text script using only fixture speech.
 
@@ -1291,9 +1310,10 @@ PRs 40–47 are complete. The release is ready when:
 - reporting, removal, audit, and credential-revocation paths work;
 - local Whoopy remains fully useful without Commons.
 
-## Next Detailed PR After The Phase 1 Skeleton
+## Detailed Hardening After The Vertical Slices
 
-After the Phase 1 vertical slice merges, return to the bounded plan by hardening
-**PR 4: Define the timeline segment models**. Extend the provisional speech-only
-artifact into the full initial `SPEECH`/`SILENCE` domain contract without adding
-audio rendering.
+The vertical phase PRs prove architecture with deliberately small contracts.
+The numbered steps remain the review map for hardening them. In particular,
+PR 4 still owns full speech metadata and union validation, PR 9 still owns the
+complete artifact manifest, and PR 10 still owns safe production FFmpeg
+execution.
