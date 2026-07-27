@@ -1,6 +1,16 @@
-"""Local orchestration, persistence, and worker boundaries."""
+"""Local orchestration, persistence, cache, checkpoint, and worker boundaries."""
 
-from whoopy.pipeline.runs import RunRecord, RunStatus, RunStore
-from whoopy.pipeline.worker import LocalWorker
+from whoopy.pipeline.cache import CacheStats, SegmentCache
+from whoopy.pipeline.runs import RunRecord, RunRecovery, RunStatus, RunStore
+from whoopy.pipeline.worker import LocalWorker, RetryPolicy
 
-__all__ = ["LocalWorker", "RunRecord", "RunStatus", "RunStore"]
+__all__ = [
+    "CacheStats",
+    "LocalWorker",
+    "RetryPolicy",
+    "RunRecord",
+    "RunRecovery",
+    "RunStatus",
+    "RunStore",
+    "SegmentCache",
+]

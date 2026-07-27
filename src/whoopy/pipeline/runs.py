@@ -53,12 +53,38 @@ class RunStatus(StrEnum):
     FAILED = "failed"
 
 
+class RunRecovery(BaseModel):
+    """Phase 3 progress and reuse counters saved in the run record."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    process_attempts: int = Field(ge=0)
+    resume_count: int = Field(ge=0)
+    cache_hits: int = Field(ge=0)
+    cache_misses: int = Field(ge=0)
+    checkpoint_reuses: int = Field(ge=0)
+    speech_segments_total: int = Field(ge=0)
+    speech_segments_completed: int = Field(ge=0)
+    failed_segment_id: str | None = Field(
+        default=None,
+        pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$",
+    )
+
+    @model_validator(mode="after")
+    def validate_progress(self) -> RunRecovery:
+        if self.speech_segments_completed > self.speech_segments_total:
+            raise ValueError("completed speech segments cannot exceed the total")
+        if self.resume_count > self.process_attempts:
+            raise ValueError("resume count cannot exceed process attempts")
+        return self
+
+
 class RunRecord(BaseModel):
     """The durable control-plane record for one local generation request."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1, 2] = 2
+    schema_version: Literal[1, 2, 3] = 3
     run_id: UUID
     status: RunStatus
     prompt: PromptText
@@ -68,6 +94,7 @@ class RunRecord(BaseModel):
     audio_artifact: Literal["narration.wav"] | None = None
     audio_manifest_artifact: Literal["audio-manifest.json"] | None = None
     quality_artifact: Literal["quality.json"] | None = None
+    recovery: RunRecovery | None = None
     error: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
@@ -83,12 +110,31 @@ class RunRecord(BaseModel):
         if self.status is RunStatus.COMPLETED:
             if self.timeline_artifact is None:
                 raise ValueError("a completed run must reference its timeline artifact")
-            if self.schema_version == 2 and any(artifact is None for artifact in artifacts):
-                raise ValueError("a completed run schema v2 must reference every audio artifact")
+            if self.schema_version in (2, 3) and any(artifact is None for artifact in artifacts):
+                raise ValueError(
+                    "a completed run schema v2 or v3 must reference every audio artifact"
+                )
         elif any(artifact is not None for artifact in artifacts):
             raise ValueError("only a completed run may reference artifacts")
         if self.schema_version == 1 and any(artifact is not None for artifact in artifacts[1:]):
             raise ValueError("run schema v1 does not support audio artifacts")
+        if self.schema_version in (1, 2):
+            if self.recovery is not None:
+                raise ValueError("run schema v1 and v2 do not support recovery metadata")
+        elif self.recovery is None:
+            raise ValueError("run schema v3 requires recovery metadata")
+        else:
+            if self.status is RunStatus.QUEUED and self.recovery.process_attempts != 0:
+                raise ValueError("a queued run cannot have processing attempts")
+            if self.status is not RunStatus.QUEUED and self.recovery.process_attempts == 0:
+                raise ValueError("a started run must have at least one processing attempt")
+            if (
+                self.status is RunStatus.COMPLETED
+                and self.recovery.speech_segments_completed != self.recovery.speech_segments_total
+            ):
+                raise ValueError("a completed run must complete every speech segment")
+            if self.status is not RunStatus.FAILED and self.recovery.failed_segment_id is not None:
+                raise ValueError("only a failed run may name its failed segment")
         if self.status is RunStatus.FAILED and self.error is None:
             raise ValueError("a failed run must contain an error")
         if self.status is not RunStatus.FAILED and self.error is not None:
@@ -104,6 +150,7 @@ class RunRecord(BaseModel):
         audio_artifact: Literal["narration.wav"] | None = None,
         audio_manifest_artifact: Literal["audio-manifest.json"] | None = None,
         quality_artifact: Literal["quality.json"] | None = None,
+        recovery: RunRecovery | None = None,
         error: str | None = None,
     ) -> RunRecord:
         """Create a fully revalidated record for the next lifecycle state."""
@@ -117,6 +164,7 @@ class RunRecord(BaseModel):
                 "audio_artifact": audio_artifact,
                 "audio_manifest_artifact": audio_manifest_artifact,
                 "quality_artifact": quality_artifact,
+                "recovery": self.recovery if recovery is None else recovery,
                 "error": error,
             }
         )
@@ -151,6 +199,15 @@ class RunStore:
                 prompt=prompt,
                 created_at=timestamp,
                 updated_at=timestamp,
+                recovery=RunRecovery(
+                    process_attempts=0,
+                    resume_count=0,
+                    cache_hits=0,
+                    cache_misses=0,
+                    checkpoint_reuses=0,
+                    speech_segments_total=0,
+                    speech_segments_completed=0,
+                ),
             )
         except ValidationError as error:
             raise RunStoreError(f"Invalid run request:\n{error}") from error

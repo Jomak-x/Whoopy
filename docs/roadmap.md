@@ -6,8 +6,9 @@ Implementation status:
 
 - **Phase 0 — complete:** the portable foundation is merged.
 - **Phase 1 — complete:** the local-core run and worker slice is merged.
-- **Phase 2 — in progress:** deterministic fixture audio is implemented on its review branch.
-- **Phases 3–6 — planned:** models and product behavior are not implemented yet.
+- **Phase 2 — complete:** deterministic fixture audio is merged.
+- **Phase 3 — in review:** segment caching, retry, recovery, and stronger integrity checks are implemented.
+- **Phases 4–6 — planned:** models and product behavior are not implemented yet.
 
 ## Phase 0: Documentation And Repo Foundation
 
@@ -120,6 +121,19 @@ Done when:
 - a failed segment can be regenerated without starting over
 - repeated renders reuse cached work
 - tests catch timing or clipping regressions
+
+Evidence:
+
+- canonical SHA-256 keys include every current synthesis-affecting input
+- cache reads revalidate metadata, PCM length, digest, format, audibility, and headroom
+- corrupt cache entries become misses and are regenerated
+- every run stores verified per-speech-segment checkpoints
+- transient errors use bounded exponential backoff while fatal errors stop immediately
+- `whoopy run resume RUN_ID` reuses completed checkpoints after failure or interruption
+- schema-v3 run records expose attempts, resumes, cache hits/misses, checkpoint reuse, progress, and failed segment ID
+- the final manifest contains per-segment and whole-stream PCM digests
+- tests deliberately introduce timing and peak-headroom regressions and reject both
+- Phase 1 and Phase 2 run records remain readable
 
 ## Phase 4: Local Product Polish
 

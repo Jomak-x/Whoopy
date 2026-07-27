@@ -504,7 +504,7 @@ whoopy/
 │       │   └── renderer/          # ffmpeg_renderer.py
 │       ├── timeline/              # current minimal models; future compiler and migrations
 │       ├── audio/                 # current fixture PCM/WAV/quality; future production renderer
-│       ├── pipeline/              # current run store/worker; future cache, recovery, duration fitting
+│       ├── pipeline/              # run store/worker, cache, recovery; future duration fitting
 │       ├── qc/                    # asr_roundtrip.py, audio_checks.py, gate.py
 │       ├── hardware.py            # native capability inspection + profile selection
 │       └── api/                   # fastapi app, huey_tasks.py, progress.py

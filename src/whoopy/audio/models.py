@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SAMPLE_RATE: Literal[24_000] = 24_000
 CHANNELS: Literal[1] = 1
@@ -43,6 +43,8 @@ class SegmentAudioSpan(BaseModel):
     frame_count: int = Field(gt=0)
     requested_duration_ms: int | None = Field(default=None, gt=0)
     actual_duration_ms: float = Field(gt=0)
+    cache_key: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    pcm_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 class AudioManifest(BaseModel):
@@ -50,7 +52,7 @@ class AudioManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 2
     run_id: UUID
     timeline_schema_version: int = Field(ge=1)
     format: Literal["pcm_s16le_wav"] = "pcm_s16le_wav"
@@ -59,7 +61,32 @@ class AudioManifest(BaseModel):
     sample_width_bytes: Literal[2] = SAMPLE_WIDTH_BYTES
     total_frames: int = Field(gt=0)
     duration_ms: float = Field(gt=0)
+    pcm_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     segments: list[SegmentAudioSpan] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_integrity_metadata(self) -> AudioManifest:
+        """Require hashes and speech cache keys in the Phase 3 manifest."""
+
+        if self.schema_version == 1:
+            if self.pcm_sha256 is not None:
+                raise ValueError("audio manifest schema v1 does not support a PCM hash")
+            if any(
+                span.cache_key is not None or span.pcm_sha256 is not None for span in self.segments
+            ):
+                raise ValueError("audio manifest schema v1 does not support segment hashes")
+            return self
+
+        if self.pcm_sha256 is None:
+            raise ValueError("audio manifest schema v2 requires a whole-file PCM hash")
+        for span in self.segments:
+            if span.pcm_sha256 is None:
+                raise ValueError("audio manifest schema v2 requires every segment PCM hash")
+            if span.segment_type == "SPEECH" and span.cache_key is None:
+                raise ValueError("audio manifest schema v2 requires speech cache keys")
+            if span.segment_type == "SILENCE" and span.cache_key is not None:
+                raise ValueError("SILENCE segments cannot have synthesis cache keys")
+        return self
 
 
 class QualityCheck(BaseModel):
@@ -77,7 +104,7 @@ class AudioQualityReport(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 2
     passed: bool
     sample_rate: int = Field(gt=0)
     channels: int = Field(gt=0)
@@ -86,6 +113,9 @@ class AudioQualityReport(BaseModel):
     duration_ms: float = Field(gt=0)
     peak_dbfs: float | None
     clipped_samples: int = Field(ge=0)
+    pcm_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    max_join_delta: int | None = Field(default=None, ge=0)
+    headroom_limit_dbfs: float | None = None
     checks: list[QualityCheck] = Field(min_length=1)
 
 
