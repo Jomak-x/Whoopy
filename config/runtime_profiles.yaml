@@ -1,0 +1,57 @@
+# Conservative starting thresholds for automatic local runtime selection.
+# They are intentionally data-driven so benchmark results can tune them without
+# adding operating-system branches to the pipeline.
+basic:
+  rank: 0
+  min_total_ram_gb: 4
+  min_available_ram_gb: 1.5
+  min_free_disk_gb: 3
+  approximate_download_gb: 1
+  llm_runtime: none
+  llm_model_class: none
+  tts_runtime: sherpa_onnx
+  modes: [templates, pasted_script, local_tts]
+
+lite:
+  rank: 1
+  min_total_ram_gb: 8
+  min_available_ram_gb: 4
+  min_free_disk_gb: 6
+  approximate_download_gb: 3
+  llm_runtime: llama_cpp
+  llm_model_class: 1b_to_2b_gguf
+  tts_runtime: sherpa_onnx
+  modes: [templates, pasted_script, local_llm, local_tts]
+
+standard:
+  rank: 2
+  min_total_ram_gb: 16
+  min_available_ram_gb: 8
+  min_free_disk_gb: 12
+  approximate_download_gb: 7
+  llm_runtime: llama_cpp
+  llm_model_class: 3b_to_8b_gguf
+  tts_runtime: sherpa_onnx
+  modes: [templates, pasted_script, local_llm, local_tts]
+
+high:
+  rank: 3
+  min_total_ram_gb: 24
+  min_available_ram_gb: 14
+  min_free_disk_gb: 20
+  approximate_download_gb: 14
+  llm_runtime: llama_cpp
+  llm_model_class: 8b_to_14b_gguf
+  tts_runtime: sherpa_onnx
+  modes: [templates, pasted_script, local_llm, local_tts]
+
+studio:
+  rank: 4
+  min_total_ram_gb: 48
+  min_available_ram_gb: 28
+  min_free_disk_gb: 40
+  approximate_download_gb: 30
+  llm_runtime: llama_cpp
+  llm_model_class: 30b_class_gguf
+  tts_runtime: sherpa_onnx
+  modes: [templates, pasted_script, local_llm, local_tts]

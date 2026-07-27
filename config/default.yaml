@@ -1,0 +1,45 @@
+# Safe, versioned defaults shared by the CLI, worker, and future API.
+# Override machine-specific values in config/local.yaml, not in this file.
+llm:
+  # `auto` selects a safe runtime profile after hardware inspection. Users do
+  # not need to understand Metal, CUDA, Vulkan, model sizes, or quantization.
+  backend: auto
+  hq_backend: auto
+  max_context_tokens: 8192
+
+tts:
+  # The universal ONNX path is selected by default; platform accelerators stay
+  # optional implementation details behind the same typed speech port.
+  backend: auto
+  voice: af_heart
+  speed: 0.9
+
+hardware:
+  # `auto` chooses the highest profile that meets conservative RAM and disk
+  # margins. A named profile remains available for testing and troubleshooting.
+  profile: auto
+  allow_remote_fallback: false
+
+ambience:
+  backend: loop_library
+  default_tags: [rain, drone]
+
+render:
+  target_lufs: -16.0
+  true_peak_db: -1.5
+  master_format: flac_48k_24bit
+  delivery: [aac_160k, opus_96k]
+
+pauses:
+  # Micro-pauses remain punctuation inside speech. Deliberate pauses become
+  # exact SILENCE events in the canonical timeline.
+  micro_max_ms: 800
+  deliberate_min_ms: 1500
+
+pipeline:
+  checkpoint_dir: ./runs
+  cache: content_addressed
+
+storage:
+  # The local core starts with SQLite. Commons moves to PostgreSQL later.
+  db_url: sqlite:///./whoopy.db
