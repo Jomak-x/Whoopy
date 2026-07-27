@@ -50,10 +50,14 @@ class Timeline(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1, 2] = 2
+    schema_version: Literal[1, 2, 3] = 2
     run_id: UUID
     created_at: AwareDatetime
-    source: Literal["phase_1_prompt_passthrough", "phase_2_fixture_meditation"]
+    source: Literal[
+        "phase_1_prompt_passthrough",
+        "phase_2_fixture_meditation",
+        "script_file",
+    ]
     segments: list[TimelineSegment] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -70,8 +74,10 @@ class Timeline(BaseModel):
                 raise ValueError("timeline schema v1 requires the Phase 1 source")
             if any(isinstance(segment, SilenceSegment) for segment in self.segments):
                 raise ValueError("timeline schema v1 does not support SILENCE segments")
-        elif self.source != "phase_2_fixture_meditation":
+        elif self.schema_version == 2 and self.source != "phase_2_fixture_meditation":
             raise ValueError("timeline schema v2 requires the Phase 2 source")
+        elif self.schema_version == 3 and self.source != "script_file":
+            raise ValueError("timeline schema v3 requires the script-file source")
         return self
 
 

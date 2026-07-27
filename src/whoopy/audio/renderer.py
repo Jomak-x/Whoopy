@@ -27,7 +27,7 @@ class AudioRenderError(RuntimeError):
 
 
 class TimelineWaveRenderer:
-    """Render speech fixtures and exact silence in canonical timeline order."""
+    """Render prepared speech and exact silence in canonical timeline order."""
 
     def __init__(self, synthesizer: SpeechSynthesizer | None = None) -> None:
         self.synthesizer: SpeechSynthesizer = (

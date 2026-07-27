@@ -7,17 +7,12 @@ Whoopy is a local-first, timeline-driven system for generating guided meditation
 
 ## Current Status
 
-Phases 0–2 established the portable repository, durable worker boundary, and
-deterministic WAV assembly. Phase 3 adds content-addressed speech caching,
-per-run segment checkpoints, bounded retry, resumable failed or interrupted
-runs, and stronger integrity checks. Speech remains an audible deterministic
-fixture tone—not a human voice—so reliability can be proven before adding TTS.
-Phase 3.5 is now the explicit next milestone: verified local model installation,
-real Kokoro speech, validated local script generation, and the first complete
-offline meditation before Phase 4 UI work.
-Its first PR implements the immutable artifact lock and safe native installer;
-its second implements typed llama.cpp and sherpa/Kokoro adapters. The normal
-worker still uses fixture tones until the script-file integration PR.
+Phases 0–3 established the portable repository, durable worker boundary,
+deterministic WAV assembly, caching, retry, and recovery. Phase 3.5 now adds
+verified native artifacts and replaceable llama.cpp and sherpa/Kokoro adapters.
+Its script-file path produces real human speech locally; the older low-level
+`run create` path intentionally retains fixture tones for fast compatibility
+tests. Local prompt-to-script generation is the next stacked PR.
 
 The functional commands are:
 
@@ -28,6 +23,7 @@ whoopy doctor
 whoopy models list
 whoopy models doctor
 whoopy models install --profile auto
+whoopy generate --script-file examples/first-meditation.md
 whoopy run create "A short grounding meditation."
 whoopy run show <run-id>
 whoopy run resume <run-id>
@@ -84,6 +80,23 @@ system, and architecture in [`config/artifacts.yaml`](./config/artifacts.yaml).
 
 ### Try The Current Flow
 
+Render the included script with real local speech after installing the Basic
+artifacts:
+
+```bash
+uv run whoopy models install --profile basic
+uv run --offline whoopy generate \
+  --script-file examples/first-meditation.md
+```
+
+Open the printed `narration.wav`. The run also preserves the source script,
+resolved settings, model metadata, canonical timeline, segment checkpoints,
+audio manifest, and quality report. Read
+[`docs/phase-3-5-real-script-speech.md`](./docs/phase-3-5-real-script-speech.md)
+for the beginner-level explanation.
+
+The lower-level fixture flow remains available for development:
+
 ```bash
 uv run whoopy run create "A short grounding meditation."
 # Copy the printed UUID into the next command.
@@ -128,12 +141,12 @@ config/                versioned settings, model registry, pacing, prompts
 scripts/check.py        platform-neutral lint, format, type, and test gate
 src/whoopy/            Python domain package and future local control plane
   artifacts.py         verified, resumable, platform-aware artifact installer
-  audio/               fixture synthesis, WAV assembly, and audio quality checks
+  audio/               speech processing, synthesis, WAV assembly, and quality checks
   control.py           prompt submission and run inspection service
   hardware.py          native capability inspection and safe profile selection
   ports/               typed capability contracts
   adapters/            model and infrastructure integrations
-  timeline/            current minimal timeline models; future compiler
+  timeline/            canonical models and text/Markdown script compiler
   pipeline/            run storage, segment cache/checkpoints, retry, and recovery
   qc/                  audio and content quality gates
   api/                 future local FastAPI control plane
@@ -163,9 +176,10 @@ Read in this order:
 9. [`docs/phase-3-quality-caching-recovery.md`](./docs/phase-3-quality-caching-recovery.md) — cache, retry, and resume
 10. [`docs/phase-3-5-first-local-meditation.md`](./docs/phase-3-5-first-local-meditation.md) — real local models and the first offline meditation
 11. [`docs/phase-3-5-runtime-adapters.md`](./docs/phase-3-5-runtime-adapters.md) — ports, metadata, error taxonomy, and native adapters
-12. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-13. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-14. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+12. [`docs/phase-3-5-real-script-speech.md`](./docs/phase-3-5-real-script-speech.md) — first real speech, script syntax, processing, and recovery
+13. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+14. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+15. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 
@@ -188,6 +202,7 @@ uv sync --extra dev --locked                 # exact cross-platform setup
 uv run whoopy doctor                         # select a safe native profile
 uv run whoopy models doctor                  # inspect its immutable artifact plan
 uv run whoopy models install --profile auto  # explicitly install verified artifacts
+uv run whoopy generate --script-file examples/first-meditation.md
 uv run whoopy run create "A calm pause."     # save a queued local run
 uv run --extra dev python scripts/check.py   # complete local/CI quality gate
 
@@ -197,9 +212,9 @@ make format         # optional Unix formatting wrapper
 make check          # optional Unix wrapper for the same Python check script
 ```
 
-Commands such as `make worker`, `make dev`, and `whoopy generate` remain future
-target interfaces. Phase 3's worker still processes one explicitly named run in
-the foreground; it is not a polling or concurrent background service.
+Commands such as `make worker` and `make dev` remain future target interfaces.
+The worker still processes one explicitly named run in the foreground; it is
+not a polling or concurrent background service.
 
 ## License
 

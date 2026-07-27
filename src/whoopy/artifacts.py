@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import stat
 import tarfile
@@ -310,6 +311,7 @@ class ArtifactStore:
         self.installed = root / "installed"
         self.records = root / "records"
         self.quarantine = root / "quarantine"
+        self.python_environments = root / "python"
 
     def download_path(self, artifact: ArtifactSpec) -> Path:
         return self.downloads / artifact.filename
@@ -472,6 +474,49 @@ class ArtifactStore:
             suffix += 1
         path.replace(candidate)
         return candidate
+
+    def materialize_python_wheels(
+        self,
+        artifacts: Iterable[ArtifactSpec],
+        *,
+        environment_name: str,
+    ) -> Path:
+        """Merge verified platform wheels into one isolated import directory."""
+
+        if re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,127}", environment_name) is None:
+            raise ArtifactError(f"Invalid Python environment name: {environment_name!r}")
+        wheels = list(artifacts)
+        if not wheels or any(artifact.kind != "python_wheel" for artifact in wheels):
+            raise ArtifactError("A Python environment requires one or more wheel artifacts.")
+        expected = {
+            artifact.artifact_id: artifact.sha256
+            for artifact in sorted(wheels, key=lambda item: item.artifact_id)
+        }
+        destination = self.python_environments / environment_name
+        marker = destination / ".whoopy-wheels.json"
+        try:
+            existing: Any = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing = None
+        if existing == expected:
+            return destination
+
+        self.python_environments.mkdir(parents=True, exist_ok=True)
+        temporary = Path(
+            tempfile.mkdtemp(prefix=f".{environment_name}.", dir=self.python_environments)
+        )
+        try:
+            for artifact in wheels:
+                wheel_path = self.require(artifact)
+                _extract_zip_safely(wheel_path, temporary)
+            _write_json_atomic(temporary / ".whoopy-wheels.json", expected)
+            if destination.exists():
+                shutil.rmtree(destination)
+            temporary.replace(destination)
+        except BaseException:
+            shutil.rmtree(temporary, ignore_errors=True)
+            raise
+        return destination
 
 
 def _copy_offline(source: Path, destination: Path) -> None:

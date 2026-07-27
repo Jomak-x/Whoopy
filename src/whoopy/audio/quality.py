@@ -139,7 +139,7 @@ def inspect_wave(wave_bytes: bytes, manifest: AudioManifest) -> AudioQualityRepo
             "every requested SILENCE duration maps to its exact frame count",
         ),
         _check("exact_silence", silence_exact, "all SILENCE samples are zero"),
-        _check("audible_speech_fixture", speech_audible, "every SPEECH span contains a tone"),
+        _check("audible_speech", speech_audible, "every SPEECH span contains audible PCM"),
         _check(
             "segment_pcm_hashes",
             segment_hashes_match,
