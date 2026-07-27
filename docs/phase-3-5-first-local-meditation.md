@@ -219,6 +219,10 @@ Out of scope: generating the script from a prompt.
 
 ### Phase 3.5 PR 4: Generate A Validated Meditation Locally
 
+Status: implemented on the `phase-3-5-local-meditation-generation` stacked
+branch. See
+[`phase-3-5-local-generation.md`](./phase-3-5-local-generation.md).
+
 Goal: turn a short user prompt into a safe, inspectable canonical timeline.
 
 Changes:

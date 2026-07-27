@@ -8,10 +8,11 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import yaml
 
+from whoopy.adapters.llm import LlamaCppScriptGenerator, LlamaCppSettings
 from whoopy.adapters.tts import SherpaOnnxKokoroAdapter, SherpaOnnxSettings
 from whoopy.artifacts import (
     ArtifactError,
@@ -26,6 +27,14 @@ from whoopy.audio.processing import ProcessedSpeechSynthesizer, SpeechProcessing
 from whoopy.config import ConfigError, load_settings
 from whoopy.control import LocalControlPlane
 from whoopy.hardware import DoctorResult, diagnose, inspect_hardware, load_runtime_profiles
+from whoopy.meditation import (
+    GenerationError,
+    GenerationWorkspace,
+    LocalMeditationGenerator,
+    load_prompt_bundle,
+)
+from whoopy.meditation.prompts import PromptLoadError
+from whoopy.meditation.workspace import WorkspaceError
 from whoopy.pipeline import (
     LocalWorker,
     RunModelMetadata,
@@ -348,6 +357,48 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_model_location_arguments(models_install_parser)
 
+    draft_parser = subcommands.add_parser(
+        "draft",
+        help="Generate a validated local meditation plan, script, and timeline.",
+    )
+    draft_parser.add_argument("prompt", help="Meditation request sent only to the local model.")
+    draft_parser.add_argument(
+        "--minutes",
+        type=float,
+        default=3.0,
+        help="Target duration from 1 to 30 minutes (default: 3).",
+    )
+    draft_parser.add_argument(
+        "--profile",
+        choices=("auto", "lite", "standard"),
+        default="auto",
+        help="Choose a local LLM profile or select one safely.",
+    )
+    draft_parser.add_argument("--seed", type=int, default=42, help="Reproducible model seed.")
+    draft_parser.add_argument(
+        "--draft-id",
+        help="Resume this draft UUID and reuse its validated plan and sections.",
+    )
+    draft_parser.add_argument(
+        "--parallel-sections",
+        type=int,
+        choices=(1, 2),
+        default=1,
+        help="Draft one section at a time by default; two requires extra memory.",
+    )
+    draft_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("drafts"),
+        help="Ignored root for plans, scripts, raw model output, and timelines.",
+    )
+    draft_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print only a machine-readable summary.",
+    )
+    _add_model_location_arguments(draft_parser)
+
     generate_parser = subcommands.add_parser(
         "generate",
         help="Render a real local meditation from a text or Markdown script.",
@@ -616,6 +667,77 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"({len(report.installed)} installed, {len(report.reused)} reused)"
             )
             print("No model was loaded.")
+        return 0
+
+    if args.command == "draft":
+        try:
+            duration_seconds = round(args.minutes * 60)
+            if not 60 <= duration_seconds <= 1_800:
+                raise GenerationError("--minutes must be between 1 and 30")
+            result, target, artifact_store, _artifacts = _model_plan(args)
+            if not result.supported or result.selected_profile is None:
+                for message in result.messages:
+                    print(message)
+                return 2
+            profile_name = cast(
+                Literal["lite", "standard"],
+                result.selected_profile.name,
+            )
+            if profile_name not in ("lite", "standard"):
+                raise GenerationError("Drafting requires the Lite or Standard LLM profile.")
+            artifact_lock = load_artifact_lock(_artifact_lock_path(args))
+            adapter = LlamaCppScriptGenerator.from_artifact_store(
+                artifact_lock=artifact_lock,
+                store=artifact_store,
+                profile_name=profile_name,
+                target=target,
+                device=",".join(result.snapshot.accelerators),
+                settings=LlamaCppSettings(),
+            )
+            run_id = UUID(args.draft_id) if args.draft_id is not None else uuid4()
+            workspace = GenerationWorkspace(args.output_dir / str(run_id))
+            generated = LocalMeditationGenerator(
+                adapter,
+                load_prompt_bundle(args.config_dir / "prompts"),
+                max_parallel_sections=args.parallel_sections,
+                workspace=workspace,
+            ).generate(
+                prompt=args.prompt,
+                duration_seconds=duration_seconds,
+                run_id=run_id,
+                seed=args.seed,
+            )
+        except (
+            AdapterError,
+            ArtifactError,
+            ConfigError,
+            GenerationError,
+            PromptLoadError,
+            WorkspaceError,
+            ValueError,
+        ) as error:
+            parser.error(str(error))
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "draft_id": str(run_id),
+                        "directory": str(workspace.root),
+                        "profile": profile_name,
+                        "estimated_duration_seconds": generated.estimated_duration_seconds,
+                        "sections": len(generated.sections),
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            print(f"Draft: {run_id}")
+            print(f"Profile: {profile_name}")
+            print(f"Directory: {workspace.root}")
+            print(f"Plan: {workspace.root / 'plan.json'}")
+            print(f"Script: {workspace.root / 'script.md'}")
+            print(f"Timeline: {workspace.root / 'timeline.json'}")
+            print(f"Estimated duration: {generated.estimated_duration_seconds:.1f} seconds")
         return 0
 
     if args.command == "generate":
