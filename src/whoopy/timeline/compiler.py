@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import Literal
 from uuid import UUID
 
 from whoopy.timeline.models import SilenceSegment, SpeechSegment, Timeline, TimelineSegment
@@ -90,6 +91,7 @@ def build_script_timeline(
     run_id: UUID,
     script: str,
     created_at: datetime,
+    source: Literal["script_file", "generated_prompt"] = "script_file",
 ) -> Timeline:
     """Compile paragraphs and standalone pause markers without model behavior."""
 
@@ -175,9 +177,9 @@ def build_script_timeline(
         raise ScriptCompileError(f"Script exceeds the {MAX_SEGMENTS}-segment safety limit.")
 
     return Timeline(
-        schema_version=3,
+        schema_version=3 if source == "script_file" else 4,
         run_id=run_id,
         created_at=created_at,
-        source="script_file",
+        source=source,
         segments=segments,
     )

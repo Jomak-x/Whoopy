@@ -255,6 +255,31 @@ Use the default single-section drafting on ordinary laptops. The explicit
 substantially more memory. See
 [`phase-3-5-local-generation.md`](./phase-3-5-local-generation.md).
 
+## Phase 3.5 PR 5: Generate The Complete Meditation
+
+The two halves now meet in one command:
+
+```bash
+uv run --offline whoopy generate \
+  "A gentle three-minute grounding meditation." \
+  --minutes 3
+```
+
+`auto` selects a safe installed LLM profile for prompts. The command reports
+its resumable ID before inference, stores every validated and raw text artifact,
+then invokes the real speech/cache/recovery worker. Use `--json` for clean
+machine output. Use Ctrl-C to cancel without deleting completed work, then
+follow the printed draft-resume or run-resume command.
+
+The authored-script form continues to select Basic automatically:
+
+```bash
+uv run --offline whoopy generate \
+  --script-file examples/first-meditation.md
+```
+
+See [`phase-3-5-end-to-end.md`](./phase-3-5-end-to-end.md).
+
 ## Local Configuration
 
 Defaults work without local files. Use process environment variables for temporary or secret overrides:

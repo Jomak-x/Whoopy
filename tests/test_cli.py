@@ -397,3 +397,65 @@ def test_draft_command_persists_validated_local_generation(
     assert (draft / "script.md").is_file()
     assert (draft / "timeline.json").is_file()
     assert len(list((draft / "sections").glob("*.json"))) == 3
+
+
+def test_generate_prompt_joins_validated_draft_to_real_audio_contract(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    snapshot = HardwareSnapshot(
+        operating_system="linux",
+        architecture="x86_64",
+        cpu_count=8,
+        total_ram_gb=16,
+        available_ram_gb=9,
+        free_disk_gb=20,
+        accelerators=["cpu"],
+    )
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: snapshot)
+    monkeypatch.setattr(
+        LlamaCppScriptGenerator,
+        "from_artifact_store",
+        classmethod(lambda _cls, **_kwargs: _DraftFixture()),
+    )
+    monkeypatch.setattr(
+        SherpaOnnxKokoroAdapter,
+        "from_artifact_store",
+        classmethod(lambda _cls, **_kwargs: FixtureSpeechSynthesizer()),
+    )
+    runs_dir = tmp_path / "runs"
+
+    assert (
+        main(
+            [
+                "generate",
+                "A gentle grounding pause.",
+                "--minutes",
+                "1",
+                "--profile",
+                "standard",
+                "--models-dir",
+                str(tmp_path / "models"),
+                "--runs-dir",
+                str(runs_dir),
+                "--json",
+            ]
+        )
+        == 0
+    )
+
+    completed = json.loads(capsys.readouterr().out)
+    run = runs_dir / completed["run_id"]
+    timeline = json.loads((run / "timeline.json").read_text(encoding="utf-8"))
+    metadata = json.loads((run / "model-metadata.json").read_text(encoding="utf-8"))
+    assert completed["schema_version"] == 5
+    assert completed["source_kind"] == "generated_prompt"
+    assert completed["status"] == "completed"
+    assert timeline["source"] == "generated_prompt"
+    assert metadata["llm"]["adapter_id"] == "test.draft"
+    assert (run / "plan.json").is_file()
+    assert len(list((run / "draft-sections").glob("*.json"))) == 3
+    assert len(list((run / "raw-model-output").glob("*.json"))) == 4
+    assert (run / "narration.wav").is_file()
+    assert json.loads((run / "quality.json").read_text(encoding="utf-8"))["passed"] is True
