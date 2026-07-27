@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from whoopy.artifacts import TargetPlatform
 from whoopy.audio.processing import SpeechProcessingSettings
@@ -24,17 +24,44 @@ class TTSRunSettings(BaseModel):
     language: str = Field(min_length=1)
 
 
+class GenerationRunSettings(BaseModel):
+    """Reproducible text-generation controls and prompt versions."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    duration_seconds: int = Field(ge=60, le=1_800)
+    seed: int
+    plan_prompt_id: str = Field(min_length=1)
+    plan_prompt_version: int = Field(ge=1)
+    section_prompt_id: str = Field(min_length=1)
+    section_prompt_version: int = Field(ge=1)
+    max_parallel_sections: int = Field(ge=1, le=2)
+    estimated_duration_seconds: float = Field(gt=0)
+
+
 class ScriptRunConfig(BaseModel):
-    """Resolved, durable settings for a script-file render."""
+    """Resolved, durable settings for authored or generated script rendering."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal[1] = 1
-    mode: Literal["script_file"] = "script_file"
+    mode: Literal["script_file", "generated_prompt"] = "script_file"
     profile: Literal["basic", "lite", "standard"]
     target: TargetPlatform
     tts: TTSRunSettings
     processing: SpeechProcessingSettings
+    generation: GenerationRunSettings | None = None
+
+    @model_validator(mode="after")
+    def validate_mode(self) -> ScriptRunConfig:
+        if self.mode == "script_file" and self.generation is not None:
+            raise ValueError("script-file config cannot contain generation settings")
+        if self.mode == "generated_prompt":
+            if self.generation is None:
+                raise ValueError("generated-prompt config requires generation settings")
+            if self.profile == "basic":
+                raise ValueError("generated-prompt config requires a local LLM profile")
+        return self
 
 
 class RunModelMetadata(BaseModel):

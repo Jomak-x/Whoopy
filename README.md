@@ -10,9 +10,11 @@ Whoopy is a local-first, timeline-driven system for generating guided meditation
 Phases 0–3 established the portable repository, durable worker boundary,
 deterministic WAV assembly, caching, retry, and recovery. Phase 3.5 now adds
 verified native artifacts and replaceable llama.cpp and sherpa/Kokoro adapters.
-Its script-file path produces real human speech locally, and `whoopy draft`
-turns a prompt into a schema-validated plan, resumable section drafts, script,
-and canonical timeline. The next stacked PR joins both paths into one command.
+Its one `whoopy generate` command now produces real human speech from either a
+local prompt or an authored script. Prompt mode preserves the validated plan,
+raw attempts, section checkpoints, script, timeline, both model identities,
+audio checkpoints, final WAV, manifest, and quality report. The remaining
+Phase 3.5 PR evaluates candidates before freezing default models and voices.
 
 The functional commands are:
 
@@ -24,6 +26,7 @@ whoopy models list
 whoopy models doctor
 whoopy models install --profile auto
 whoopy draft "A three-minute grounding meditation." --minutes 3
+whoopy generate "A three-minute grounding meditation." --minutes 3
 whoopy generate --script-file examples/first-meditation.md
 whoopy run create "A short grounding meditation."
 whoopy run show <run-id>
@@ -95,6 +98,18 @@ resolved settings, model metadata, canonical timeline, segment checkpoints,
 audio manifest, and quality report. Read
 [`docs/phase-3-5-real-script-speech.md`](./docs/phase-3-5-real-script-speech.md)
 for the beginner-level explanation.
+
+Or use the complete offline prompt flow with the Standard stack:
+
+```bash
+uv run whoopy models install --profile standard
+uv run --offline whoopy generate \
+  "A gentle three-minute grounding meditation." \
+  --minutes 3
+```
+
+Read [`docs/phase-3-5-end-to-end.md`](./docs/phase-3-5-end-to-end.md) for the
+full artifact map, cancellation/recovery paths, and measured real-model result.
 
 The lower-level fixture flow remains available for development:
 
@@ -179,9 +194,10 @@ Read in this order:
 11. [`docs/phase-3-5-runtime-adapters.md`](./docs/phase-3-5-runtime-adapters.md) — ports, metadata, error taxonomy, and native adapters
 12. [`docs/phase-3-5-real-script-speech.md`](./docs/phase-3-5-real-script-speech.md) — first real speech, script syntax, processing, and recovery
 13. [`docs/phase-3-5-local-generation.md`](./docs/phase-3-5-local-generation.md) — plan-first generation, validation, safety, and draft resume
-14. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-15. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-16. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+14. [`docs/phase-3-5-end-to-end.md`](./docs/phase-3-5-end-to-end.md) — one-command prompt/script audio flow and recovery
+15. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+16. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+17. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 
@@ -205,6 +221,7 @@ uv run whoopy doctor                         # select a safe native profile
 uv run whoopy models doctor                  # inspect its immutable artifact plan
 uv run whoopy models install --profile auto  # explicitly install verified artifacts
 uv run whoopy draft "A calm pause." --minutes 3
+uv run whoopy generate "A calm pause." --minutes 3
 uv run whoopy generate --script-file examples/first-meditation.md
 uv run whoopy run create "A calm pause."     # save a queued local run
 uv run --extra dev python scripts/check.py   # complete local/CI quality gate

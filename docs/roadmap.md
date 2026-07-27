@@ -158,7 +158,7 @@ Implementation order:
 2. add typed llama.cpp and sherpa-onnx adapters — implemented
 3. render a pasted script with real Kokoro speech — implemented
 4. generate and validate a meditation locally with Qwen3-4B — implemented
-5. join both paths behind one `whoopy generate` command
+5. join both paths behind one `whoopy generate` command — implemented
 6. run a documented model and voice bake-off before freezing defaults
 
 Each numbered item is a separate PR. The detailed changes, acceptance criteria,

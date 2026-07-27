@@ -20,6 +20,7 @@ from pydantic import (
 )
 
 from whoopy.audio import AudioManifest, AudioQualityReport
+from whoopy.meditation import MeditationGenerationResult
 from whoopy.pipeline.generation import RunModelMetadata, ScriptRunConfig
 from whoopy.timeline import Timeline
 
@@ -31,6 +32,9 @@ QUALITY_FILENAME: Literal["quality.json"] = "quality.json"
 SCRIPT_FILENAME: Literal["script.md"] = "script.md"
 RESOLVED_CONFIG_FILENAME: Literal["resolved-config.json"] = "resolved-config.json"
 MODEL_METADATA_FILENAME: Literal["model-metadata.json"] = "model-metadata.json"
+PLAN_FILENAME: Literal["plan.json"] = "plan.json"
+RAW_MODEL_OUTPUT_DIRECTORY: Literal["raw-model-output"] = "raw-model-output"
+DRAFT_SECTIONS_DIRECTORY: Literal["draft-sections"] = "draft-sections"
 PromptText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=20_000),
@@ -89,16 +93,19 @@ class RunRecord(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1, 2, 3, 4] = 3
+    schema_version: Literal[1, 2, 3, 4, 5] = 3
     run_id: UUID
     status: RunStatus
     prompt: PromptText
-    source_kind: Literal["fixture_prompt", "script_file"] = "fixture_prompt"
+    source_kind: Literal["fixture_prompt", "script_file", "generated_prompt"] = "fixture_prompt"
     created_at: AwareDatetime
     updated_at: AwareDatetime
     script_artifact: Literal["script.md"] | None = None
     resolved_config_artifact: Literal["resolved-config.json"] | None = None
     model_metadata_artifact: Literal["model-metadata.json"] | None = None
+    plan_artifact: Literal["plan.json"] | None = None
+    raw_model_output_artifact: Literal["raw-model-output"] | None = None
+    draft_sections_artifact: Literal["draft-sections"] | None = None
     timeline_artifact: Literal["timeline.json"] | None = None
     audio_artifact: Literal["narration.wav"] | None = None
     audio_manifest_artifact: Literal["audio-manifest.json"] | None = None
@@ -132,15 +139,29 @@ class RunRecord(BaseModel):
             self.resolved_config_artifact,
             self.model_metadata_artifact,
         )
+        generated_artifacts = (
+            self.plan_artifact,
+            self.raw_model_output_artifact,
+            self.draft_sections_artifact,
+        )
         if self.schema_version < 4:
             if self.source_kind != "fixture_prompt" or any(
-                artifact is not None for artifact in input_artifacts
+                artifact is not None for artifact in input_artifacts + generated_artifacts
             ):
                 raise ValueError("run schemas v1-v3 do not support real-script input artifacts")
-        elif self.source_kind != "script_file" or any(
-            artifact is None for artifact in input_artifacts
+        elif self.schema_version == 4:
+            if (
+                self.source_kind != "script_file"
+                or any(artifact is None for artifact in input_artifacts)
+                or any(artifact is not None for artifact in generated_artifacts)
+            ):
+                raise ValueError("run schema v4 requires only script-file input artifacts")
+        elif (
+            self.source_kind != "generated_prompt"
+            or any(artifact is None for artifact in input_artifacts)
+            or any(artifact is None for artifact in generated_artifacts)
         ):
-            raise ValueError("run schema v4 requires every script-file input artifact")
+            raise ValueError("run schema v5 requires every generated-prompt input artifact")
 
         if self.schema_version in (1, 2):
             if self.recovery is not None:
@@ -312,6 +333,93 @@ class RunStore:
             shutil.rmtree(temporary, ignore_errors=True)
         return record
 
+    def create_generated_run(
+        self,
+        *,
+        prompt: str,
+        generated: MeditationGenerationResult,
+        resolved_config: ScriptRunConfig,
+        model_metadata: RunModelMetadata,
+        run_id: UUID,
+        created_at: datetime,
+    ) -> RunRecord:
+        """Atomically promote validated draft artifacts into a queued schema-v5 run."""
+
+        if generated.timeline.run_id != run_id:
+            raise RunStoreError("Generated timeline does not belong to the requested run ID.")
+        try:
+            record = RunRecord(
+                schema_version=5,
+                run_id=run_id,
+                status=RunStatus.QUEUED,
+                prompt=prompt,
+                source_kind="generated_prompt",
+                created_at=created_at,
+                updated_at=created_at,
+                script_artifact=SCRIPT_FILENAME,
+                resolved_config_artifact=RESOLVED_CONFIG_FILENAME,
+                model_metadata_artifact=MODEL_METADATA_FILENAME,
+                plan_artifact=PLAN_FILENAME,
+                raw_model_output_artifact=RAW_MODEL_OUTPUT_DIRECTORY,
+                draft_sections_artifact=DRAFT_SECTIONS_DIRECTORY,
+                recovery=RunRecovery(
+                    process_attempts=0,
+                    resume_count=0,
+                    cache_hits=0,
+                    cache_misses=0,
+                    checkpoint_reuses=0,
+                    speech_segments_total=0,
+                    speech_segments_completed=0,
+                ),
+            )
+        except ValidationError as error:
+            raise RunStoreError(f"Invalid generated run request:\n{error}") from error
+
+        self.root.mkdir(parents=True, exist_ok=True)
+        run_directory = self.run_directory(run_id)
+        if run_directory.exists():
+            raise RunStoreError(f"Run directory already exists: {run_directory}")
+        temporary = self.root / f".{run_id}.{uuid4().hex}.tmp"
+        try:
+            temporary.mkdir()
+            (temporary / RAW_MODEL_OUTPUT_DIRECTORY).mkdir()
+            (temporary / DRAFT_SECTIONS_DIRECTORY).mkdir()
+            self._write_bytes(temporary / SCRIPT_FILENAME, generated.script.encode("utf-8"))
+            self._write_json(
+                temporary / PLAN_FILENAME,
+                generated.plan.model_dump_json(indent=2) + "\n",
+            )
+            for attempt_number, attempt in enumerate(generated.raw_attempts, start=1):
+                self._write_json(
+                    temporary
+                    / RAW_MODEL_OUTPUT_DIRECTORY
+                    / f"{attempt_number:03d}-{attempt.stage.replace(':', '-')}.json",
+                    attempt.model_dump_json(indent=2) + "\n",
+                )
+            for section in generated.sections:
+                self._write_json(
+                    temporary / DRAFT_SECTIONS_DIRECTORY / f"{section.section_id}.json",
+                    section.model_dump_json(indent=2) + "\n",
+                )
+            self._write_json(
+                temporary / RESOLVED_CONFIG_FILENAME,
+                resolved_config.model_dump_json(indent=2) + "\n",
+            )
+            self._write_json(
+                temporary / MODEL_METADATA_FILENAME,
+                model_metadata.model_dump_json(indent=2) + "\n",
+            )
+            self._write_json(
+                temporary / RUN_RECORD_FILENAME,
+                record.model_dump_json(indent=2) + "\n",
+            )
+            temporary.replace(run_directory)
+        except OSError as error:
+            raise RunStoreError(f"Could not create generated run {run_id}: {error}") from error
+        finally:
+            shutil.rmtree(temporary, ignore_errors=True)
+        return record
+
     def load(self, run_id: UUID | str) -> RunRecord:
         """Load and validate a run record from disk."""
 
@@ -431,6 +539,15 @@ class RunStore:
 
     def model_metadata_path(self, run_id: UUID | str) -> Path:
         return self.run_directory(run_id) / MODEL_METADATA_FILENAME
+
+    def plan_path(self, run_id: UUID | str) -> Path:
+        return self.run_directory(run_id) / PLAN_FILENAME
+
+    def raw_model_output_path(self, run_id: UUID | str) -> Path:
+        return self.run_directory(run_id) / RAW_MODEL_OUTPUT_DIRECTORY
+
+    def draft_sections_path(self, run_id: UUID | str) -> Path:
+        return self.run_directory(run_id) / DRAFT_SECTIONS_DIRECTORY
 
     @staticmethod
     def parse_run_id(value: UUID | str) -> UUID:

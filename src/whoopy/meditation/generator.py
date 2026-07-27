@@ -296,6 +296,7 @@ class LocalMeditationGenerator:
             run_id=run_id,
             script=script,
             created_at=timestamp,
+            source="generated_prompt",
         )
         spoken_words = sum(section.word_count for section in sections)
         silence_seconds = sum(section.pause_after_ms for section in plan.sections) / 1_000

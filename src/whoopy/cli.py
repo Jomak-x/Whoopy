@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,6 +37,7 @@ from whoopy.meditation import (
 from whoopy.meditation.prompts import PromptLoadError
 from whoopy.meditation.workspace import WorkspaceError
 from whoopy.pipeline import (
+    GenerationRunSettings,
     LocalWorker,
     RunModelMetadata,
     RunRecord,
@@ -184,6 +186,11 @@ def _real_script_worker(
             run_id=active_record.run_id,
             script=store.load_script(active_record.run_id),
             created_at=created_at,
+            source=(
+                "generated_prompt"
+                if active_record.source_kind == "generated_prompt"
+                else "script_file"
+            ),
         )
 
     return LocalWorker(
@@ -201,7 +208,7 @@ def _worker_for_record(
     artifact_lock_path: Path,
     models_dir: Path,
 ) -> LocalWorker:
-    if record.source_kind == "script_file":
+    if record.source_kind in ("script_file", "generated_prompt"):
         return _real_script_worker(
             store,
             record,
@@ -225,6 +232,12 @@ def _print_run(record: RunRecord, store: RunStore, *, as_json: bool) -> None:
         print(f"Resolved config: {store.resolved_config_path(record.run_id)}")
     if record.model_metadata_artifact is not None:
         print(f"Model metadata: {store.model_metadata_path(record.run_id)}")
+    if record.plan_artifact is not None:
+        print(f"Plan: {store.plan_path(record.run_id)}")
+    if record.raw_model_output_artifact is not None:
+        print(f"Raw model output: {store.raw_model_output_path(record.run_id)}")
+    if record.draft_sections_artifact is not None:
+        print(f"Draft sections: {store.draft_sections_path(record.run_id)}")
     if record.timeline_artifact is not None:
         print(f"Timeline: {store.timeline_path(record.run_id)}")
     if record.audio_artifact is not None:
@@ -401,19 +414,41 @@ def _build_parser() -> argparse.ArgumentParser:
 
     generate_parser = subcommands.add_parser(
         "generate",
-        help="Render a real local meditation from a text or Markdown script.",
+        help="Create real local speech from a prompt or an authored script.",
+    )
+    generate_parser.add_argument(
+        "prompt",
+        nargs="?",
+        help="Meditation request for the local LLM; omit when using --script-file.",
     )
     generate_parser.add_argument(
         "--script-file",
         type=Path,
-        required=True,
         help="UTF-8 text or Markdown containing prose and [pause: 3s] markers.",
+    )
+    generate_parser.add_argument(
+        "--minutes",
+        type=float,
+        default=3.0,
+        help="Prompt-mode target duration from 1 to 30 minutes (default: 3).",
+    )
+    generate_parser.add_argument("--seed", type=int, default=42, help="Local LLM seed.")
+    generate_parser.add_argument(
+        "--parallel-sections",
+        type=int,
+        choices=(1, 2),
+        default=1,
+        help="Draft one section at a time unless extra memory is available.",
+    )
+    generate_parser.add_argument(
+        "--draft-id",
+        help="Resume prompt drafting from this UUID before creating its run.",
     )
     generate_parser.add_argument(
         "--profile",
         choices=("auto", "basic", "lite", "standard"),
         default="auto",
-        help="Use Basic automatically for script rendering or request a profile.",
+        help="Use Basic for scripts; prompt mode safely selects Lite or Standard.",
     )
     generate_parser.add_argument("--voice", help="Kokoro voice name; currently af_heart.")
     generate_parser.add_argument("--speed", type=float, help="Positive Kokoro speech-speed factor.")
@@ -741,9 +776,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "generate":
+        active_run_id: UUID | None = None
         try:
+            if (args.prompt is None) == (args.script_file is None):
+                raise GenerationError("Provide either a prompt or --script-file, but not both.")
+            if args.script_file is not None and args.draft_id is not None:
+                raise GenerationError("--draft-id is available only in prompt mode.")
             settings = load_settings(args.config_dir)
-            requested_profile = "basic" if args.profile == "auto" else args.profile
+            prompt_mode = args.prompt is not None
+            requested_profile = args.profile if prompt_mode or args.profile != "auto" else "basic"
             result, target, artifact_store, _artifacts = _model_plan(
                 args,
                 requested_profile=requested_profile,
@@ -756,18 +797,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 Literal["basic", "lite", "standard"],
                 result.selected_profile.name,
             )
-
-            script = args.script_file.read_text(encoding="utf-8")
-            run_id = uuid4()
+            if prompt_mode and profile_name == "basic":
+                raise GenerationError("Prompt mode requires the Lite or Standard profile.")
+            run_id = UUID(args.draft_id) if args.draft_id is not None else uuid4()
+            active_run_id = run_id
             created_at = datetime.now(UTC)
-            # Compile before creating a durable run so invalid Markdown cannot
-            # leave behind a queued directory.
-            build_script_timeline(
-                run_id=run_id,
-                script=script,
-                created_at=created_at,
-            )
-
+            store = _run_store(args)
+            artifact_lock = load_artifact_lock(_artifact_lock_path(args))
             voice_name = args.voice or settings.tts.voice
             speaker_ids = {"af_heart": 3}
             if voice_name not in speaker_ids:
@@ -784,65 +820,136 @@ def main(argv: Sequence[str] | None = None) -> int:
                 language="en-us",
             )
             raw_synthesizer = SherpaOnnxKokoroAdapter.from_artifact_store(
-                artifact_lock=load_artifact_lock(_artifact_lock_path(args)),
+                artifact_lock=artifact_lock,
                 store=artifact_store,
                 profile_name=profile_name,
                 target=target,
                 settings=tts_settings,
             )
             processing = SpeechProcessingSettings()
-            synthesizer = ProcessedSpeechSynthesizer(
-                raw_synthesizer,
-                settings=processing,
-            )
-            resolved_config = ScriptRunConfig(
-                profile=profile_name,
-                target=target,
-                tts=TTSRunSettings(
-                    voice_name=tts_settings.voice_name,
-                    speaker_id=tts_settings.speaker_id,
-                    speed=tts_settings.speed,
-                    num_threads=tts_settings.num_threads,
-                    provider=tts_settings.provider,
-                    language=tts_settings.language,
-                ),
-                processing=processing,
-            )
-            store = _run_store(args)
-            queued = store.create_script_run(
-                script=script,
-                source_name=args.script_file.name,
-                resolved_config=resolved_config,
-                model_metadata=RunModelMetadata(tts=raw_synthesizer.metadata),
-                run_id=run_id,
-                created_at=created_at,
+            durable_tts = TTSRunSettings(
+                voice_name=tts_settings.voice_name,
+                speaker_id=tts_settings.speaker_id,
+                speed=tts_settings.speed,
+                num_threads=tts_settings.num_threads,
+                provider=tts_settings.provider,
+                language=tts_settings.language,
             )
 
-            def timeline_builder(
-                active_record: RunRecord,
-                timeline_created_at: datetime,
-            ) -> Timeline:
-                return build_script_timeline(
-                    run_id=active_record.run_id,
-                    script=store.load_script(active_record.run_id),
-                    created_at=timeline_created_at,
+            if prompt_mode:
+                assert args.prompt is not None
+                duration_seconds = round(args.minutes * 60)
+                if not 60 <= duration_seconds <= 1_800:
+                    raise GenerationError("--minutes must be between 1 and 30")
+                if not args.json:
+                    print(
+                        f"[1/3] Drafting locally (resumable ID {run_id})...",
+                        file=sys.stderr,
+                    )
+                llm = LlamaCppScriptGenerator.from_artifact_store(
+                    artifact_lock=artifact_lock,
+                    store=artifact_store,
+                    profile_name=profile_name,
+                    target=target,
+                    device=",".join(result.snapshot.accelerators),
+                    settings=LlamaCppSettings(),
                 )
-
-            completed = LocalWorker(
+                prompts = load_prompt_bundle(args.config_dir / "prompts")
+                workspace = GenerationWorkspace(store.root / ".generation-workspaces" / str(run_id))
+                generated = LocalMeditationGenerator(
+                    llm,
+                    prompts,
+                    max_parallel_sections=args.parallel_sections,
+                    workspace=workspace,
+                ).generate(
+                    prompt=args.prompt,
+                    duration_seconds=duration_seconds,
+                    run_id=run_id,
+                    created_at=created_at,
+                    seed=args.seed,
+                )
+                resolved_config = ScriptRunConfig(
+                    mode="generated_prompt",
+                    profile=profile_name,
+                    target=target,
+                    tts=durable_tts,
+                    processing=processing,
+                    generation=GenerationRunSettings(
+                        duration_seconds=duration_seconds,
+                        seed=args.seed,
+                        plan_prompt_id=prompts.plan.prompt_id,
+                        plan_prompt_version=prompts.plan.version,
+                        section_prompt_id=prompts.section.prompt_id,
+                        section_prompt_version=prompts.section.version,
+                        max_parallel_sections=args.parallel_sections,
+                        estimated_duration_seconds=generated.estimated_duration_seconds,
+                    ),
+                )
+                queued = store.create_generated_run(
+                    prompt=args.prompt,
+                    generated=generated,
+                    resolved_config=resolved_config,
+                    model_metadata=RunModelMetadata(
+                        tts=raw_synthesizer.metadata,
+                        llm=llm.metadata,
+                    ),
+                    run_id=run_id,
+                    created_at=created_at,
+                )
+                if not args.json:
+                    print("[2/3] Validated plan and script saved.", file=sys.stderr)
+            else:
+                assert args.script_file is not None
+                script = args.script_file.read_text(encoding="utf-8")
+                # Compile before creating a durable run so invalid Markdown cannot
+                # leave behind a queued directory.
+                build_script_timeline(
+                    run_id=run_id,
+                    script=script,
+                    created_at=created_at,
+                )
+                queued = store.create_script_run(
+                    script=script,
+                    source_name=args.script_file.name,
+                    resolved_config=ScriptRunConfig(
+                        profile=profile_name,
+                        target=target,
+                        tts=durable_tts,
+                        processing=processing,
+                    ),
+                    model_metadata=RunModelMetadata(tts=raw_synthesizer.metadata),
+                    run_id=run_id,
+                    created_at=created_at,
+                )
+            if not args.json:
+                print("[3/3] Synthesizing, caching, and checking audio...", file=sys.stderr)
+            completed = _real_script_worker(
                 store,
-                cache=_segment_cache(store),
-                synthesizer=synthesizer,
-                timeline_builder=timeline_builder,
+                queued,
+                artifact_lock_path=_artifact_lock_path(args),
+                models_dir=args.models_dir,
             ).process(queued.run_id)
+        except KeyboardInterrupt:
+            recovery = (
+                f" Resume with `whoopy run resume {active_run_id}` if run.json exists; "
+                f"otherwise repeat generate with `--draft-id {active_run_id}`."
+                if active_run_id is not None
+                else ""
+            )
+            print(f"Generation cancelled.{recovery}", file=sys.stderr)
+            return 130
         except (
             ArtifactError,
             AdapterError,
             ConfigError,
+            GenerationError,
             OSError,
+            PromptLoadError,
             RunStoreError,
             ScriptCompileError,
             ValueError,
             WorkerError,
+            WorkspaceError,
         ) as error:
             parser.error(str(error))
         _print_run(completed, store, as_json=args.json)

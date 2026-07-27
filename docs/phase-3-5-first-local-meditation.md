@@ -253,6 +253,9 @@ Out of scope: a permanent model winner or an advanced editor.
 
 ### Phase 3.5 PR 5: Join The Real End-To-End Flow
 
+Status: implemented on the `phase-3-5-end-to-end-generation` stacked branch.
+See [`phase-3-5-end-to-end.md`](./phase-3-5-end-to-end.md).
+
 Goal: provide one understandable command for the first generated meditation.
 
 Changes:
