@@ -10,9 +10,9 @@ Whoopy is a local-first, timeline-driven system for generating guided meditation
 Phases 0–3 established the portable repository, durable worker boundary,
 deterministic WAV assembly, caching, retry, and recovery. Phase 3.5 now adds
 verified native artifacts and replaceable llama.cpp and sherpa/Kokoro adapters.
-Its script-file path produces real human speech locally; the older low-level
-`run create` path intentionally retains fixture tones for fast compatibility
-tests. Local prompt-to-script generation is the next stacked PR.
+Its script-file path produces real human speech locally, and `whoopy draft`
+turns a prompt into a schema-validated plan, resumable section drafts, script,
+and canonical timeline. The next stacked PR joins both paths into one command.
 
 The functional commands are:
 
@@ -23,6 +23,7 @@ whoopy doctor
 whoopy models list
 whoopy models doctor
 whoopy models install --profile auto
+whoopy draft "A three-minute grounding meditation." --minutes 3
 whoopy generate --script-file examples/first-meditation.md
 whoopy run create "A short grounding meditation."
 whoopy run show <run-id>
@@ -177,9 +178,10 @@ Read in this order:
 10. [`docs/phase-3-5-first-local-meditation.md`](./docs/phase-3-5-first-local-meditation.md) — real local models and the first offline meditation
 11. [`docs/phase-3-5-runtime-adapters.md`](./docs/phase-3-5-runtime-adapters.md) — ports, metadata, error taxonomy, and native adapters
 12. [`docs/phase-3-5-real-script-speech.md`](./docs/phase-3-5-real-script-speech.md) — first real speech, script syntax, processing, and recovery
-13. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-14. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-15. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+13. [`docs/phase-3-5-local-generation.md`](./docs/phase-3-5-local-generation.md) — plan-first generation, validation, safety, and draft resume
+14. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+15. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+16. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 
@@ -202,6 +204,7 @@ uv sync --extra dev --locked                 # exact cross-platform setup
 uv run whoopy doctor                         # select a safe native profile
 uv run whoopy models doctor                  # inspect its immutable artifact plan
 uv run whoopy models install --profile auto  # explicitly install verified artifacts
+uv run whoopy draft "A calm pause." --minutes 3
 uv run whoopy generate --script-file examples/first-meditation.md
 uv run whoopy run create "A calm pause."     # save a queued local run
 uv run --extra dev python scripts/check.py   # complete local/CI quality gate

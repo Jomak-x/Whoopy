@@ -7,10 +7,12 @@ from pathlib import Path
 import yaml
 from pytest import CaptureFixture, MonkeyPatch
 
+from whoopy.adapters.llm import LlamaCppScriptGenerator
 from whoopy.adapters.tts import SherpaOnnxKokoroAdapter
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.cli import main
 from whoopy.hardware import HardwareSnapshot
+from whoopy.ports import AdapterMetadata, ScriptGenerationRequest, ScriptGenerationResult
 
 
 def test_help_exits_successfully(capsys: CaptureFixture[str]) -> None:
@@ -305,3 +307,93 @@ def test_generate_script_file_writes_real_flow_artifacts_with_adapter_contract(
     assert (run_directory / "audio-manifest.json").is_file()
     quality = json.loads((run_directory / "quality.json").read_text(encoding="utf-8"))
     assert quality["passed"] is True
+
+
+class _DraftFixture:
+    metadata = AdapterMetadata(
+        adapter_id="test.draft",
+        versioned_model_id="fixture@1",
+        runtime_id="python",
+        runtime_version="test",
+        license_id="CC0-1.0",
+        device="fixture",
+    )
+
+    def generate(self, request: ScriptGenerationRequest) -> ScriptGenerationResult:
+        if "Create the structural JSON plan" in request.prompt:
+            value = {
+                "title": "Test Meditation",
+                "intention": "Offer a quiet pause.",
+                "sections": [
+                    {
+                        "id": section_id,
+                        "title": section_id.title(),
+                        "purpose": f"Guide the {section_id} section.",
+                        "weight": 1,
+                        "pause_seconds": 3,
+                    }
+                    for section_id in ("arrive", "notice", "return")
+                ],
+            }
+        else:
+            section_id = request.prompt.split("Section ID: ", 1)[1].splitlines()[0]
+            value = {
+                "section_id": section_id,
+                "text": " ".join([section_id] * 46),
+            }
+        return ScriptGenerationResult(
+            text=json.dumps(value),
+            metadata=self.metadata,
+            elapsed_seconds=0.01,
+        )
+
+
+def test_draft_command_persists_validated_local_generation(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    snapshot = HardwareSnapshot(
+        operating_system="linux",
+        architecture="x86_64",
+        cpu_count=8,
+        total_ram_gb=16,
+        available_ram_gb=9,
+        free_disk_gb=20,
+        accelerators=["cpu"],
+    )
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: snapshot)
+    monkeypatch.setattr(
+        LlamaCppScriptGenerator,
+        "from_artifact_store",
+        classmethod(lambda _cls, **_kwargs: _DraftFixture()),
+    )
+    output_dir = tmp_path / "drafts"
+
+    assert (
+        main(
+            [
+                "draft",
+                "A gentle grounding pause.",
+                "--minutes",
+                "1",
+                "--profile",
+                "standard",
+                "--models-dir",
+                str(tmp_path / "models"),
+                "--output-dir",
+                str(output_dir),
+                "--json",
+            ]
+        )
+        == 0
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    draft = output_dir / output["draft_id"]
+    assert output["sections"] == 3
+    assert (draft / "request.json").is_file()
+    assert (draft / "plan.json").is_file()
+    assert (draft / "script.md").is_file()
+    assert (draft / "timeline.json").is_file()
+    assert len(list((draft / "sections").glob("*.json"))) == 3

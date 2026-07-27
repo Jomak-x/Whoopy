@@ -234,6 +234,27 @@ See [`phase-3-5-real-script-speech.md`](./phase-3-5-real-script-speech.md) for
 the complete script syntax, processing rules, output map, cache identity, and
 resume behavior.
 
+## Phase 3.5 PR 4: Draft With The Local LLM
+
+The Lite or Standard profile can turn a prompt into validated text artifacts:
+
+```bash
+uv run --offline whoopy draft \
+  "A gentle three-minute grounding meditation." \
+  --minutes 3 \
+  --profile standard
+```
+
+The output under `drafts/<UUID>/` includes the original resolved request,
+versioned model metadata, raw attempts, trusted plan, independent section
+checkpoints, final script, and canonical timeline. Resume a partially completed
+draft by repeating the exact inputs with `--draft-id UUID`.
+
+Use the default single-section drafting on ordinary laptops. The explicit
+`--parallel-sections 2` option runs two llama.cpp processes and therefore needs
+substantially more memory. See
+[`phase-3-5-local-generation.md`](./phase-3-5-local-generation.md).
+
 ## Local Configuration
 
 Defaults work without local files. Use process environment variables for temporary or secret overrides:
