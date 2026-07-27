@@ -1,18 +1,29 @@
-# Provisional model adapter registry. Phase 0 records intended boundaries only;
-# later PRs add the adapter classes and validate every declaration at startup.
+# Provisional model adapter registry. Phase 3.5 implements the universal
+# llama.cpp and sherpa-onnx classes; a later PR validates and constructs these
+# declarations through the normal CLI.
 #
 # A backend is replaceable when it implements the relevant typed port. Keep
 # prompt formatting, sampling quirks, voice controls, and runtime errors inside
 # that adapter rather than branching on model names in the pipeline.
 llm:
   llama_cpp_qwen3_1_7b:
-    adapter: whoopy.adapters.llm.llama_cpp:LlamaCppAdapter
-    versioned_model_id: Qwen/Qwen3-1.7B-GGUF
+    adapter: whoopy.adapters.llm.llama_cpp:LlamaCppScriptGenerator
+    versioned_model_id: Qwen/Qwen3-1.7B-GGUF@90862c4b9d2787eaed51d12237eafdfe7c5f6077
     license_id: Apache-2.0
     runtime: llama_cpp
+    runtime_version: b10142
     platforms: [macos-arm64, macos-x86_64, windows-arm64, windows-x86_64, linux-x86_64, linux-arm64]
     profile_candidates: [lite]
-    status: planned
+    status: adapter_implemented
+  llama_cpp_qwen3_4b:
+    adapter: whoopy.adapters.llm.llama_cpp:LlamaCppScriptGenerator
+    versioned_model_id: Qwen/Qwen3-4B-GGUF@bc640142c66e1fdd12af0bd68f40445458f3869b
+    license_id: Apache-2.0
+    runtime: llama_cpp
+    runtime_version: b10142
+    platforms: [macos-arm64, macos-x86_64, windows-arm64, windows-x86_64, linux-x86_64, linux-arm64]
+    profile_candidates: [standard]
+    status: adapter_implemented
   mlx_qwen3:
     adapter: whoopy.adapters.llm.mlx_qwen3:MLXQwen3Adapter
     versioned_model_id: Qwen/Qwen3-32B
@@ -31,12 +42,13 @@ llm:
 tts:
   sherpa_onnx_kokoro:
     adapter: whoopy.adapters.tts.sherpa_onnx:SherpaOnnxKokoroAdapter
-    versioned_model_id: hexgrad/Kokoro-82M
+    versioned_model_id: sherpa-onnx/kokoro-multi-lang-v1_0
     license_id: Apache-2.0
     runtime: sherpa_onnx
-    platforms: [macos-arm64, macos-x86_64, windows-arm64, windows-x86_64, linux-x86_64, linux-arm64]
+    runtime_version: 1.13.4
+    platforms: [macos-arm64, macos-x86_64, windows-x86_64, linux-x86_64, linux-arm64]
     publication_policy: allowed_after_asset_check
-    status: planned
+    status: adapter_implemented
   kokoro:
     adapter: whoopy.adapters.tts.kokoro:KokoroAdapter
     versioned_model_id: hexgrad/Kokoro-82M

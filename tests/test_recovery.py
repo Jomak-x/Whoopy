@@ -20,7 +20,10 @@ START = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
 
 
 class SwitchableSynthesizer:
-    cache_identity: str = "tests.switchable_fixture@1"
+    metadata = FixtureSpeechSynthesizer.metadata.model_copy(
+        update={"adapter_id": "tests.switchable_fixture"}
+    )
+    cache_identity: str = metadata.cache_identity
     sample_rate: int = 24_000
 
     def __init__(self, *, failing_segment: str, failures_remaining: int) -> None:

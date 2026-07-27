@@ -18,7 +18,7 @@ Nested environment variables use two underscores. For example, `WHOOPY_TTS__VOIC
 - `default.yaml` contains safe, versioned application defaults.
 - `artifacts.yaml` locks exact model/runtime files, byte sizes, SHA-256
   digests, licenses, platforms, and profile component sets.
-- `models.yaml` is the future adapter registry. A model choice is metadata and configuration, not pipeline logic.
+- `models.yaml` is the provisional adapter registry. A model choice is metadata and configuration, not pipeline logic.
 - `pacing_profiles.yaml` contains product pacing presets.
 - `runtime_profiles.yaml` maps live RAM and disk safety margins to Basic, Lite, Standard, High, and Studio capabilities.
 - `prompts/` holds versioned system prompts once model-backed generation is added.
@@ -31,7 +31,8 @@ whoopy doctor
 whoopy models doctor
 ```
 
-`models.yaml` remains the adapter-registry skeleton. `artifacts.yaml` and
-`runtime_profiles.yaml` are active: the former answers “which immutable files?”
-and the latter answers “can this laptop safely use them?” Neither doctor
-command imports a runtime or loads a model.
+The universal llama.cpp and sherpa-onnx classes named by `models.yaml` now
+exist; normal CLI construction arrives in the integration PR. `artifacts.yaml`
+and `runtime_profiles.yaml` are active: the former answers “which immutable
+files?” and the latter answers “can this laptop safely use them?” Neither
+doctor command imports a runtime or loads a model.

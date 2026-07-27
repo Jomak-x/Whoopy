@@ -299,6 +299,7 @@ The laptop does not currently satisfy Basic's RAM or disk margin. Free resources
 
 ### A model named in `models.yaml` cannot run
 
-Expected until the adapter PR: entries remain `status: planned`. Artifact
-installation is active, but installing verified files does not yet connect
-those runtimes to the worker.
+The universal entries now have `status: adapter_implemented`. Artifact
+installation and direct adapter construction are active, but the normal worker
+still uses the fixture until the script-file and generated-meditation PRs
+connect those adapters to user-facing commands.

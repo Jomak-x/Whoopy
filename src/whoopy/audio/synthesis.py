@@ -5,32 +5,31 @@ from __future__ import annotations
 import hashlib
 import json
 import unicodedata
-from typing import Protocol
 
-from whoopy.audio.models import PcmAudio
+from whoopy.ports.errors import (
+    AdapterError,
+    FatalAdapterError,
+    InvalidAdapterOutput,
+    TransientAdapterError,
+)
+from whoopy.ports.models import SpeechSynthesizer as SpeechSynthesizer
 from whoopy.timeline import SpeechSegment
 
 
-class SpeechSynthesizer(Protocol):
-    """Small replaceable boundary implemented by fixture and future TTS adapters."""
-
-    cache_identity: str
-    sample_rate: int
-
-    def synthesize(self, segment: SpeechSegment) -> PcmAudio:
-        """Generate one speech segment or raise a classified synthesis error."""
-
-
-class SynthesisError(RuntimeError):
+class SynthesisError(AdapterError):
     """Base class for errors that a speech adapter deliberately classifies."""
 
 
-class TransientSynthesisError(SynthesisError):
+class TransientSynthesisError(SynthesisError, TransientAdapterError):
     """A temporary failure that may succeed when the same segment is retried."""
 
 
-class FatalSynthesisError(SynthesisError):
+class FatalSynthesisError(SynthesisError, FatalAdapterError):
     """A deterministic failure that should be surfaced without retrying."""
+
+
+class InvalidSynthesisOutput(FatalSynthesisError, InvalidAdapterOutput):
+    """Speech output that violates Whoopy's PCM contract."""
 
 
 def _normalized_text(text: str) -> str:
