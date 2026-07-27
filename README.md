@@ -7,14 +7,22 @@ Whoopy is a local-first, timeline-driven system for generating guided meditation
 
 ## Current Status
 
-Phase 0 establishes the repository foundation. It includes documentation, the Python package and CLI skeleton, typed layered configuration, automatic hardware profiling, ownership markers for future components, tests, and native CI on Windows, macOS, and Linux. It intentionally does **not** implement timelines, model inference, audio rendering, APIs, queues, or user interfaces.
+Phase 0 established the portable repository foundation. Phase 1 adds the first
+executable local-core slice: a prompt can be saved as a queued run, a separate
+foreground worker can process that run, and the worker writes a validated
+`timeline.json` artifact. This intentionally uses the prompt itself as one
+placeholder `SPEECH` segment; it does **not** claim that script generation,
+speech synthesis, audio rendering, a background queue, or a UI exists yet.
 
-The only functional commands in this phase are:
+The functional commands are:
 
 ```bash
 whoopy --help
 whoopy config show
 whoopy doctor
+whoopy run create "A short grounding meditation."
+whoopy run show <run-id>
+whoopy worker process <run-id>
 ```
 
 ## Design In One Minute
@@ -53,6 +61,19 @@ uv run --extra dev python scripts/check.py
 
 `uv` reads `.python-version`, installs Python 3.11 when needed, and reproduces `uv.lock`. The setup installs only lightweight foundation dependencies; it does not download model weights or install an ML runtime. Unix contributors may use the equivalent `make setup` and `make check` wrappers.
 
+### Try The Phase 1 Flow
+
+```bash
+uv run whoopy run create "A short grounding meditation."
+# Copy the printed UUID into the next command.
+uv run whoopy worker process <run-id>
+uv run whoopy run show <run-id>
+```
+
+This creates `runs/<run-id>/run.json`, then `timeline.json`. See
+[`docs/phase-1-local-core.md`](./docs/phase-1-local-core.md) for a beginner-level
+explanation of every state and file.
+
 ## Configuration
 
 Configuration precedence is:
@@ -76,11 +97,12 @@ See [`config/README.md`](./config/README.md) for the contract.
 config/                versioned settings, model registry, pacing, prompts
 scripts/check.py        platform-neutral lint, format, type, and test gate
 src/whoopy/            Python domain package and future local control plane
+  control.py           prompt submission and run inspection service
   hardware.py          native capability inspection and safe profile selection
   ports/               typed capability contracts
   adapters/            model and infrastructure integrations
-  timeline/            canonical timeline schema and compiler
-  pipeline/            orchestration, checkpoints, cache, recovery
+  timeline/            current minimal timeline models; future compiler
+  pipeline/            run storage and worker; future cache and recovery
   qc/                  audio and content quality gates
   api/                 future local FastAPI control plane
 assets/                 redistributable, provenance-tracked source assets
@@ -104,9 +126,10 @@ Read in this order:
 4. [`docs/setup.md`](./docs/setup.md) — machine and build sequence
 5. [`docs/roadmap.md`](./docs/roadmap.md) — implementation phases
 6. [`docs/native-portability.md`](./docs/native-portability.md) — automatic cross-platform runtime and weak-laptop behavior
-7. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-8. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-9. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+7. [`docs/phase-1-local-core.md`](./docs/phase-1-local-core.md) — the first executable flow
+8. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+9. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+10. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 
@@ -127,6 +150,7 @@ Read in this order:
 ```bash
 uv sync --extra dev --locked                 # exact cross-platform setup
 uv run whoopy doctor                         # select a safe native profile
+uv run whoopy run create "A calm pause."     # save a queued local run
 uv run --extra dev python scripts/check.py   # complete local/CI quality gate
 
 make setup          # optional Unix wrapper for uv sync
@@ -135,7 +159,9 @@ make format         # optional Unix formatting wrapper
 make check          # optional Unix wrapper for the same Python check script
 ```
 
-Commands such as `make worker`, `make dev`, and `whoopy generate` are documented target interfaces, not Phase 0 features.
+Commands such as `make worker`, `make dev`, and `whoopy generate` remain future
+target interfaces. Phase 1's worker processes one explicitly named run in the
+foreground; it is not a polling background service.
 
 ## License
 

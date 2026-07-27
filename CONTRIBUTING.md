@@ -17,7 +17,9 @@ uv run whoopy doctor
 uv run --extra dev python scripts/check.py
 ```
 
-`uv` supplies the reference Python 3.11 runtime on Windows, macOS, and Linux. Phase 0 has no Node, FFmpeg, Docker, or model-download step. Make targets are convenience wrappers, not the Windows interface.
+`uv` supplies the reference Python 3.11 runtime on Windows, macOS, and Linux.
+The current local-core skeleton has no Node, FFmpeg, Docker, or model-download
+step. Make targets are convenience wrappers, not the Windows interface.
 
 ## Pull Request Standard
 

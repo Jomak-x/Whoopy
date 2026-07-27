@@ -4,8 +4,9 @@ This roadmap turns the spec into implementation phases. Each phase has a reason 
 
 Implementation status:
 
-- **Phase 0 — in progress:** foundation is implemented on its review branch.
-- **Phases 1–6 — planned:** no product behavior is implemented yet.
+- **Phase 0 — complete:** the portable foundation is merged.
+- **Phase 1 — in progress:** the local-core slice is implemented on its review branch.
+- **Phases 2–6 — planned:** audio and product behavior are not implemented yet.
 
 ## Phase 0: Documentation And Repo Foundation
 
@@ -54,6 +55,22 @@ Done when:
 - a prompt creates a run
 - a worker processes that run
 - the system writes a timeline artifact
+
+Evidence:
+
+- `whoopy run create PROMPT` writes a validated queued `run.json`
+- `whoopy worker process RUN_ID` owns the running/completed transitions
+- a successful worker writes validated `timeline.json` before completion
+- a failed worker saves a readable failed state
+- run IDs are UUID-validated before becoming filesystem paths
+- important JSON artifacts are atomically replaced
+- tests cover the control plane, storage, worker, failure, and full CLI flow
+
+Deliberate boundary:
+
+- the timeline contains one prompt-passthrough `SPEECH` segment
+- there is one foreground worker, not a polling or concurrent queue
+- there is no model, TTS, audio, API, database, or UI yet
 
 ## Phase 2: Deterministic Audio Assembly
 

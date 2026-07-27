@@ -34,6 +34,9 @@ API/CLI -> application services -> pipeline
 - `qc/` evaluates artifacts and returns structured results.
 - `api/` translates local HTTP/queue input into application calls; it does not run models in-process.
 - `hardware.py` detects native resources and selects a safe user-facing runtime profile.
+- `control.py` submits prompts and reads run state without performing worker work.
+- `pipeline/runs.py` owns durable records, UUID-safe paths, and atomic artifact writes.
+- `pipeline/worker.py` owns lifecycle transitions and processing behind the worker boundary.
 
 ## Replaceable Models
 
@@ -49,9 +52,9 @@ The default path resolves `auto` to llama.cpp/GGUF and sherpa-onnx/Kokoro. Optio
 
 ## Runtime Data
 
-Later phases create these ignored paths:
+Phase 1 creates the first of these ignored runtime paths:
 
-- `runs/` for per-generation manifests and intermediate artifacts;
+- `runs/` for per-generation records and timeline artifacts;
 - `cache/` for content-addressed reusable work;
 - `models/` for optional repository-local weights;
 - SQLite database and sidecar files.

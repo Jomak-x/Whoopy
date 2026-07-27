@@ -60,6 +60,31 @@ make check
 
 Make is not required on Windows. The Python check script is the shared contract used by every operating system in CI.
 
+## Phase 1: Run The Local-Core Skeleton
+
+Create a durable queued run:
+
+```bash
+uv run whoopy run create "A short grounding meditation."
+```
+
+Copy the printed run ID and process it with the separate worker command:
+
+```bash
+uv run whoopy worker process <run-id>
+uv run whoopy run show <run-id>
+```
+
+The first command writes `runs/<run-id>/run.json`. The worker changes its state
+from `queued` to `running`, writes `timeline.json`, then marks the record
+`completed`. Add `--json` for machine-readable command output or
+`--runs-dir PATH` to use a temporary artifact root.
+
+The timeline is intentionally a one-segment prompt passthrough. This phase tests
+the control-plane, persistence, worker, and artifact boundaries; it does not
+generate a script or audio. See
+[`phase-1-local-core.md`](./phase-1-local-core.md) for the complete walkthrough.
+
 ## Local Configuration
 
 Defaults work without local files. Use process environment variables for temporary or secret overrides:

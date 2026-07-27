@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from pytest import CaptureFixture, MonkeyPatch
 
@@ -39,3 +40,51 @@ def test_doctor_prints_machine_readable_recommendation(
     output = json.loads(capsys.readouterr().out)
     assert output["supported"] is True
     assert output["selected_profile"]["name"] == "standard"
+
+
+def test_run_and_worker_commands_write_the_phase_one_artifacts(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    assert (
+        main(
+            [
+                "run",
+                "create",
+                "A calm one-minute pause.",
+                "--runs-dir",
+                str(tmp_path),
+                "--json",
+            ]
+        )
+        == 0
+    )
+    queued = json.loads(capsys.readouterr().out)
+    assert queued["status"] == "queued"
+
+    assert (
+        main(
+            [
+                "worker",
+                "process",
+                queued["run_id"],
+                "--runs-dir",
+                str(tmp_path),
+                "--json",
+            ]
+        )
+        == 0
+    )
+    completed = json.loads(capsys.readouterr().out)
+    assert completed["status"] == "completed"
+    assert completed["timeline_artifact"] == "timeline.json"
+
+    run_directory = tmp_path / queued["run_id"]
+    assert (run_directory / "run.json").is_file()
+    timeline = json.loads((run_directory / "timeline.json").read_text(encoding="utf-8"))
+    assert timeline["segments"] == [
+        {
+            "id": "speech-0001",
+            "type": "SPEECH",
+            "text": "A calm one-minute pause.",
+        }
+    ]
