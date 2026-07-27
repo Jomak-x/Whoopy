@@ -14,7 +14,7 @@ llm:
     runtime_version: b10142
     platforms: [macos-arm64, macos-x86_64, windows-arm64, windows-x86_64, linux-x86_64, linux-arm64]
     profile_candidates: [lite]
-    status: adapter_implemented
+    status: experimental_failed_bakeoff_v1
   llama_cpp_qwen3_4b:
     adapter: whoopy.adapters.llm.llama_cpp:LlamaCppScriptGenerator
     versioned_model_id: Qwen/Qwen3-4B-GGUF@bc640142c66e1fdd12af0bd68f40445458f3869b

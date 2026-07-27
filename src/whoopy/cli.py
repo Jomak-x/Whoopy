@@ -27,6 +27,7 @@ from whoopy.artifacts import (
 from whoopy.audio.processing import ProcessedSpeechSynthesizer, SpeechProcessingSettings
 from whoopy.config import ConfigError, load_settings
 from whoopy.control import LocalControlPlane
+from whoopy.evaluation import BakeoffRunner, EvaluationSetError, load_evaluation_set
 from whoopy.hardware import DoctorResult, diagnose, inspect_hardware, load_runtime_profiles
 from whoopy.meditation import (
     GenerationError,
@@ -50,6 +51,7 @@ from whoopy.pipeline.runs import RunStoreError
 from whoopy.pipeline.worker import WorkerError
 from whoopy.ports import AdapterError
 from whoopy.timeline import ScriptCompileError, Timeline, build_script_timeline
+from whoopy.voices import KOKORO_ENGLISH_VOICES, kokoro_speaker_id
 
 
 def _add_run_location_arguments(parser: argparse.ArgumentParser) -> None:
@@ -412,6 +414,32 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_model_location_arguments(draft_parser)
 
+    evaluate_parser = subcommands.add_parser(
+        "evaluate",
+        help="Run the versioned local script-model bake-off.",
+    )
+    evaluate_parser.add_argument(
+        "--profiles",
+        nargs="+",
+        choices=("lite", "standard"),
+        default=("lite", "standard"),
+        help="Candidates to measure against the same cases.",
+    )
+    evaluate_parser.add_argument(
+        "--evaluation-set",
+        type=Path,
+        default=Path("config/evaluation/phase-3-5.yaml"),
+        help="Versioned YAML evaluation fixture.",
+    )
+    evaluate_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="New directory for report.json and per-case artifacts.",
+    )
+    evaluate_parser.add_argument("--seed", type=int, default=42)
+    _add_model_location_arguments(evaluate_parser)
+
     generate_parser = subcommands.add_parser(
         "generate",
         help="Create real local speech from a prompt or an authored script.",
@@ -450,7 +478,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="Use Basic for scripts; prompt mode safely selects Lite or Standard.",
     )
-    generate_parser.add_argument("--voice", help="Kokoro voice name; currently af_heart.")
+    generate_parser.add_argument(
+        "--voice",
+        choices=tuple(sorted(KOKORO_ENGLISH_VOICES)),
+        help="Kokoro voice name; defaults to config/default.yaml.",
+    )
     generate_parser.add_argument("--speed", type=float, help="Positive Kokoro speech-speed factor.")
     generate_parser.add_argument(
         "--json",
@@ -718,6 +750,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 Literal["lite", "standard"],
                 result.selected_profile.name,
             )
+            if args.profile == "auto" and profile_name == "lite":
+                raise GenerationError(
+                    "The v1 bake-off did not qualify Lite for automatic drafting. "
+                    "Use Standard, Basic script mode, or explicitly request "
+                    "--profile lite for experimentation."
+                )
             if profile_name not in ("lite", "standard"):
                 raise GenerationError("Drafting requires the Lite or Standard LLM profile.")
             artifact_lock = load_artifact_lock(_artifact_lock_path(args))
@@ -775,6 +813,90 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Estimated duration: {generated.estimated_duration_seconds:.1f} seconds")
         return 0
 
+    if args.command == "evaluate":
+        try:
+            report_path = args.output_dir / "report.json"
+            if report_path.exists():
+                raise EvaluationSetError(
+                    f"Refusing to replace existing bake-off report: {report_path}"
+                )
+            evaluation_set = load_evaluation_set(args.evaluation_set)
+            prompts = load_prompt_bundle(args.config_dir / "prompts")
+            runner = BakeoffRunner(
+                evaluation_set=evaluation_set,
+                prompts=prompts,
+                output_directory=args.output_dir,
+                seed=args.seed,
+            )
+            candidates: dict[str, LlamaCppScriptGenerator] = {}
+            all_results = []
+            platform_name = ""
+            for requested in args.profiles:
+                result, target, artifact_store, artifacts = _model_plan(
+                    args,
+                    requested_profile=requested,
+                )
+                if not result.supported or result.selected_profile is None:
+                    raise EvaluationSetError(
+                        f"Profile {requested} is unsafe on this machine: "
+                        + "; ".join(result.messages)
+                    )
+                profile_name = cast(Literal["lite", "standard"], requested)
+                component = "llm_model_lite" if profile_name == "lite" else "llm_model_standard"
+                model_artifacts = [
+                    artifact for artifact in artifacts if artifact.component == component
+                ]
+                if len(model_artifacts) != 1:
+                    raise EvaluationSetError(
+                        f"Expected one {component} artifact, found {len(model_artifacts)}."
+                    )
+                adapter = LlamaCppScriptGenerator.from_artifact_store(
+                    artifact_lock=load_artifact_lock(_artifact_lock_path(args)),
+                    store=artifact_store,
+                    profile_name=profile_name,
+                    target=target,
+                    device=",".join(result.snapshot.accelerators),
+                    settings=LlamaCppSettings(),
+                )
+                candidates[profile_name] = adapter
+                platform_name = f"{target.operating_system}-{target.architecture}"
+                print(
+                    f"Evaluating {profile_name}: {len(evaluation_set.cases)} cases...",
+                    file=sys.stderr,
+                )
+                all_results.extend(
+                    runner.run_candidate(
+                        profile=profile_name,
+                        adapter=adapter,
+                        model_artifact_bytes=model_artifacts[0].size_bytes,
+                    )
+                )
+            bakeoff_report = runner.report(
+                platform=platform_name,
+                candidates=candidates,
+                results=all_results,
+            )
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = report_path.with_name(f".{report_path.name}.{uuid4().hex}.tmp")
+            temporary.write_text(
+                bakeoff_report.model_dump_json(indent=2) + "\n",
+                encoding="utf-8",
+            )
+            temporary.replace(report_path)
+            print(report_path)
+        except (
+            AdapterError,
+            ArtifactError,
+            ConfigError,
+            EvaluationSetError,
+            GenerationError,
+            PromptLoadError,
+            ValueError,
+            WorkspaceError,
+        ) as error:
+            parser.error(str(error))
+        return 0
+
     if args.command == "generate":
         active_run_id: UUID | None = None
         try:
@@ -799,21 +921,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             if prompt_mode and profile_name == "basic":
                 raise GenerationError("Prompt mode requires the Lite or Standard profile.")
+            if prompt_mode and args.profile == "auto" and profile_name == "lite":
+                raise GenerationError(
+                    "The v1 bake-off did not qualify Lite for automatic prompt mode. "
+                    "Use an authored --script-file on this laptop, or explicitly "
+                    "request --profile lite for experimentation."
+                )
             run_id = UUID(args.draft_id) if args.draft_id is not None else uuid4()
             active_run_id = run_id
             created_at = datetime.now(UTC)
             store = _run_store(args)
             artifact_lock = load_artifact_lock(_artifact_lock_path(args))
             voice_name = args.voice or settings.tts.voice
-            speaker_ids = {"af_heart": 3}
-            if voice_name not in speaker_ids:
-                raise ConfigError(
-                    f"Unsupported Kokoro voice {voice_name!r}; currently available: af_heart."
-                )
             speed = args.speed if args.speed is not None else settings.tts.speed
             tts_settings = SherpaOnnxSettings(
                 voice_name=voice_name,
-                speaker_id=speaker_ids[voice_name],
+                speaker_id=kokoro_speaker_id(voice_name),
                 speed=speed,
                 num_threads=2,
                 provider="cpu",

@@ -1,0 +1,28 @@
+schema_version: 1
+evaluation_id: phase-3-5-local-script-models
+version: 1
+cases:
+  - id: grounding-1m
+    category: grounding
+    prompt: A gentle grounding meditation after a stressful day.
+    duration_seconds: 60
+  - id: breath-awareness-2m
+    category: breath_awareness
+    prompt: A calm breath-awareness practice with no breath holding or counting.
+    duration_seconds: 120
+  - id: body-scan-3m
+    category: body_scan
+    prompt: A slow body scan for releasing ordinary end-of-day tension.
+    duration_seconds: 180
+  - id: sleep-4m
+    category: sleep
+    prompt: A quiet wind-down meditation for preparing to sleep.
+    duration_seconds: 240
+  - id: anxious-moment-2m
+    category: anxiety
+    prompt: A non-medical grounding pause for someone experiencing an anxious moment.
+    duration_seconds: 120
+  - id: daytime-focus-1m
+    category: focus
+    prompt: A brief daytime reset before returning to focused work.
+    duration_seconds: 60

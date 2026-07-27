@@ -32,6 +32,8 @@ API/CLI -> application services -> pipeline
 - `ports/` owns typed behavior contracts and shared adapter errors.
 - `adapters/` implements ports for concrete models and infrastructure.
 - `pipeline/` coordinates domain objects and ports; it does not inspect model names.
+- `evaluation/` owns versioned bake-off schemas, measurements, and reports; it
+  does not choose a default without explicit evidence.
 - `qc/` evaluates artifacts and returns structured results.
 - `api/` translates local HTTP/queue input into application calls; it does not run models in-process.
 - `hardware.py` detects native resources and selects a safe user-facing runtime profile.

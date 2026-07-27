@@ -21,7 +21,7 @@ lite:
   llm_runtime: llama_cpp
   llm_model_class: 1b_to_2b_gguf
   tts_runtime: sherpa_onnx
-  modes: [templates, pasted_script, local_llm, local_tts]
+  modes: [templates, pasted_script, experimental_local_llm, local_tts]
 
 standard:
   rank: 2

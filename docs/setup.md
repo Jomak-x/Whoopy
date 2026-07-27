@@ -280,6 +280,37 @@ uv run --offline whoopy generate \
 
 See [`phase-3-5-end-to-end.md`](./phase-3-5-end-to-end.md).
 
+## Phase 3.5 PR 6: Reproduce The Bake-Off
+
+Install and verify both candidates, then run identical versioned cases:
+
+```bash
+uv run whoopy models install --profile lite
+uv run whoopy models install --profile standard
+uv run --offline whoopy evaluate \
+  --profiles lite standard \
+  --models-dir models/managed \
+  --output-dir evaluations/local/my-bakeoff
+```
+
+The first measured v1 run qualified Standard for automatic prompt mode but not
+Lite. On a laptop that cannot safely run Standard, use the authored
+`--script-file` Basic path. Explicit `--profile lite` remains available for
+experiments, but `auto` will explain that it is not a qualified default.
+
+Prepare a human voice review without revealing speaker names:
+
+```bash
+uv run --offline python scripts/prepare_voice_bakeoff.py \
+  --script-file examples/first-meditation.md \
+  --models-dir models/managed \
+  --output-dir evaluations/local/voices-v1
+```
+
+Read the committed
+[`evaluations/phase-3-5-model-bakeoff-2026-07-26.md`](./evaluations/phase-3-5-model-bakeoff-2026-07-26.md)
+and [`evaluations/voice-listening-rubric.md`](./evaluations/voice-listening-rubric.md).
+
 ## Local Configuration
 
 Defaults work without local files. Use process environment variables for temporary or secret overrides:
@@ -364,9 +395,9 @@ Basic is a supported product mode, not an error. It avoids a local LLM while ret
 
 The laptop does not currently satisfy Basic's RAM or disk margin. Free resources and rerun the command. Whoopy deliberately refuses to attempt a model load.
 
-### A model named in `models.yaml` cannot run
+### `auto` refuses Lite prompt mode
 
-The universal entries now have `status: adapter_implemented`. Artifact
-installation and direct adapter construction are active, but the normal worker
-still uses the fixture until the script-file and generated-meditation PRs
-connect those adapters to user-facing commands.
+This is an evidence-based safety/quality decision, not a missing adapter. The
+v1 strict bake-off completed 0/6 cases with Qwen3-1.7B Q8_0. Use Basic with an
+authored script, run Standard on a suitable machine, or explicitly choose
+`--profile lite` to experiment while preserving the recorded limitation.
