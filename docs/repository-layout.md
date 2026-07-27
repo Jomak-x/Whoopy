@@ -28,7 +28,7 @@ API/CLI -> application services -> pipeline
 ```
 
 - `timeline/` owns the canonical segment types and compilation rules.
-- `audio/` owns the synthesis protocol, dependency-free fixture PCM, WAV assembly, manifests, and read-back checks.
+- `audio/` owns speech post-processing, dependency-free fixture PCM, WAV assembly, manifests, and read-back checks.
 - `ports/` owns typed behavior contracts and shared adapter errors.
 - `adapters/` implements ports for concrete models and infrastructure.
 - `pipeline/` coordinates domain objects and ports; it does not inspect model names.

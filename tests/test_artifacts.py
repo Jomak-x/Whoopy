@@ -4,8 +4,9 @@ import hashlib
 import io
 import tarfile
 import urllib.request
+import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 import yaml
@@ -33,13 +34,14 @@ def _artifact(
     *,
     filename: str | None = None,
     archive: ArchiveFormat = ArchiveFormat.NONE,
+    kind: Literal["model", "runtime", "tts_model", "python_wheel"] = "model",
 ) -> ArtifactSpec:
     return ArtifactSpec(
         artifact_id=artifact_id,
         component=component,
         display_name=artifact_id.replace("_", " "),
         version="test-v1",
-        kind="model",
+        kind=kind,
         license_id="Apache-2.0",
         source_url=f"https://example.invalid/{filename or artifact_id}",
         filename=filename or f"{artifact_id}.bin",
@@ -67,6 +69,13 @@ def _tar_bz2_symlink(member_name: str, target: str) -> bytes:
         info.type = tarfile.SYMTYPE
         info.linkname = target
         archive.addfile(info)
+    return output.getvalue()
+
+
+def _zip(member_name: str, payload: bytes) -> bytes:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, mode="w") as archive:
+        archive.writestr(member_name, payload)
     return output.getvalue()
 
 
@@ -219,6 +228,50 @@ def test_full_verification_detects_changed_extracted_content(tmp_path: Path) -> 
     status = store.inspect(artifact, verify_digest=True)
     assert status.state is ArtifactState.CORRUPT
     assert "extracted installation digest" in status.message
+
+
+def test_verified_python_wheels_materialize_into_one_environment(tmp_path: Path) -> None:
+    first_payload = _zip("sherpa_onnx/__init__.py", b"version = 'test'")
+    second_payload = _zip("sherpa_onnx/lib/native.so", b"native")
+    first = _artifact(
+        "python",
+        "sherpa_python",
+        first_payload,
+        filename="python.whl",
+        kind="python_wheel",
+    )
+    second = _artifact(
+        "native",
+        "sherpa_native",
+        second_payload,
+        filename="native.whl",
+        kind="python_wheel",
+    )
+    offline = tmp_path / "offline"
+    offline.mkdir()
+    (offline / first.filename).write_bytes(first_payload)
+    (offline / second.filename).write_bytes(second_payload)
+    store = ArtifactStore(tmp_path / "managed")
+    ArtifactInstaller(store).install_profile(
+        "basic",
+        [first, second],
+        TargetPlatform(operating_system="linux", architecture="x86_64"),
+        offline_directory=offline,
+        allow_network=False,
+    )
+
+    environment = store.materialize_python_wheels(
+        [first, second],
+        environment_name="sherpa_test",
+    )
+    reused = store.materialize_python_wheels(
+        [first, second],
+        environment_name="sherpa_test",
+    )
+
+    assert reused == environment
+    assert (environment / "sherpa_onnx" / "__init__.py").is_file()
+    assert (environment / "sherpa_onnx" / "lib" / "native.so").is_file()
 
 
 def test_archive_path_traversal_is_rejected(tmp_path: Path) -> None:

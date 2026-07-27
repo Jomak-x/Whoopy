@@ -190,6 +190,9 @@ Out of scope: meditation prompting and the final one-command workflow.
 
 ### Phase 3.5 PR 3: Produce Real Speech From A Pasted Script
 
+Status: implemented on the `phase-3-5-real-script-speech` stacked branch. See
+[`phase-3-5-real-script-speech.md`](./phase-3-5-real-script-speech.md).
+
 Goal: make the first useful meditation possible without waiting for LLM
 integration.
 

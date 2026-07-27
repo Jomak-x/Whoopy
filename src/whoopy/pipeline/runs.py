@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -19,6 +20,7 @@ from pydantic import (
 )
 
 from whoopy.audio import AudioManifest, AudioQualityReport
+from whoopy.pipeline.generation import RunModelMetadata, ScriptRunConfig
 from whoopy.timeline import Timeline
 
 RUN_RECORD_FILENAME: Literal["run.json"] = "run.json"
@@ -26,6 +28,9 @@ TIMELINE_FILENAME: Literal["timeline.json"] = "timeline.json"
 AUDIO_FILENAME: Literal["narration.wav"] = "narration.wav"
 AUDIO_MANIFEST_FILENAME: Literal["audio-manifest.json"] = "audio-manifest.json"
 QUALITY_FILENAME: Literal["quality.json"] = "quality.json"
+SCRIPT_FILENAME: Literal["script.md"] = "script.md"
+RESOLVED_CONFIG_FILENAME: Literal["resolved-config.json"] = "resolved-config.json"
+MODEL_METADATA_FILENAME: Literal["model-metadata.json"] = "model-metadata.json"
 PromptText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=20_000),
@@ -84,12 +89,16 @@ class RunRecord(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1, 2, 3] = 3
+    schema_version: Literal[1, 2, 3, 4] = 3
     run_id: UUID
     status: RunStatus
     prompt: PromptText
+    source_kind: Literal["fixture_prompt", "script_file"] = "fixture_prompt"
     created_at: AwareDatetime
     updated_at: AwareDatetime
+    script_artifact: Literal["script.md"] | None = None
+    resolved_config_artifact: Literal["resolved-config.json"] | None = None
+    model_metadata_artifact: Literal["model-metadata.json"] | None = None
     timeline_artifact: Literal["timeline.json"] | None = None
     audio_artifact: Literal["narration.wav"] | None = None
     audio_manifest_artifact: Literal["audio-manifest.json"] | None = None
@@ -110,7 +119,7 @@ class RunRecord(BaseModel):
         if self.status is RunStatus.COMPLETED:
             if self.timeline_artifact is None:
                 raise ValueError("a completed run must reference its timeline artifact")
-            if self.schema_version in (2, 3) and any(artifact is None for artifact in artifacts):
+            if self.schema_version in (2, 3, 4) and any(artifact is None for artifact in artifacts):
                 raise ValueError(
                     "a completed run schema v2 or v3 must reference every audio artifact"
                 )
@@ -118,6 +127,21 @@ class RunRecord(BaseModel):
             raise ValueError("only a completed run may reference artifacts")
         if self.schema_version == 1 and any(artifact is not None for artifact in artifacts[1:]):
             raise ValueError("run schema v1 does not support audio artifacts")
+        input_artifacts = (
+            self.script_artifact,
+            self.resolved_config_artifact,
+            self.model_metadata_artifact,
+        )
+        if self.schema_version < 4:
+            if self.source_kind != "fixture_prompt" or any(
+                artifact is not None for artifact in input_artifacts
+            ):
+                raise ValueError("run schemas v1-v3 do not support real-script input artifacts")
+        elif self.source_kind != "script_file" or any(
+            artifact is None for artifact in input_artifacts
+        ):
+            raise ValueError("run schema v4 requires every script-file input artifact")
+
         if self.schema_version in (1, 2):
             if self.recovery is not None:
                 raise ValueError("run schema v1 and v2 do not support recovery metadata")
@@ -222,6 +246,72 @@ class RunStore:
         self.save(record)
         return record
 
+    def create_script_run(
+        self,
+        *,
+        script: str,
+        source_name: str,
+        resolved_config: ScriptRunConfig,
+        model_metadata: RunModelMetadata,
+        run_id: UUID | None = None,
+        created_at: datetime | None = None,
+    ) -> RunRecord:
+        """Atomically create a queued schema-v4 run and its immutable inputs."""
+
+        active_run_id = run_id or uuid4()
+        timestamp = created_at or _utc_now()
+        try:
+            record = RunRecord(
+                schema_version=4,
+                run_id=active_run_id,
+                status=RunStatus.QUEUED,
+                prompt=f"Render local script: {source_name}",
+                source_kind="script_file",
+                created_at=timestamp,
+                updated_at=timestamp,
+                script_artifact=SCRIPT_FILENAME,
+                resolved_config_artifact=RESOLVED_CONFIG_FILENAME,
+                model_metadata_artifact=MODEL_METADATA_FILENAME,
+                recovery=RunRecovery(
+                    process_attempts=0,
+                    resume_count=0,
+                    cache_hits=0,
+                    cache_misses=0,
+                    checkpoint_reuses=0,
+                    speech_segments_total=0,
+                    speech_segments_completed=0,
+                ),
+            )
+        except ValidationError as error:
+            raise RunStoreError(f"Invalid script run request:\n{error}") from error
+
+        self.root.mkdir(parents=True, exist_ok=True)
+        run_directory = self.run_directory(active_run_id)
+        if run_directory.exists():
+            raise RunStoreError(f"Run directory already exists: {run_directory}")
+        temporary = self.root / f".{active_run_id}.{uuid4().hex}.tmp"
+        try:
+            temporary.mkdir()
+            self._write_bytes(temporary / SCRIPT_FILENAME, script.encode("utf-8"))
+            self._write_json(
+                temporary / RESOLVED_CONFIG_FILENAME,
+                resolved_config.model_dump_json(indent=2) + "\n",
+            )
+            self._write_json(
+                temporary / MODEL_METADATA_FILENAME,
+                model_metadata.model_dump_json(indent=2) + "\n",
+            )
+            self._write_json(
+                temporary / RUN_RECORD_FILENAME,
+                record.model_dump_json(indent=2) + "\n",
+            )
+            temporary.replace(run_directory)
+        except OSError as error:
+            raise RunStoreError(f"Could not create script run {active_run_id}: {error}") from error
+        finally:
+            shutil.rmtree(temporary, ignore_errors=True)
+        return record
+
     def load(self, run_id: UUID | str) -> RunRecord:
         """Load and validate a run record from disk."""
 
@@ -294,6 +384,27 @@ class RunStore:
         self._write_json(path, report.model_dump_json(indent=2) + "\n")
         return path
 
+    def load_script(self, run_id: UUID | str) -> str:
+        path = self.script_path(run_id)
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError as error:
+            raise RunStoreError(f"Could not load script artifact {path}: {error}") from error
+
+    def load_resolved_config(self, run_id: UUID | str) -> ScriptRunConfig:
+        path = self.resolved_config_path(run_id)
+        try:
+            return ScriptRunConfig.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValidationError) as error:
+            raise RunStoreError(f"Could not load resolved config {path}: {error}") from error
+
+    def load_model_metadata(self, run_id: UUID | str) -> RunModelMetadata:
+        path = self.model_metadata_path(run_id)
+        try:
+            return RunModelMetadata.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValidationError) as error:
+            raise RunStoreError(f"Could not load model metadata {path}: {error}") from error
+
     def run_directory(self, run_id: UUID | str) -> Path:
         return self.root / str(self.parse_run_id(run_id))
 
@@ -311,6 +422,15 @@ class RunStore:
 
     def quality_path(self, run_id: UUID | str) -> Path:
         return self.run_directory(run_id) / QUALITY_FILENAME
+
+    def script_path(self, run_id: UUID | str) -> Path:
+        return self.run_directory(run_id) / SCRIPT_FILENAME
+
+    def resolved_config_path(self, run_id: UUID | str) -> Path:
+        return self.run_directory(run_id) / RESOLVED_CONFIG_FILENAME
+
+    def model_metadata_path(self, run_id: UUID | str) -> Path:
+        return self.run_directory(run_id) / MODEL_METADATA_FILENAME
 
     @staticmethod
     def parse_run_id(value: UUID | str) -> UUID:

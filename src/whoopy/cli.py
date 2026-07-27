@@ -5,11 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
+from uuid import uuid4
 
 import yaml
 
+from whoopy.adapters.tts import SherpaOnnxKokoroAdapter, SherpaOnnxSettings
 from whoopy.artifacts import (
     ArtifactError,
     ArtifactInstaller,
@@ -19,12 +22,23 @@ from whoopy.artifacts import (
     TargetPlatform,
     load_artifact_lock,
 )
+from whoopy.audio.processing import ProcessedSpeechSynthesizer, SpeechProcessingSettings
 from whoopy.config import ConfigError, load_settings
 from whoopy.control import LocalControlPlane
 from whoopy.hardware import DoctorResult, diagnose, inspect_hardware, load_runtime_profiles
-from whoopy.pipeline import LocalWorker, RunRecord, RunStore, SegmentCache
+from whoopy.pipeline import (
+    LocalWorker,
+    RunModelMetadata,
+    RunRecord,
+    RunStore,
+    ScriptRunConfig,
+    SegmentCache,
+    TTSRunSettings,
+)
 from whoopy.pipeline.runs import RunStoreError
 from whoopy.pipeline.worker import WorkerError
+from whoopy.ports import AdapterError
+from whoopy.timeline import ScriptCompileError, Timeline, build_script_timeline
 
 
 def _add_run_location_arguments(parser: argparse.ArgumentParser) -> None:
@@ -67,6 +81,12 @@ def _add_model_location_arguments(parser: argparse.ArgumentParser) -> None:
         default=Path("config"),
         help="Directory containing runtime_profiles.yaml.",
     )
+    _add_runtime_model_arguments(parser)
+
+
+def _add_runtime_model_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add model paths to commands that already define --config-dir."""
+
     parser.add_argument(
         "--artifact-lock",
         type=Path,
@@ -82,6 +102,8 @@ def _add_model_location_arguments(parser: argparse.ArgumentParser) -> None:
 
 def _model_plan(
     args: argparse.Namespace,
+    *,
+    requested_profile: str | None = None,
 ) -> tuple[DoctorResult, TargetPlatform, ArtifactStore, list[ArtifactSpec]]:
     """Resolve a safe profile and its exact artifacts without loading a model."""
 
@@ -92,16 +114,17 @@ def _model_plan(
         for profile in load_runtime_profiles(args.config_dir / "runtime_profiles.yaml")
         if profile.name in artifact_lock.profiles
     ]
-    if args.profile != "auto" and args.profile not in artifact_lock.profiles:
+    profile_name = requested_profile or args.profile
+    if profile_name != "auto" and profile_name not in artifact_lock.profiles:
         raise ArtifactError(
-            f"Profile {args.profile!r} has no pinned artifact plan yet. "
+            f"Profile {profile_name!r} has no pinned artifact plan yet. "
             f"Available plans: {', '.join(sorted(artifact_lock.profiles))}."
         )
     inspection_path = args.models_dir
     while not inspection_path.exists() and inspection_path != inspection_path.parent:
         inspection_path = inspection_path.parent
     snapshot = inspect_hardware(inspection_path)
-    result = diagnose(snapshot, profiles, args.profile)
+    result = diagnose(snapshot, profiles, profile_name)
     target = TargetPlatform(
         operating_system=snapshot.operating_system,
         architecture=snapshot.architecture,
@@ -112,6 +135,73 @@ def _model_plan(
     return result, target, ArtifactStore(args.models_dir), artifacts
 
 
+def _artifact_lock_path(args: argparse.Namespace) -> Path:
+    artifact_lock: Path | None = args.artifact_lock
+    return artifact_lock or args.config_dir / "artifacts.yaml"
+
+
+def _real_script_worker(
+    store: RunStore,
+    record: RunRecord,
+    *,
+    artifact_lock_path: Path,
+    models_dir: Path,
+) -> LocalWorker:
+    """Reconstruct a schema-v4 worker only from durable run configuration."""
+
+    resolved = store.load_resolved_config(record.run_id)
+    tts_settings = SherpaOnnxSettings(
+        voice_name=resolved.tts.voice_name,
+        speaker_id=resolved.tts.speaker_id,
+        speed=resolved.tts.speed,
+        num_threads=resolved.tts.num_threads,
+        provider=resolved.tts.provider,
+        language=resolved.tts.language,
+    )
+    raw_synthesizer = SherpaOnnxKokoroAdapter.from_artifact_store(
+        artifact_lock=load_artifact_lock(artifact_lock_path),
+        store=ArtifactStore(models_dir),
+        profile_name=resolved.profile,
+        target=resolved.target,
+        settings=tts_settings,
+    )
+    synthesizer = ProcessedSpeechSynthesizer(
+        raw_synthesizer,
+        settings=resolved.processing,
+    )
+
+    def timeline_builder(active_record: RunRecord, created_at: datetime) -> Timeline:
+        return build_script_timeline(
+            run_id=active_record.run_id,
+            script=store.load_script(active_record.run_id),
+            created_at=created_at,
+        )
+
+    return LocalWorker(
+        store,
+        cache=_segment_cache(store),
+        synthesizer=synthesizer,
+        timeline_builder=timeline_builder,
+    )
+
+
+def _worker_for_record(
+    store: RunStore,
+    record: RunRecord,
+    *,
+    artifact_lock_path: Path,
+    models_dir: Path,
+) -> LocalWorker:
+    if record.source_kind == "script_file":
+        return _real_script_worker(
+            store,
+            record,
+            artifact_lock_path=artifact_lock_path,
+            models_dir=models_dir,
+        )
+    return LocalWorker(store, cache=_segment_cache(store))
+
+
 def _print_run(record: RunRecord, store: RunStore, *, as_json: bool) -> None:
     if as_json:
         print(record.model_dump_json(indent=2))
@@ -120,6 +210,12 @@ def _print_run(record: RunRecord, store: RunStore, *, as_json: bool) -> None:
     print(f"Status: {record.status.value}")
     print(f"Prompt: {record.prompt}")
     print(f"Record: {store.record_path(record.run_id)}")
+    if record.script_artifact is not None:
+        print(f"Script: {store.script_path(record.run_id)}")
+    if record.resolved_config_artifact is not None:
+        print(f"Resolved config: {store.resolved_config_path(record.run_id)}")
+    if record.model_metadata_artifact is not None:
+        print(f"Model metadata: {store.model_metadata_path(record.run_id)}")
     if record.timeline_artifact is not None:
         print(f"Timeline: {store.timeline_path(record.run_id)}")
     if record.audio_artifact is not None:
@@ -252,6 +348,36 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_model_location_arguments(models_install_parser)
 
+    generate_parser = subcommands.add_parser(
+        "generate",
+        help="Render a real local meditation from a text or Markdown script.",
+    )
+    generate_parser.add_argument(
+        "--script-file",
+        type=Path,
+        required=True,
+        help="UTF-8 text or Markdown containing prose and [pause: 3s] markers.",
+    )
+    generate_parser.add_argument(
+        "--profile",
+        choices=("auto", "basic", "lite", "standard"),
+        default="auto",
+        help="Use Basic automatically for script rendering or request a profile.",
+    )
+    generate_parser.add_argument("--voice", help="Kokoro voice name; currently af_heart.")
+    generate_parser.add_argument("--speed", type=float, help="Positive Kokoro speech-speed factor.")
+    generate_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print only the machine-readable completed run record.",
+    )
+    _add_model_location_arguments(generate_parser)
+    generate_parser.add_argument(
+        "--runs-dir",
+        type=Path,
+        help="Override pipeline.checkpoint_dir for this command.",
+    )
+
     run_parser = subcommands.add_parser("run", help="Create or inspect durable local runs.")
     run_commands = run_parser.add_subparsers(dest="run_command")
     create_parser = run_commands.add_parser(
@@ -286,6 +412,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Print only the machine-readable completed run record.",
     )
     _add_run_location_arguments(run_resume_parser)
+    _add_runtime_model_arguments(run_resume_parser)
 
     cache_parser = subcommands.add_parser(
         "cache",
@@ -319,6 +446,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Print only the machine-readable completed run record.",
     )
     _add_run_location_arguments(process_parser)
+    _add_runtime_model_arguments(process_parser)
 
     return parser
 
@@ -458,6 +586,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for message in result.messages:
                     print(message)
                 return 2
+            profile_name = cast(
+                Literal["basic", "lite", "standard"],
+                result.selected_profile.name,
+            )
             callback = None if args.json else lambda message: print(f"  {message}")
             if not args.json:
                 print(
@@ -484,6 +616,114 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"({len(report.installed)} installed, {len(report.reused)} reused)"
             )
             print("No model was loaded.")
+        return 0
+
+    if args.command == "generate":
+        try:
+            settings = load_settings(args.config_dir)
+            requested_profile = "basic" if args.profile == "auto" else args.profile
+            result, target, artifact_store, _artifacts = _model_plan(
+                args,
+                requested_profile=requested_profile,
+            )
+            if not result.supported or result.selected_profile is None:
+                for message in result.messages:
+                    print(message)
+                return 2
+            profile_name = cast(
+                Literal["basic", "lite", "standard"],
+                result.selected_profile.name,
+            )
+
+            script = args.script_file.read_text(encoding="utf-8")
+            run_id = uuid4()
+            created_at = datetime.now(UTC)
+            # Compile before creating a durable run so invalid Markdown cannot
+            # leave behind a queued directory.
+            build_script_timeline(
+                run_id=run_id,
+                script=script,
+                created_at=created_at,
+            )
+
+            voice_name = args.voice or settings.tts.voice
+            speaker_ids = {"af_heart": 3}
+            if voice_name not in speaker_ids:
+                raise ConfigError(
+                    f"Unsupported Kokoro voice {voice_name!r}; currently available: af_heart."
+                )
+            speed = args.speed if args.speed is not None else settings.tts.speed
+            tts_settings = SherpaOnnxSettings(
+                voice_name=voice_name,
+                speaker_id=speaker_ids[voice_name],
+                speed=speed,
+                num_threads=2,
+                provider="cpu",
+                language="en-us",
+            )
+            raw_synthesizer = SherpaOnnxKokoroAdapter.from_artifact_store(
+                artifact_lock=load_artifact_lock(_artifact_lock_path(args)),
+                store=artifact_store,
+                profile_name=profile_name,
+                target=target,
+                settings=tts_settings,
+            )
+            processing = SpeechProcessingSettings()
+            synthesizer = ProcessedSpeechSynthesizer(
+                raw_synthesizer,
+                settings=processing,
+            )
+            resolved_config = ScriptRunConfig(
+                profile=profile_name,
+                target=target,
+                tts=TTSRunSettings(
+                    voice_name=tts_settings.voice_name,
+                    speaker_id=tts_settings.speaker_id,
+                    speed=tts_settings.speed,
+                    num_threads=tts_settings.num_threads,
+                    provider=tts_settings.provider,
+                    language=tts_settings.language,
+                ),
+                processing=processing,
+            )
+            store = _run_store(args)
+            queued = store.create_script_run(
+                script=script,
+                source_name=args.script_file.name,
+                resolved_config=resolved_config,
+                model_metadata=RunModelMetadata(tts=raw_synthesizer.metadata),
+                run_id=run_id,
+                created_at=created_at,
+            )
+
+            def timeline_builder(
+                active_record: RunRecord,
+                timeline_created_at: datetime,
+            ) -> Timeline:
+                return build_script_timeline(
+                    run_id=active_record.run_id,
+                    script=store.load_script(active_record.run_id),
+                    created_at=timeline_created_at,
+                )
+
+            completed = LocalWorker(
+                store,
+                cache=_segment_cache(store),
+                synthesizer=synthesizer,
+                timeline_builder=timeline_builder,
+            ).process(queued.run_id)
+        except (
+            ArtifactError,
+            AdapterError,
+            ConfigError,
+            OSError,
+            RunStoreError,
+            ScriptCompileError,
+            ValueError,
+            WorkerError,
+        ) as error:
+            parser.error(str(error))
+        _print_run(completed, store, as_json=args.json)
         return 0
 
     if args.command == "run" and args.run_command == "create":
@@ -514,8 +754,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "run" and args.run_command == "resume":
         try:
             store = _run_store(args)
-            record = LocalWorker(store, cache=_segment_cache(store)).resume(args.run_id)
-        except (ConfigError, RunStoreError, WorkerError) as error:
+            existing = store.load(args.run_id)
+            record = _worker_for_record(
+                store,
+                existing,
+                artifact_lock_path=_artifact_lock_path(args),
+                models_dir=args.models_dir,
+            ).resume(args.run_id)
+        except (AdapterError, ArtifactError, ConfigError, RunStoreError, WorkerError) as error:
             parser.error(str(error))
         _print_run(record, store, as_json=args.json)
         return 0
@@ -539,8 +785,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "worker" and args.worker_command == "process":
         try:
             store = _run_store(args)
-            record = LocalWorker(store, cache=_segment_cache(store)).process(args.run_id)
-        except (ConfigError, RunStoreError, WorkerError) as error:
+            existing = store.load(args.run_id)
+            record = _worker_for_record(
+                store,
+                existing,
+                artifact_lock_path=_artifact_lock_path(args),
+                models_dir=args.models_dir,
+            ).process(args.run_id)
+        except (AdapterError, ArtifactError, ConfigError, RunStoreError, WorkerError) as error:
             parser.error(str(error))
         _print_run(record, store, as_json=args.json)
         return 0

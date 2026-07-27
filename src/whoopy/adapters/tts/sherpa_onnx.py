@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import math
+import sys
 from array import array
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -52,6 +53,17 @@ def _load_sherpa_onnx() -> Any:
     return importlib.import_module("sherpa_onnx")
 
 
+def _loader_from_directory(directory: Path) -> ModuleLoader:
+    def load() -> Any:
+        import_path = str(directory)
+        if import_path not in sys.path:
+            sys.path.insert(0, import_path)
+        importlib.invalidate_caches()
+        return importlib.import_module("sherpa_onnx")
+
+    return load
+
+
 def _component(artifacts: Sequence[ArtifactSpec], component: str) -> ArtifactSpec:
     matches = [artifact for artifact in artifacts if artifact.component == component]
     if len(matches) != 1:
@@ -97,11 +109,11 @@ class SherpaOnnxKokoroAdapter:
         runtime_version: str,
         license_id: str,
         settings: SherpaOnnxSettings | None = None,
-        module_loader: ModuleLoader = _load_sherpa_onnx,
+        module_loader: ModuleLoader | None = None,
     ) -> None:
         self.model_directory = _kokoro_root(model_directory)
         self.settings = settings or SherpaOnnxSettings()
-        self.module_loader = module_loader
+        self.module_loader = module_loader or _load_sherpa_onnx
         self._engine: Any | None = None
         self.metadata = AdapterMetadata(
             adapter_id="whoopy.sherpa_onnx_kokoro",
@@ -130,7 +142,7 @@ class SherpaOnnxKokoroAdapter:
         profile_name: str,
         target: TargetPlatform,
         settings: SherpaOnnxSettings | None = None,
-        module_loader: ModuleLoader = _load_sherpa_onnx,
+        module_loader: ModuleLoader | None = None,
     ) -> SherpaOnnxKokoroAdapter:
         """Resolve and reverify the model and both platform wheels before use."""
 
@@ -139,15 +151,20 @@ class SherpaOnnxKokoroAdapter:
         python_wheel = _component(artifacts, "sherpa_onnx_python")
         native_wheel = _component(artifacts, "sherpa_onnx_core")
         model_path = store.require(model)
-        store.require(python_wheel)
-        store.require(native_wheel)
+        environment = store.materialize_python_wheels(
+            [python_wheel, native_wheel],
+            environment_name=(
+                f"sherpa_onnx_{python_wheel.version}_"
+                f"{target.operating_system}_{target.architecture}"
+            ).replace(".", "_"),
+        )
         return cls(
             model_directory=model_path,
             model_version=model.version,
             runtime_version=python_wheel.version,
             license_id=model.license_id,
             settings=settings,
-            module_loader=module_loader,
+            module_loader=module_loader or _loader_from_directory(environment),
         )
 
     def _load_engine(self) -> Any:

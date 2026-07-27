@@ -7,7 +7,11 @@ from uuid import UUID
 
 import pytest
 
+from whoopy.artifacts import TargetPlatform
+from whoopy.audio.fixture import FixtureSpeechSynthesizer
+from whoopy.audio.processing import SpeechProcessingSettings
 from whoopy.control import LocalControlPlane
+from whoopy.pipeline.generation import RunModelMetadata, ScriptRunConfig, TTSRunSettings
 from whoopy.pipeline.runs import (
     InvalidRunIdError,
     RunRecord,
@@ -95,3 +99,37 @@ def test_run_id_must_be_a_uuid_before_it_becomes_a_path(tmp_path: Path) -> None:
 
     with pytest.raises(InvalidRunIdError, match="Invalid run ID"):
         store.load("../../outside")
+
+
+def test_script_run_atomically_saves_every_immutable_input(tmp_path: Path) -> None:
+    store = RunStore(tmp_path)
+    resolved = ScriptRunConfig(
+        profile="basic",
+        target=TargetPlatform(operating_system="linux", architecture="x86_64"),
+        tts=TTSRunSettings(
+            voice_name="af_heart",
+            speaker_id=3,
+            speed=0.9,
+            num_threads=2,
+            provider="cpu",
+            language="en-us",
+        ),
+        processing=SpeechProcessingSettings(),
+    )
+    metadata = RunModelMetadata(tts=FixtureSpeechSynthesizer.metadata)
+
+    record = store.create_script_run(
+        script="Welcome.\n\n[pause: 2s]\n\nBreathe.",
+        source_name="test.md",
+        resolved_config=resolved,
+        model_metadata=metadata,
+        run_id=RUN_ID,
+        created_at=CREATED_AT,
+    )
+
+    assert record.schema_version == 4
+    assert record.source_kind == "script_file"
+    assert store.load_script(RUN_ID).startswith("Welcome.")
+    assert store.load_resolved_config(RUN_ID) == resolved
+    assert store.load_model_metadata(RUN_ID) == metadata
+    assert store.load(RUN_ID) == record

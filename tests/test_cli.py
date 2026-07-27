@@ -7,6 +7,8 @@ from pathlib import Path
 import yaml
 from pytest import CaptureFixture, MonkeyPatch
 
+from whoopy.adapters.tts import SherpaOnnxKokoroAdapter
+from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.cli import main
 from whoopy.hardware import HardwareSnapshot
 
@@ -245,3 +247,61 @@ standard:
     second = json.loads(capsys.readouterr().out)
     assert second["installed"] == []
     assert second["reused"] == ["tiny_model"]
+
+
+def test_generate_script_file_writes_real_flow_artifacts_with_adapter_contract(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    snapshot = HardwareSnapshot(
+        operating_system="linux",
+        architecture="x86_64",
+        cpu_count=8,
+        total_ram_gb=8,
+        available_ram_gb=4,
+        free_disk_gb=20,
+        accelerators=["cpu"],
+    )
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: snapshot)
+    monkeypatch.setattr(
+        SherpaOnnxKokoroAdapter,
+        "from_artifact_store",
+        classmethod(lambda _cls, **_kwargs: FixtureSpeechSynthesizer()),
+    )
+    script_path = tmp_path / "meditation.md"
+    script_path.write_text(
+        "# Test\n\nWelcome to this moment.\n\n[pause: 1.5s]\n\nLet your shoulders soften.",
+        encoding="utf-8",
+    )
+    runs_dir = tmp_path / "runs"
+
+    assert (
+        main(
+            [
+                "generate",
+                "--script-file",
+                str(script_path),
+                "--runs-dir",
+                str(runs_dir),
+                "--models-dir",
+                str(tmp_path / "models"),
+                "--json",
+            ]
+        )
+        == 0
+    )
+
+    completed = json.loads(capsys.readouterr().out)
+    run_directory = runs_dir / completed["run_id"]
+    assert completed["schema_version"] == 4
+    assert completed["status"] == "completed"
+    assert completed["source_kind"] == "script_file"
+    assert (run_directory / "script.md").read_text(encoding="utf-8").startswith("# Test")
+    assert (run_directory / "resolved-config.json").is_file()
+    assert (run_directory / "model-metadata.json").is_file()
+    assert (run_directory / "timeline.json").is_file()
+    assert (run_directory / "narration.wav").is_file()
+    assert (run_directory / "audio-manifest.json").is_file()
+    quality = json.loads((run_directory / "quality.json").read_text(encoding="utf-8"))
+    assert quality["passed"] is True

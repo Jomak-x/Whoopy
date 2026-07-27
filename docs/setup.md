@@ -213,6 +213,27 @@ The initial lock covers macOS arm64/x86_64, Linux arm64/x86_64, and Windows
 x86_64. Windows arm64 is detected but safely refused because sherpa-onnx 1.13.4
 does not publish the required native CPython 3.11 wheels for that target.
 
+## Phase 3.5 PR 3: Render Real Speech Offline
+
+Basic mode needs Kokoro and its native speech runtime, but no language model:
+
+```bash
+uv run whoopy models install --profile basic
+uv run --offline whoopy generate \
+  --script-file examples/first-meditation.md
+```
+
+The first command is the only step that needs a network when no offline
+artifact directory is available. The second compiles prose and `[pause: 2s]`
+markers, speaks prose locally, and writes an inspectable schema-v4 run beneath
+`runs/`.
+
+The artifact manager materializes the verified sherpa-onnx wheels into isolated
+ignored storage. Contributors do not manually modify the project environment.
+See [`phase-3-5-real-script-speech.md`](./phase-3-5-real-script-speech.md) for
+the complete script syntax, processing rules, output map, cache identity, and
+resume behavior.
+
 ## Local Configuration
 
 Defaults work without local files. Use process environment variables for temporary or secret overrides:
