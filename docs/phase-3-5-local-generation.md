@@ -129,7 +129,9 @@ does not see a half-written JSON checkpoint.
 
 ## Duration Is An Estimate At This Stage
 
-The plan uses a documented 165-words-per-minute estimate plus exact pause time.
+The plan uses a documented 210-words-per-minute estimate plus exact pause time.
+That value is calibrated from Kokoro v1.0 at Whoopy's default 0.9 speed and is
+kept slightly below the measured roughly 214 words per minute.
 The completed script must be within 25 percent or 20 seconds of the requested
 duration, whichever tolerance is larger. This catches structurally short or
 long results before TTS.

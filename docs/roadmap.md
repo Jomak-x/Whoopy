@@ -8,8 +8,9 @@ Implementation status:
 - **Phase 1 — complete:** the local-core run and worker slice is merged.
 - **Phase 2 — complete:** deterministic fixture audio is merged.
 - **Phase 3 — in review:** segment caching, retry, recovery, and stronger integrity checks are implemented.
-- **Phase 3.5 — in progress:** verified offline artifacts, replaceable native
-  adapters, and the first real script-to-speech path are implemented.
+- **Phase 3.5 — human review pending:** install, replaceable adapters, authored
+  speech, validated generation, one-command audio, and automatic model
+  evaluation are implemented. Anonymous voice samples await listener ratings.
 - **Phases 4–6 — planned:** product UI and platform behavior are not implemented yet.
 
 ## Phase 0: Documentation And Repo Foundation
@@ -159,7 +160,8 @@ Implementation order:
 3. render a pasted script with real Kokoro speech — implemented
 4. generate and validate a meditation locally with Qwen3-4B — implemented
 5. join both paths behind one `whoopy generate` command — implemented
-6. run a documented model and voice bake-off before freezing defaults
+6. run a documented model and voice bake-off before freezing defaults —
+   automatic model comparison implemented; human voice review pending
 
 Each numbered item is a separate PR. The detailed changes, acceptance criteria,
 initial artifact pins, and research sources are in

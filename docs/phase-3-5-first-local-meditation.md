@@ -281,6 +281,11 @@ Out of scope: the Phase 4 web UI, ambience, public sharing, and background queue
 
 ### Phase 3.5 PR 6: Run The Default-Model Bake-Off
 
+Status: implemented on the `phase-3-5-model-bakeoff` stacked branch. Automatic
+model results are published in
+[`evaluations/phase-3-5-model-bakeoff-2026-07-26.md`](./evaluations/phase-3-5-model-bakeoff-2026-07-26.md).
+The final human voice choice remains explicitly pending.
+
 Goal: distinguish a working first model from the best supported default.
 
 Changes:

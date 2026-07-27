@@ -140,7 +140,7 @@ def test_plan_first_generation_produces_valid_script_and_timeline() -> None:
         )
         == 9_000
     )
-    assert result.estimated_duration_seconds == pytest.approx(59.1818, rel=0.001)
+    assert result.estimated_duration_seconds == pytest.approx(48.4286, rel=0.001)
 
 
 def test_invalid_json_is_repaired_with_a_bounded_retry() -> None:

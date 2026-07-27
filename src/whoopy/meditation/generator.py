@@ -83,7 +83,10 @@ def _allocate_plan(proposed: ProposedPlan, duration_seconds: int) -> MeditationP
         for section in proposed.sections
     ]
     allocated[-1] += speech_budget - sum(allocated)
-    words_per_minute = 165
+    # Measured Kokoro v1.0 output at Whoopy's default 0.9 speed is roughly
+    # 214 spoken words/minute. Use a slightly conservative planning rate so a
+    # requested duration does not systematically render 20% short.
+    words_per_minute = 210
     planned: list[PlannedSection] = []
     for section, speech_seconds, pause_ms in zip(proposed.sections, allocated, pauses, strict=True):
         target_words = speech_seconds * words_per_minute / 60

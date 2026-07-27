@@ -13,8 +13,11 @@ verified native artifacts and replaceable llama.cpp and sherpa/Kokoro adapters.
 Its one `whoopy generate` command now produces real human speech from either a
 local prompt or an authored script. Prompt mode preserves the validated plan,
 raw attempts, section checkpoints, script, timeline, both model identities,
-audio checkpoints, final WAV, manifest, and quality report. The remaining
-Phase 3.5 PR evaluates candidates before freezing default models and voices.
+audio checkpoints, final WAV, manifest, and quality report. The first recorded
+bake-off keeps Standard Qwen3-4B for prompt mode, rejects
+the current Lite model as a dependable fallback after a 0/6 strict result, and
+keeps Basic authored-script mode as the lower-resource path. Human voice review
+remains deliberately pending.
 
 The functional commands are:
 
@@ -28,6 +31,7 @@ whoopy models install --profile auto
 whoopy draft "A three-minute grounding meditation." --minutes 3
 whoopy generate "A three-minute grounding meditation." --minutes 3
 whoopy generate --script-file examples/first-meditation.md
+whoopy evaluate --output-dir evaluations/local/my-bakeoff
 whoopy run create "A short grounding meditation."
 whoopy run show <run-id>
 whoopy run resume <run-id>
@@ -195,9 +199,11 @@ Read in this order:
 12. [`docs/phase-3-5-real-script-speech.md`](./docs/phase-3-5-real-script-speech.md) — first real speech, script syntax, processing, and recovery
 13. [`docs/phase-3-5-local-generation.md`](./docs/phase-3-5-local-generation.md) — plan-first generation, validation, safety, and draft resume
 14. [`docs/phase-3-5-end-to-end.md`](./docs/phase-3-5-end-to-end.md) — one-command prompt/script audio flow and recovery
-15. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-16. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-17. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+15. [`docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md`](./docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md) — Lite/Standard measurements, failures, and decision
+16. [`docs/evaluations/voice-listening-rubric.md`](./docs/evaluations/voice-listening-rubric.md) — anonymous voice samples and human review
+17. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+18. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+19. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 
@@ -223,6 +229,7 @@ uv run whoopy models install --profile auto  # explicitly install verified artif
 uv run whoopy draft "A calm pause." --minutes 3
 uv run whoopy generate "A calm pause." --minutes 3
 uv run whoopy generate --script-file examples/first-meditation.md
+uv run whoopy evaluate --output-dir evaluations/local/my-bakeoff
 uv run whoopy run create "A calm pause."     # save a queued local run
 uv run --extra dev python scripts/check.py   # complete local/CI quality gate
 

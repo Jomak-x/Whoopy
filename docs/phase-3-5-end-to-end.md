@@ -132,6 +132,11 @@ Real-model tests are manual/local because CI must stay fast and cannot download
 multi-gigabyte artifacts. Normal CI replaces only the adapter implementations;
 it exercises the same schemas, pipeline, storage, cache, worker, and renderer.
 
+The final Phase 3.5 completion run used the calibrated 210-word-per-minute
+planning budget with the actual Standard and Kokoro adapters. It requested
+180 seconds, estimated 180.57 seconds, rendered 180.37 seconds, synthesized
+seven speech segments, and passed every audio check while fully offline.
+
 ## Still Intentionally Missing
 
 The permanent browser UI is Phase 4. This PR does not add ambience, music,

@@ -22,6 +22,7 @@ config/local.yaml
 runs/
 cache/
 models/
+evaluations/local/
 *.db
 *.db-shm
 *.db-wal
