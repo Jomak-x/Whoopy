@@ -16,6 +16,8 @@ Nested environment variables use two underscores. For example, `WHOOPY_TTS__VOIC
 ## Files
 
 - `default.yaml` contains safe, versioned application defaults.
+- `artifacts.yaml` locks exact model/runtime files, byte sizes, SHA-256
+  digests, licenses, platforms, and profile component sets.
 - `models.yaml` is the future adapter registry. A model choice is metadata and configuration, not pipeline logic.
 - `pacing_profiles.yaml` contains product pacing presets.
 - `runtime_profiles.yaml` maps live RAM and disk safety margins to Basic, Lite, Standard, High, and Studio capabilities.
@@ -26,6 +28,10 @@ Validate the resolved settings with:
 ```bash
 whoopy config show
 whoopy doctor
+whoopy models doctor
 ```
 
-The model and pacing registries are documented skeletons in Phase 0. `runtime_profiles.yaml` is active: `whoopy doctor` uses it without downloading or loading a model. Exact model artifacts and measured runtime benchmarks arrive with their adapters.
+`models.yaml` remains the adapter-registry skeleton. `artifacts.yaml` and
+`runtime_profiles.yaml` are active: the former answers “which immutable files?”
+and the latter answers “can this laptop safely use them?” Neither doctor
+command imports a runtime or loads a model.

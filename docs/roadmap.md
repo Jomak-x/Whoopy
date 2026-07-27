@@ -8,7 +8,8 @@ Implementation status:
 - **Phase 1 — complete:** the local-core run and worker slice is merged.
 - **Phase 2 — complete:** deterministic fixture audio is merged.
 - **Phase 3 — in review:** segment caching, retry, recovery, and stronger integrity checks are implemented.
-- **Phases 4–6 — planned:** models and product behavior are not implemented yet.
+- **Phase 3.5 — in progress:** its verified offline artifact manager is implemented; runtime adapters and real generation are next.
+- **Phases 4–6 — planned:** product UI and platform behavior are not implemented yet.
 
 ## Phase 0: Documentation And Repo Foundation
 
@@ -135,6 +136,44 @@ Evidence:
 - tests deliberately introduce timing and peak-headroom regressions and reject both
 - Phase 1 and Phase 2 run records remain readable
 
+## Phase 3.5: First Real Local Meditation
+
+Goal:
+
+- replace fixture tones with real local speech
+- turn a prompt into a validated meditation plan, script, and timeline
+- prove the complete flow offline before building the permanent UI
+
+Why this phase exists:
+
+- Phase 3 proves reliability with deterministic fixtures, not model quality
+- a UI should be built around the real workflow and artifacts
+- model downloads and native runtime compatibility must be solved before an
+  internet-constrained development period
+
+Implementation order:
+
+1. add a verified, resumable offline artifact manager — implemented
+2. add typed llama.cpp and sherpa-onnx adapters
+3. render a pasted script with real Kokoro speech
+4. generate and validate a meditation locally with Qwen3-4B
+5. join both paths behind one `whoopy generate` command
+6. run a documented model and voice bake-off before freezing defaults
+
+Each numbered item is a separate PR. The detailed changes, acceptance criteria,
+initial artifact pins, and research sources are in
+[`phase-3-5-first-local-meditation.md`](./phase-3-5-first-local-meditation.md).
+
+Done when:
+
+- one prompt creates a three- to five-minute spoken meditation locally
+- the installed stack runs without networking
+- Basic mode creates real speech from a pasted script without an LLM
+- generated plans, scripts, timelines, model metadata, and audio remain inspectable
+- real speech reuses Phase 3 caching, retry, resume, and quality checks
+- hardware checks choose a safe profile or refuse before an unsafe load
+- model and voice implementations remain replaceable behind typed ports
+
 ## Phase 4: Local Product Polish
 
 Goal:
@@ -202,6 +241,8 @@ Use this order instead:
 4. build the local pipeline
 5. verify audio determinism
 6. add recovery and tests
-7. only then think about the public platform
+7. prove real local script and speech generation
+8. build the permanent local UI around the proven workflow
+9. only then think about the public platform
 
 That sequence keeps the hardest unknowns visible early.

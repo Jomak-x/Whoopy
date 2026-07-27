@@ -151,6 +151,68 @@ The second command proves the current environment and local `uv` cache can run
 the full quality gate without a network request. Do not delete `.venv` or clear
 the `uv` cache before traveling.
 
+## Phase 3.5 PR 1: Prepare Verified Model Artifacts
+
+List immutable artifacts applicable to this operating system and architecture:
+
+```bash
+uv run whoopy models list
+```
+
+Resolve the highest supported artifact plan that fits current RAM and disk:
+
+```bash
+uv run whoopy models doctor
+uv run whoopy models doctor --profile standard --json
+```
+
+`models doctor` performs no download, import, or model load. It exits with:
+
+- `0` when the complete selected plan is installed;
+- `1` when the hardware fits but artifacts are missing; or
+- `2` when the requested profile or native platform is unsupported.
+
+Install the selected plan from its pinned HTTPS sources:
+
+```bash
+uv run whoopy models install --profile auto
+```
+
+For travel, already-downloaded files can be imported without any network
+fallback:
+
+```bash
+uv run whoopy models install \
+  --profile standard \
+  --offline-dir models/offline \
+  --no-network
+```
+
+The installer searches the offline directory by locked filename, copies each
+source into isolated managed storage, checks the exact byte count and SHA-256
+digest, safely extracts supported archives, and writes a small verification
+record. A second identical command reuses all five Standard artifacts.
+
+Use a full rehash when diagnosing possible disk corruption:
+
+```bash
+uv run whoopy models doctor --profile standard --verify
+```
+
+Managed state remains ignored by Git:
+
+```text
+models/managed/
+├── downloads/       verified archives, wheels, and GGUF files
+├── installed/       safely extracted native runtimes and TTS data
+├── records/         verification records bound to the artifact lock
+└── quarantine/      rejected or superseded managed files
+```
+
+The initial lock covers macOS arm64/x86_64, Linux arm64/x86_64, and Windows
+x86_64. Windows arm64 is detected but safely refused because sherpa-onnx 1.13.4
+does not publish the required native CPython 3.11 wheels for that target.
+
 ## Local Configuration
 
 Defaults work without local files. Use process environment variables for temporary or secret overrides:
@@ -175,7 +237,7 @@ Do not commit `.env` or `config/local.yaml`. `.env.example` documents variable n
 
 ## Native Runtime Strategy
 
-The future normal path is:
+The normal runtime plan is:
 
 - llama.cpp/GGUF for cross-platform local script generation;
 - sherpa-onnx/Kokoro for cross-platform local speech;
@@ -186,7 +248,10 @@ Users will not select Metal, CUDA, Vulkan, or CPU manually. Runtime inspection a
 
 ## Later Native Requirements
 
-The adapter and audio PRs will add verified downloads for the correct platform binaries. Developers working on those adapters may need native build tools, but normal users should not.
+The Phase 3.5 artifact manager now acquires verified model and runtime files.
+The following adapter PR connects those files to the worker. Developers working
+on additional adapters may need native build tools, but the normal pinned path
+uses published binaries.
 
 The intended release artifacts are:
 
@@ -205,7 +270,7 @@ Each artifact will bundle the application runtime and correct platform binaries.
 5. typed runtime ports and fixture adapters;
 6. universal llama.cpp and sherpa-onnx adapters;
 7. measured model profiles and artifact management;
-8. script generation and recovery;
+8. local TTS and script generation;
 9. local API, worker, database, and PWA;
 10. native installers;
 11. optional Commons platform.
@@ -234,4 +299,6 @@ The laptop does not currently satisfy Basic's RAM or disk margin. Free resources
 
 ### A model named in `models.yaml` cannot run
 
-Expected in Phase 0: entries remain `status: planned`. Hardware detection is active; model adapters and downloads are not.
+Expected until the adapter PR: entries remain `status: planned`. Artifact
+installation is active, but installing verified files does not yet connect
+those runtimes to the worker.

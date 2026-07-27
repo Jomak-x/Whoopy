@@ -14,8 +14,13 @@ The Phase 3 reliability PR is a fourth vertical slice: it combines the minimum
 parts of content-addressed caching, per-segment checkpoints, retry taxonomy,
 resume behavior, and output-integrity checks needed to prove that work survives
 partial failure.
+Phase 3.5 is the next integration milestone. It deliberately pulls the minimum
+real-runtime, Kokoro, script-generation, and end-to-end behavior forward before
+the UI. Its six ordered PRs are specified in
+[`phase-3-5-first-local-meditation.md`](./phase-3-5-first-local-meditation.md).
 The numbered PRs below still own the production-grade expansion of those
-contracts and should remain bounded review units.
+contracts—including ambience, mastering, broader model support, and operational
+features—and should remain bounded review units.
 
 The first major objective is not the web application. It is a dependable local CLI that converts a script into a canonical timeline and then into correctly timed audio. Real models, background ambience, the local web UI, and the public Commons platform are layered on only after that foundation works.
 

@@ -10,9 +10,18 @@ from typing import Any
 
 import yaml
 
+from whoopy.artifacts import (
+    ArtifactError,
+    ArtifactInstaller,
+    ArtifactSpec,
+    ArtifactState,
+    ArtifactStore,
+    TargetPlatform,
+    load_artifact_lock,
+)
 from whoopy.config import ConfigError, load_settings
 from whoopy.control import LocalControlPlane
-from whoopy.hardware import diagnose, inspect_hardware, load_runtime_profiles
+from whoopy.hardware import DoctorResult, diagnose, inspect_hardware, load_runtime_profiles
 from whoopy.pipeline import LocalWorker, RunRecord, RunStore, SegmentCache
 from whoopy.pipeline.runs import RunStoreError
 from whoopy.pipeline.worker import WorkerError
@@ -47,6 +56,60 @@ def _segment_cache(store: RunStore) -> SegmentCache:
     """Share cached speech across every run stored beneath this root."""
 
     return SegmentCache(store.root / ".cache" / "segments")
+
+
+def _add_model_location_arguments(parser: argparse.ArgumentParser) -> None:
+    """Give model commands explicit, machine-local storage inputs."""
+
+    parser.add_argument(
+        "--config-dir",
+        type=Path,
+        default=Path("config"),
+        help="Directory containing runtime_profiles.yaml.",
+    )
+    parser.add_argument(
+        "--artifact-lock",
+        type=Path,
+        help="Override CONFIG_DIR/artifacts.yaml.",
+    )
+    parser.add_argument(
+        "--models-dir",
+        type=Path,
+        default=Path("models/managed"),
+        help="Ignored directory for verified downloads and extracted runtimes.",
+    )
+
+
+def _model_plan(
+    args: argparse.Namespace,
+) -> tuple[DoctorResult, TargetPlatform, ArtifactStore, list[ArtifactSpec]]:
+    """Resolve a safe profile and its exact artifacts without loading a model."""
+
+    lock_path = args.artifact_lock or args.config_dir / "artifacts.yaml"
+    artifact_lock = load_artifact_lock(lock_path)
+    profiles = [
+        profile
+        for profile in load_runtime_profiles(args.config_dir / "runtime_profiles.yaml")
+        if profile.name in artifact_lock.profiles
+    ]
+    if args.profile != "auto" and args.profile not in artifact_lock.profiles:
+        raise ArtifactError(
+            f"Profile {args.profile!r} has no pinned artifact plan yet. "
+            f"Available plans: {', '.join(sorted(artifact_lock.profiles))}."
+        )
+    inspection_path = args.models_dir
+    while not inspection_path.exists() and inspection_path != inspection_path.parent:
+        inspection_path = inspection_path.parent
+    snapshot = inspect_hardware(inspection_path)
+    result = diagnose(snapshot, profiles, args.profile)
+    target = TargetPlatform(
+        operating_system=snapshot.operating_system,
+        architecture=snapshot.architecture,
+    )
+    if not result.supported or result.selected_profile is None:
+        return result, target, ArtifactStore(args.models_dir), []
+    artifacts = artifact_lock.resolve(result.selected_profile.name, target)
+    return result, target, ArtifactStore(args.models_dir), artifacts
 
 
 def _print_run(record: RunRecord, store: RunStore, *, as_json: bool) -> None:
@@ -123,6 +186,71 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("auto", "basic", "lite", "standard", "high", "studio"),
         help="Test a named profile instead of the configured automatic selection.",
     )
+
+    models_parser = subcommands.add_parser(
+        "models",
+        help="Inspect or install verified local model artifacts.",
+    )
+    model_commands = models_parser.add_subparsers(dest="models_command")
+    models_list_parser = model_commands.add_parser(
+        "list",
+        help="List locked artifacts for this operating system without loading them.",
+    )
+    models_list_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable artifact metadata and state.",
+    )
+    _add_model_location_arguments(models_list_parser)
+
+    models_doctor_parser = model_commands.add_parser(
+        "doctor",
+        help="Resolve a safe profile and report everything it needs.",
+    )
+    models_doctor_parser.add_argument(
+        "--profile",
+        choices=("auto", "basic", "lite", "standard", "high", "studio"),
+        default="auto",
+        help="Resolve a named profile or choose automatically.",
+    )
+    models_doctor_parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Rehash complete downloads, including multi-gigabyte model files.",
+    )
+    models_doctor_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable hardware, plan, and artifact state.",
+    )
+    _add_model_location_arguments(models_doctor_parser)
+
+    models_install_parser = model_commands.add_parser(
+        "install",
+        help="Install one safe profile from verified offline files or HTTPS.",
+    )
+    models_install_parser.add_argument(
+        "--profile",
+        choices=("auto", "basic", "lite", "standard", "high", "studio"),
+        default="auto",
+        help="Install a named profile or choose automatically.",
+    )
+    models_install_parser.add_argument(
+        "--offline-dir",
+        type=Path,
+        help="Search this directory recursively for already downloaded files.",
+    )
+    models_install_parser.add_argument(
+        "--no-network",
+        action="store_true",
+        help="Fail instead of downloading an artifact missing from offline storage.",
+    )
+    models_install_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print only the machine-readable install report.",
+    )
+    _add_model_location_arguments(models_install_parser)
 
     run_parser = subcommands.add_parser("run", help="Create or inspect durable local runs.")
     run_commands = run_parser.add_subparsers(dest="run_command")
@@ -249,6 +377,114 @@ def main(argv: Sequence[str] | None = None) -> int:
             for message in result.messages:
                 print(f"  - {message}")
         return 0 if result.supported else 2
+
+    if args.command == "models" and args.models_command == "list":
+        try:
+            lock_path = args.artifact_lock or args.config_dir / "artifacts.yaml"
+            artifact_lock = load_artifact_lock(lock_path)
+            target = TargetPlatform.current()
+            artifact_store = ArtifactStore(args.models_dir)
+            artifacts = [
+                artifact for artifact in artifact_lock.artifacts if artifact.supports(target)
+            ]
+            statuses = [artifact_store.inspect(artifact) for artifact in artifacts]
+        except ArtifactError as error:
+            parser.error(str(error))
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "target": target.model_dump(mode="json"),
+                        "artifacts": [status.model_dump(mode="json") for status in statuses],
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            print(f"Whoopy locked artifacts for {target.operating_system} {target.architecture}")
+            for status in statuses:
+                print(
+                    f"  [{status.state.value:9}] {status.artifact_id} "
+                    f"({status.license_id}, {status.size_bytes} bytes)"
+                )
+        return 0
+
+    if args.command == "models" and args.models_command == "doctor":
+        try:
+            result, target, artifact_store, artifacts = _model_plan(args)
+            statuses = [
+                artifact_store.inspect(artifact, verify_digest=args.verify)
+                for artifact in artifacts
+            ]
+        except (ArtifactError, ConfigError) as error:
+            parser.error(str(error))
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "hardware": result.model_dump(mode="json"),
+                        "target": target.model_dump(mode="json"),
+                        "artifacts": [status.model_dump(mode="json") for status in statuses],
+                        "ready": bool(statuses)
+                        and all(status.state is ArtifactState.INSTALLED for status in statuses),
+                        "loaded_models": False,
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            print("Whoopy model compatibility check")
+            print(f"  Target: {target.operating_system} {target.architecture}")
+            print(f"  Hardware: {'supported' if result.supported else 'not supported'}")
+            if result.selected_profile is not None:
+                print(f"  Profile: {result.selected_profile.name}")
+            for message in result.messages:
+                print(f"  - {message}")
+            for status in statuses:
+                print(f"  [{status.state.value:9}] {status.display_name}")
+            print("  No model was loaded.")
+        if not result.supported:
+            return 2
+        return (
+            0
+            if statuses and all(status.state is ArtifactState.INSTALLED for status in statuses)
+            else 1
+        )
+
+    if args.command == "models" and args.models_command == "install":
+        try:
+            result, target, artifact_store, artifacts = _model_plan(args)
+            if not result.supported or result.selected_profile is None:
+                for message in result.messages:
+                    print(message)
+                return 2
+            callback = None if args.json else lambda message: print(f"  {message}")
+            if not args.json:
+                print(
+                    f"Installing Whoopy {result.selected_profile.name} artifacts for "
+                    f"{target.operating_system} {target.architecture}"
+                )
+            report = ArtifactInstaller(
+                artifact_store,
+                status_callback=callback,
+            ).install_profile(
+                result.selected_profile.name,
+                artifacts,
+                target,
+                offline_directory=args.offline_dir,
+                allow_network=not args.no_network,
+            )
+        except (ArtifactError, ConfigError) as error:
+            parser.error(str(error))
+        if args.json:
+            print(report.model_dump_json(indent=2))
+        else:
+            print(
+                f"Ready: {len(report.artifacts)} artifacts "
+                f"({len(report.installed)} installed, {len(report.reused)} reused)"
+            )
+            print("No model was loaded.")
+        return 0
 
     if args.command == "run" and args.run_command == "create":
         try:

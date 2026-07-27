@@ -1,0 +1,282 @@
+# Immutable Phase 3.5 artifact lock.
+#
+# URLs are never selected dynamically at install time. Updating a runtime or
+# model requires a reviewed change to its version, byte size, SHA-256 digest,
+# license, and platform mapping in this file.
+schema_version: 1
+
+artifacts:
+  - artifact_id: qwen3_1_7b_q8
+    component: llm_model_lite
+    display_name: Qwen3 1.7B Q8_0
+    version: 90862c4b9d2787eaed51d12237eafdfe7c5f6077
+    kind: model
+    license_id: Apache-2.0
+    source_url: https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/90862c4b9d2787eaed51d12237eafdfe7c5f6077/Qwen3-1.7B-Q8_0.gguf?download=true
+    filename: Qwen3-1.7B-Q8_0.gguf
+    size_bytes: 1834426016
+    sha256: 061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a
+    operating_systems: [all]
+    architectures: [all]
+
+  - artifact_id: qwen3_4b_q4_k_m
+    component: llm_model_standard
+    display_name: Qwen3 4B Q4_K_M
+    version: bc640142c66e1fdd12af0bd68f40445458f3869b
+    kind: model
+    license_id: Apache-2.0
+    source_url: https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf?download=true
+    filename: Qwen3-4B-Q4_K_M.gguf
+    size_bytes: 2497280256
+    sha256: 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5
+    operating_systems: [all]
+    architectures: [all]
+
+  - artifact_id: kokoro_multilang_v1_0
+    component: tts_model
+    display_name: Kokoro multilingual v1.0
+    version: v1_0
+    kind: tts_model
+    license_id: Apache-2.0
+    source_url: https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2
+    filename: kokoro-multi-lang-v1_0.tar.bz2
+    size_bytes: 349418188
+    sha256: c133d26353d776da730870dac7da07dbfc9a5e3bc80cc5e8e83ab6e823be7046
+    operating_systems: [all]
+    architectures: [all]
+    archive: tar.bz2
+
+  - artifact_id: llama_cpp_b10142_darwin_arm64
+    component: llm_runtime
+    display_name: llama.cpp b10142 for macOS arm64
+    version: b10142
+    kind: runtime
+    license_id: MIT
+    source_url: https://github.com/ggml-org/llama.cpp/releases/download/b10142/llama-b10142-bin-macos-arm64.tar.gz
+    filename: llama-b10142-bin-macos-arm64.tar.gz
+    size_bytes: 10877713
+    sha256: 496696a75da480b80c4cc26c112e00f55e99567c386bd6cf51a8d914ae68373f
+    operating_systems: [darwin]
+    architectures: [arm64]
+    archive: tar.gz
+
+  - artifact_id: llama_cpp_b10142_darwin_x86_64
+    component: llm_runtime
+    display_name: llama.cpp b10142 for macOS x86_64
+    version: b10142
+    kind: runtime
+    license_id: MIT
+    source_url: https://github.com/ggml-org/llama.cpp/releases/download/b10142/llama-b10142-bin-macos-x64.tar.gz
+    filename: llama-b10142-bin-macos-x64.tar.gz
+    size_bytes: 11152893
+    sha256: 449466145589d80f4062e7a26f223eb96e1f145188b57e980d94e50ba6700418
+    operating_systems: [darwin]
+    architectures: [x86_64]
+    archive: tar.gz
+
+  - artifact_id: llama_cpp_b10142_linux_arm64
+    component: llm_runtime
+    display_name: llama.cpp b10142 for Linux arm64
+    version: b10142
+    kind: runtime
+    license_id: MIT
+    source_url: https://github.com/ggml-org/llama.cpp/releases/download/b10142/llama-b10142-bin-ubuntu-arm64.tar.gz
+    filename: llama-b10142-bin-ubuntu-arm64.tar.gz
+    size_bytes: 13282573
+    sha256: d7ea75ef2efeb4a00a793a23f788e240a3444a78d21c733718a2dd8c6dac26e3
+    operating_systems: [linux]
+    architectures: [arm64]
+    archive: tar.gz
+
+  - artifact_id: llama_cpp_b10142_linux_x86_64
+    component: llm_runtime
+    display_name: llama.cpp b10142 for Linux x86_64
+    version: b10142
+    kind: runtime
+    license_id: MIT
+    source_url: https://github.com/ggml-org/llama.cpp/releases/download/b10142/llama-b10142-bin-ubuntu-x64.tar.gz
+    filename: llama-b10142-bin-ubuntu-x64.tar.gz
+    size_bytes: 16383407
+    sha256: 4ddb95c5c16fab30d92ed58687d2ae610c59b239c922ae8ecf1f58a83ad53599
+    operating_systems: [linux]
+    architectures: [x86_64]
+    archive: tar.gz
+
+  - artifact_id: llama_cpp_b10142_windows_arm64
+    component: llm_runtime
+    display_name: llama.cpp b10142 for Windows arm64
+    version: b10142
+    kind: runtime
+    license_id: MIT
+    source_url: https://github.com/ggml-org/llama.cpp/releases/download/b10142/llama-b10142-bin-win-cpu-arm64.zip
+    filename: llama-b10142-bin-win-cpu-arm64.zip
+    size_bytes: 12139483
+    sha256: 98f8abea82ade00aa16adb3cd1442b2feb6a969051497682efb2208356c975b4
+    operating_systems: [windows]
+    architectures: [arm64]
+    archive: zip
+
+  - artifact_id: llama_cpp_b10142_windows_x86_64
+    component: llm_runtime
+    display_name: llama.cpp b10142 for Windows x86_64
+    version: b10142
+    kind: runtime
+    license_id: MIT
+    source_url: https://github.com/ggml-org/llama.cpp/releases/download/b10142/llama-b10142-bin-win-cpu-x64.zip
+    filename: llama-b10142-bin-win-cpu-x64.zip
+    size_bytes: 18292093
+    sha256: 6fa98eff21e990ab40672f162e419ee744143d727d9b05bfb3f2b2c01c8557f8
+    operating_systems: [windows]
+    architectures: [x86_64]
+    archive: zip
+
+  - artifact_id: sherpa_onnx_1_13_4_darwin_arm64
+    component: sherpa_onnx_python
+    display_name: sherpa-onnx 1.13.4 for CPython 3.11 macOS arm64
+    version: 1.13.4
+    kind: python_wheel
+    license_id: Apache-2.0
+    source_url: https://files.pythonhosted.org/packages/e8/93/4385fcdb1f197521fe13fa887893cc200d27569d3cbcccf0d7b92d6a9e62/sherpa_onnx-1.13.4-cp311-cp311-macosx_11_0_arm64.whl
+    filename: sherpa_onnx-1.13.4-cp311-cp311-macosx_11_0_arm64.whl
+    size_bytes: 2100029
+    sha256: c2d4337b80b54dd68f566cab941a2ad47ab6cfabb68e88002ee0c920493c16d3
+    operating_systems: [darwin]
+    architectures: [arm64]
+
+  - artifact_id: sherpa_onnx_1_13_4_darwin_x86_64
+    component: sherpa_onnx_python
+    display_name: sherpa-onnx 1.13.4 for CPython 3.11 macOS x86_64
+    version: 1.13.4
+    kind: python_wheel
+    license_id: Apache-2.0
+    source_url: https://files.pythonhosted.org/packages/41/c8/a2ff828ce9a2702b607c25f6303b21d7d41b6ad1520f660b95a0113f4051/sherpa_onnx-1.13.4-cp311-cp311-macosx_10_15_x86_64.whl
+    filename: sherpa_onnx-1.13.4-cp311-cp311-macosx_10_15_x86_64.whl
+    size_bytes: 2288314
+    sha256: c3e9f96a07570faefca8e3aabcfb78690e680d188d5d44d06fd8711185fe37d6
+    operating_systems: [darwin]
+    architectures: [x86_64]
+
+  - artifact_id: sherpa_onnx_1_13_4_linux_arm64
+    component: sherpa_onnx_python
+    display_name: sherpa-onnx 1.13.4 for CPython 3.11 Linux arm64
+    version: 1.13.4
+    kind: python_wheel
+    license_id: Apache-2.0
+    source_url: https://files.pythonhosted.org/packages/ea/cb/c80832f800719c72fc5805a94fe489e805fc67156e102927609917ad8f67/sherpa_onnx-1.13.4-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+    filename: sherpa_onnx-1.13.4-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+    size_bytes: 4132838
+    sha256: 7c4a1c178eb801af92f70120128c1f956b5388b9d684f0af2a08614e05dc3047
+    operating_systems: [linux]
+    architectures: [arm64]
+
+  - artifact_id: sherpa_onnx_1_13_4_linux_x86_64
+    component: sherpa_onnx_python
+    display_name: sherpa-onnx 1.13.4 for CPython 3.11 Linux x86_64
+    version: 1.13.4
+    kind: python_wheel
+    license_id: Apache-2.0
+    source_url: https://files.pythonhosted.org/packages/e0/ac/88b4e1ce614ddebe2484e95cad4b19d7db24f3b489d04f9877667cb48ccb/sherpa_onnx-1.13.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+    filename: sherpa_onnx-1.13.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+    size_bytes: 4356406
+    sha256: fbfc385b98d730080e1b12dc94c604be3867e4fb7bd6b15b830eb33cbf390111
+    operating_systems: [linux]
+    architectures: [x86_64]
+
+  - artifact_id: sherpa_onnx_1_13_4_windows_x86_64
+    component: sherpa_onnx_python
+    display_name: sherpa-onnx 1.13.4 for CPython 3.11 Windows x86_64
+    version: 1.13.4
+    kind: python_wheel
+    license_id: Apache-2.0
+    source_url: https://files.pythonhosted.org/packages/7e/b1/ae1c113ac9c67dcabbed559f50950c7220a62e49e6b5acb4c2219ab22409/sherpa_onnx-1.13.4-cp311-cp311-win_amd64.whl
+    filename: sherpa_onnx-1.13.4-cp311-cp311-win_amd64.whl
+    size_bytes: 2239901
+    sha256: 04a82d79c13a4ce2bd9ccf51de93e83cbfc7bc50520c53e5e967565100d0724d
+    operating_systems: [windows]
+    architectures: [x86_64]
+
+  - artifact_id: sherpa_onnx_core_1_13_4_darwin_arm64
+    component: sherpa_onnx_core
+    display_name: sherpa-onnx core 1.13.4 for macOS arm64
+    version: 1.13.4
+    kind: python_wheel
+    license_id: Apache-2.0
+    source_url: https://files.pythonhosted.org/packages/a2/26/d0d6bebea4ef8b7de6eed1a335235d1acce9197425c08eecb57ef107904d/sherpa_onnx_core-1.13.4-py3-none-macosx_11_0_arm64.whl
+    filename: sherpa_onnx_core-1.13.4-py3-none-macosx_11_0_arm64.whl
+    size_bytes: 16897650
+    sha256: 7820183581b711a68e30281a4fb36c0af8ef5615bfc789234fb259439824a014
+    operating_systems: [darwin]
+    architectures: [arm64]
+
+  - artifact_id: sherpa_onnx_core_1_13_4_darwin_x86_64
+    component: sherpa_onnx_core
+    display_name: sherpa-onnx core 1.13.4 for macOS x86_64
+    version: 1.13.4
+    kind: python_wheel
+    license_id: Apache-2.0
+    source_url: https://files.pythonhosted.org/packages/2a/8c/a1336beab226d228f62bdbe1cacf1439a2f6cf8714baac98f1f031dd2f60/sherpa_onnx_core-1.13.4-py3-none-macosx_10_15_x86_64.whl
+    filename: sherpa_onnx_core-1.13.4-py3-none-macosx_10_15_x86_64.whl
+    size_bytes: 19325474
+    sha256: 674ea57eb6458002dab4e39749d21a7364b2f962f4a4958a3ee4c351b093cafd
+    operating_systems: [darwin]
+    architectures: [x86_64]
+
+  - artifact_id: sherpa_onnx_core_1_13_4_linux_arm64
+    component: sherpa_onnx_core
+    display_name: sherpa-onnx core 1.13.4 for Linux arm64
+    version: 1.13.4
+    kind: python_wheel
+    license_id: Apache-2.0
+    source_url: https://files.pythonhosted.org/packages/81/29/15859e896574230d5377738ef27e8647cbd19fa325d75b1a00074791798d/sherpa_onnx_core-1.13.4-py3-none-manylinux2014_aarch64.whl
+    filename: sherpa_onnx_core-1.13.4-py3-none-manylinux2014_aarch64.whl
+    size_bytes: 13023017
+    sha256: b4e4d17eb0d5c569bf4c9effcbc3daef57cf7e2b8418e07ae90f90c9b60b35d5
+    operating_systems: [linux]
+    architectures: [arm64]
+
+  - artifact_id: sherpa_onnx_core_1_13_4_linux_x86_64
+    component: sherpa_onnx_core
+    display_name: sherpa-onnx core 1.13.4 for Linux x86_64
+    version: 1.13.4
+    kind: python_wheel
+    license_id: Apache-2.0
+    source_url: https://files.pythonhosted.org/packages/41/be/38c57721d71ee74d984b1ca21720a8ca8477d6d341026af24ff658866ef9/sherpa_onnx_core-1.13.4-py3-none-manylinux2014_x86_64.whl
+    filename: sherpa_onnx_core-1.13.4-py3-none-manylinux2014_x86_64.whl
+    size_bytes: 10338839
+    sha256: 367aa06cee90b3fd7959d4e071d6fc821710b859af399b4987e5c3119ee6ae2a
+    operating_systems: [linux]
+    architectures: [x86_64]
+
+  - artifact_id: sherpa_onnx_core_1_13_4_windows_x86_64
+    component: sherpa_onnx_core
+    display_name: sherpa-onnx core 1.13.4 for Windows x86_64
+    version: 1.13.4
+    kind: python_wheel
+    license_id: Apache-2.0
+    source_url: https://files.pythonhosted.org/packages/95/b0/c3d59ac76f3db873e41bd0cb4fc30b352a278da3289217985aaae3650211/sherpa_onnx_core-1.13.4-py3-none-win_amd64.whl
+    filename: sherpa_onnx_core-1.13.4-py3-none-win_amd64.whl
+    size_bytes: 16450053
+    sha256: 0a6949cf0fd83adb9fbcfdf5c27b8907a57f7b48626db703c7f6037be9b61764
+    operating_systems: [windows]
+    architectures: [x86_64]
+
+profiles:
+  basic:
+    components:
+      - tts_model
+      - sherpa_onnx_python
+      - sherpa_onnx_core
+  lite:
+    components:
+      - llm_runtime
+      - llm_model_lite
+      - tts_model
+      - sherpa_onnx_python
+      - sherpa_onnx_core
+  standard:
+    components:
+      - llm_runtime
+      - llm_model_standard
+      - tts_model
+      - sherpa_onnx_python
+      - sherpa_onnx_core

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
+import yaml
 from pytest import CaptureFixture, MonkeyPatch
 
 from whoopy.cli import main
@@ -113,3 +115,133 @@ def test_run_and_worker_commands_write_the_phase_three_artifacts(
     assert cache_stats["entries"] == 2
     assert cache_stats["valid_entries"] == 2
     assert cache_stats["corrupt_entries"] == 0
+
+
+def test_models_doctor_resolves_a_plan_without_loading_models(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    snapshot = HardwareSnapshot(
+        operating_system="linux",
+        architecture="x86_64",
+        cpu_count=8,
+        total_ram_gb=16,
+        available_ram_gb=9,
+        free_disk_gb=20,
+        accelerators=["cpu"],
+    )
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: snapshot)
+
+    assert (
+        main(
+            [
+                "models",
+                "doctor",
+                "--profile",
+                "standard",
+                "--models-dir",
+                str(tmp_path),
+                "--json",
+            ]
+        )
+        == 1
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["hardware"]["selected_profile"]["name"] == "standard"
+    assert len(output["artifacts"]) == 5
+    assert {artifact["state"] for artifact in output["artifacts"]} == {"missing"}
+    assert output["ready"] is False
+    assert output["loaded_models"] is False
+
+
+def test_models_install_can_prepare_a_profile_without_network(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    payload = b"tiny offline artifact"
+    digest = hashlib.sha256(payload).hexdigest()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "runtime_profiles.yaml").write_text(
+        """
+standard:
+  rank: 2
+  min_total_ram_gb: 16
+  min_available_ram_gb: 8
+  min_free_disk_gb: 12
+  approximate_download_gb: 0.001
+  llm_runtime: fixture
+  llm_model_class: fixture
+  tts_runtime: fixture
+  modes: [local_llm]
+""".lstrip(),
+        encoding="utf-8",
+    )
+    lock_path = config_dir / "artifacts.yaml"
+    lock_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "artifacts": [
+                    {
+                        "artifact_id": "tiny_model",
+                        "component": "llm_model",
+                        "display_name": "Tiny model",
+                        "version": "test-v1",
+                        "kind": "model",
+                        "license_id": "Apache-2.0",
+                        "source_url": "https://example.invalid/tiny.bin",
+                        "filename": "tiny.bin",
+                        "size_bytes": len(payload),
+                        "sha256": digest,
+                        "operating_systems": ["linux"],
+                        "architectures": ["x86_64"],
+                    }
+                ],
+                "profiles": {"standard": {"components": ["llm_model"]}},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    offline_dir = tmp_path / "offline"
+    offline_dir.mkdir()
+    (offline_dir / "tiny.bin").write_bytes(payload)
+    models_dir = tmp_path / "managed"
+    snapshot = HardwareSnapshot(
+        operating_system="linux",
+        architecture="x86_64",
+        cpu_count=8,
+        total_ram_gb=16,
+        available_ram_gb=9,
+        free_disk_gb=20,
+        accelerators=["cpu"],
+    )
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: snapshot)
+
+    arguments = [
+        "models",
+        "install",
+        "--profile",
+        "standard",
+        "--config-dir",
+        str(config_dir),
+        "--models-dir",
+        str(models_dir),
+        "--offline-dir",
+        str(offline_dir),
+        "--no-network",
+        "--json",
+    ]
+    assert main(arguments) == 0
+    first = json.loads(capsys.readouterr().out)
+    assert first["installed"] == ["tiny_model"]
+    assert first["reused"] == []
+
+    assert main(arguments) == 0
+    second = json.loads(capsys.readouterr().out)
+    assert second["installed"] == []
+    assert second["reused"] == ["tiny_model"]
