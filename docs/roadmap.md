@@ -7,11 +7,13 @@ Implementation status:
 - **Phase 0 — complete:** the portable foundation is merged.
 - **Phase 1 — complete:** the local-core run and worker slice is merged.
 - **Phase 2 — complete:** deterministic fixture audio is merged.
-- **Phase 3 — in review:** segment caching, retry, recovery, and stronger integrity checks are implemented.
-- **Phase 3.5 — human review pending:** install, replaceable adapters, authored
+- **Phase 3 — complete:** segment caching, retry, recovery, and stronger integrity checks are merged.
+- **Phase 3.5 — implementation complete; human voice review pending:** install, replaceable adapters, authored
   speech, validated generation, one-command audio, and automatic model
-  evaluation are implemented. Anonymous voice samples await listener ratings.
-- **Phases 4–6 — planned:** product UI and platform behavior are not implemented yet.
+  evaluation are merged. Anonymous voice samples await listener ratings.
+- **Phase 4 — started:** a small private local tester exercises the real flow;
+  the permanent editor and product-polish work remain planned.
+- **Phases 5–6 — planned:** extended local capabilities and public-platform behavior are not implemented yet.
 
 ## Phase 0: Documentation And Repo Foundation
 
@@ -161,7 +163,7 @@ Implementation order:
 4. generate and validate a meditation locally with Qwen3-4B — implemented
 5. join both paths behind one `whoopy generate` command — implemented
 6. run a documented model and voice bake-off before freezing defaults —
-   automatic model comparison implemented; human voice review pending
+   automatic model comparison implemented and merged; human voice review pending
 
 Each numbered item is a separate PR. The detailed changes, acceptance criteria,
 initial artifact pins, and research sources are in
@@ -178,6 +180,16 @@ Done when:
 - model and voice implementations remain replaceable behind typed ports
 
 ## Phase 4: Local Product Polish
+
+Current first slice:
+
+- `whoopy web --open` starts a dependency-free tester on `127.0.0.1`
+- the page uses the real CLI pipeline for prompt and authored-script modes
+- readiness, task state, recent durable runs, audio, and important artifacts
+  are visible in one place
+- the server does not expose itself to the local network or a cloud service
+
+This tester is intentionally not the full Phase 4 editor.
 
 Goal:
 
