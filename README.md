@@ -23,6 +23,7 @@ The functional commands are:
 
 ```bash
 whoopy --help
+whoopy web --open
 whoopy config show
 whoopy doctor
 whoopy models list
@@ -87,6 +88,20 @@ Every file is pinned by version, size, SHA-256 digest, license, operating
 system, and architecture in [`config/artifacts.yaml`](./config/artifacts.yaml).
 
 ### Try The Current Flow
+
+The easiest way to try both real flows is the private local tester:
+
+```bash
+uv run --offline whoopy web --open
+```
+
+It starts at `http://127.0.0.1:8765`, calls the same real CLI pipeline, shows
+laptop/model readiness, accepts either a prompt or authored script, lists saved
+runs, plays completed WAV files, and exposes their plan, script, timeline, and
+quality report. It has no cloud backend and is intentionally a small bridge to
+the full Phase 4 product. Read
+[`docs/phase-3-5-overall-guide.md`](./docs/phase-3-5-overall-guide.md) for the
+from-zero explanation of every Phase 3.5 PR and the tester.
 
 Render the included script with real local speech after installing the Basic
 artifacts:
@@ -169,7 +184,8 @@ src/whoopy/            Python domain package and future local control plane
   timeline/            canonical models and text/Markdown script compiler
   pipeline/            run storage, segment cache/checkpoints, retry, and recovery
   qc/                  audio and content quality gates
-  api/                 future local FastAPI control plane
+  api/                 future expanded local control plane
+  webui/               dependency-free local tester and HTTP boundary
 assets/                 redistributable, provenance-tracked source assets
 db/                     future SQLAlchemy models and migrations
 web/                    future local SvelteKit PWA
@@ -194,16 +210,17 @@ Read in this order:
 7. [`docs/phase-1-local-core.md`](./docs/phase-1-local-core.md) — the first executable flow
 8. [`docs/phase-2-deterministic-audio.md`](./docs/phase-2-deterministic-audio.md) — exact audio assembly
 9. [`docs/phase-3-quality-caching-recovery.md`](./docs/phase-3-quality-caching-recovery.md) — cache, retry, and resume
-10. [`docs/phase-3-5-first-local-meditation.md`](./docs/phase-3-5-first-local-meditation.md) — real local models and the first offline meditation
-11. [`docs/phase-3-5-runtime-adapters.md`](./docs/phase-3-5-runtime-adapters.md) — ports, metadata, error taxonomy, and native adapters
-12. [`docs/phase-3-5-real-script-speech.md`](./docs/phase-3-5-real-script-speech.md) — first real speech, script syntax, processing, and recovery
-13. [`docs/phase-3-5-local-generation.md`](./docs/phase-3-5-local-generation.md) — plan-first generation, validation, safety, and draft resume
-14. [`docs/phase-3-5-end-to-end.md`](./docs/phase-3-5-end-to-end.md) — one-command prompt/script audio flow and recovery
-15. [`docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md`](./docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md) — Lite/Standard measurements, failures, and decision
-16. [`docs/evaluations/voice-listening-rubric.md`](./docs/evaluations/voice-listening-rubric.md) — anonymous voice samples and human review
-17. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-18. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-19. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+10. [`docs/phase-3-5-overall-guide.md`](./docs/phase-3-5-overall-guide.md) — start here for the from-zero explanation and local tester
+11. [`docs/phase-3-5-first-local-meditation.md`](./docs/phase-3-5-first-local-meditation.md) — real local models and the first offline meditation
+12. [`docs/phase-3-5-runtime-adapters.md`](./docs/phase-3-5-runtime-adapters.md) — ports, metadata, error taxonomy, and native adapters
+13. [`docs/phase-3-5-real-script-speech.md`](./docs/phase-3-5-real-script-speech.md) — first real speech, script syntax, processing, and recovery
+14. [`docs/phase-3-5-local-generation.md`](./docs/phase-3-5-local-generation.md) — plan-first generation, validation, safety, and draft resume
+15. [`docs/phase-3-5-end-to-end.md`](./docs/phase-3-5-end-to-end.md) — one-command prompt/script audio flow and recovery
+16. [`docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md`](./docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md) — Lite/Standard measurements, failures, and decision
+17. [`docs/evaluations/voice-listening-rubric.md`](./docs/evaluations/voice-listening-rubric.md) — anonymous voice samples and human review
+18. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+19. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+20. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 
@@ -226,6 +243,7 @@ uv sync --extra dev --locked                 # exact cross-platform setup
 uv run whoopy doctor                         # select a safe native profile
 uv run whoopy models doctor                  # inspect its immutable artifact plan
 uv run whoopy models install --profile auto  # explicitly install verified artifacts
+uv run --offline whoopy web --open           # private browser tester
 uv run whoopy draft "A calm pause." --minutes 3
 uv run whoopy generate "A calm pause." --minutes 3
 uv run whoopy generate --script-file examples/first-meditation.md

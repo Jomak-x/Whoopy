@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#173d35">
+    <meta
+      name="description"
+      content="A private local studio for generating and inspecting Whoopy meditations."
+    >
+    <title>Whoopy Local Studio</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Whoopy Local Studio home">
+        <span class="brand-mark" aria-hidden="true">W</span>
+        <span>
+          <strong>Whoopy</strong>
+          <small>local studio</small>
+        </span>
+      </a>
+      <div class="privacy-pill">
+        <span class="privacy-dot" aria-hidden="true"></span>
+        Private to this laptop
+      </div>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">Your quiet corner</p>
+        <h1 id="page-title">Turn a thought into<br>a guided pause.</h1>
+        <p class="intro-copy">
+          Write what you need. Whoopy plans, speaks, times, checks, and saves
+          the meditation on this computer.
+        </p>
+      </section>
+
+      <section class="workspace" aria-label="Meditation generator">
+        <div class="composer card">
+          <div class="mode-switch" role="radiogroup" aria-label="Input type">
+            <button class="mode-button active" type="button" role="radio" aria-checked="true"
+              data-mode="prompt">Describe it</button>
+            <button class="mode-button" type="button" role="radio" aria-checked="false"
+              data-mode="script">Use my script</button>
+          </div>
+
+          <label class="input-label" for="meditation-input" id="input-label">
+            What kind of moment do you need?
+          </label>
+          <textarea
+            id="meditation-input"
+            maxlength="20000"
+            placeholder="A gentle three-minute grounding meditation after a busy day…"
+          ></textarea>
+          <p class="input-help" id="input-help">
+            Whoopy’s local Standard model will create and validate the plan and words.
+          </p>
+
+          <div class="settings-grid">
+            <label class="setting duration-setting">
+              <span>Length</span>
+              <span class="setting-value" id="minutes-value">3 min</span>
+              <input id="minutes" type="range" min="1" max="10" value="3" step="1">
+            </label>
+            <label class="setting">
+              <span>Voice</span>
+              <select id="voice">
+                <option value="af_heart">Heart · warm</option>
+                <option value="af_bella">Bella · clear</option>
+                <option value="af_nicole">Nicole · calm</option>
+                <option value="am_michael">Michael · grounded</option>
+              </select>
+            </label>
+            <label class="setting">
+              <span>Pace</span>
+              <select id="speed">
+                <option value="0.8">Slower</option>
+                <option value="0.9" selected>Gentle</option>
+                <option value="1.0">Natural</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="action-row">
+            <button class="primary-button" type="button" id="generate-button">
+              <span>Create meditation</span>
+              <span aria-hidden="true">→</span>
+            </button>
+            <p class="model-note" id="model-note">Standard local model · no upload</p>
+          </div>
+
+          <div class="task-panel hidden" id="task-panel" aria-live="polite">
+            <div class="task-heading">
+              <div>
+                <p class="task-kicker">Working locally</p>
+                <h2 id="task-title">Creating your meditation</h2>
+              </div>
+              <button class="text-button" type="button" id="cancel-button">Cancel</button>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <span id="progress-bar"></span>
+            </div>
+            <p id="task-message">Starting the local models…</p>
+          </div>
+
+          <div class="error-panel hidden" id="error-panel" role="alert">
+            <strong>Whoopy could not finish this one.</strong>
+            <p id="error-message"></p>
+          </div>
+        </div>
+
+        <aside class="readiness card" aria-labelledby="readiness-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Before you begin</p>
+              <h2 id="readiness-title">Laptop readiness</h2>
+            </div>
+            <button class="icon-button" id="refresh-status" type="button"
+              aria-label="Refresh laptop status">↻</button>
+          </div>
+          <div id="status-content" class="status-content">
+            <div class="status-skeleton"></div>
+            <div class="status-skeleton short"></div>
+          </div>
+          <div class="flow-note">
+            <span class="flow-number">01</span>
+            <p><strong>Plan</strong><br>Structure and safety are validated.</p>
+          </div>
+          <div class="flow-note">
+            <span class="flow-number">02</span>
+            <p><strong>Speak</strong><br>Kokoro creates each speech segment.</p>
+          </div>
+          <div class="flow-note">
+            <span class="flow-number">03</span>
+            <p><strong>Check</strong><br>Timing and audio integrity must pass.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="library" aria-labelledby="library-title">
+        <div class="library-heading">
+          <div>
+            <p class="eyebrow">Saved on this laptop</p>
+            <h2 id="library-title">Recent meditations</h2>
+          </div>
+          <button class="text-button" id="refresh-runs" type="button">Refresh</button>
+        </div>
+        <div id="runs-list" class="runs-list">
+          <div class="empty-state">Looking for saved meditations…</div>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="run-dialog">
+      <form method="dialog" class="dialog-shell">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Saved run</p>
+            <h2 id="dialog-title">Meditation</h2>
+          </div>
+          <button class="close-button" value="close" aria-label="Close">×</button>
+        </div>
+        <audio id="audio-player" controls preload="metadata"></audio>
+        <div class="artifact-tabs" role="tablist" aria-label="Run details">
+          <button type="button" role="tab" aria-selected="true" data-artifact="script">Script</button>
+          <button type="button" role="tab" aria-selected="false" data-artifact="plan">Plan</button>
+          <button type="button" role="tab" aria-selected="false" data-artifact="quality">Checks</button>
+          <button type="button" role="tab" aria-selected="false" data-artifact="timeline">Timeline</button>
+        </div>
+        <pre id="artifact-content">Choose an artifact to inspect.</pre>
+      </form>
+    </dialog>
+
+    <footer>
+      <span>Whoopy · named for a very good cat</span>
+      <span>Stop the terminal command to close the studio.</span>
+    </footer>
+  </body>
+</html>

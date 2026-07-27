@@ -29,6 +29,9 @@ whoopy = "whoopy.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"whoopy.webui" = ["static/*.html", "static/*.css", "static/*.js"]
+
 [tool.pytest.ini_options]
 addopts = "--strict-markers --strict-config -ra"
 testpaths = ["tests"]

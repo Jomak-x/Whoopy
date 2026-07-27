@@ -566,6 +566,46 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_run_location_arguments(process_parser)
     _add_runtime_model_arguments(process_parser)
 
+    web_parser = subcommands.add_parser(
+        "web",
+        help="Start the private local browser interface.",
+    )
+    web_parser.add_argument(
+        "--host",
+        choices=("127.0.0.1", "localhost"),
+        default="127.0.0.1",
+        help="Loopback address to use (default: 127.0.0.1).",
+    )
+    web_parser.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="Local TCP port from 1 to 65535 (default: 8765).",
+    )
+    web_parser.add_argument(
+        "--open",
+        action="store_true",
+        help="Open the interface in the default browser after starting.",
+    )
+    web_parser.add_argument(
+        "--config-dir",
+        type=Path,
+        default=Path("config"),
+        help="Directory containing Whoopy configuration.",
+    )
+    web_parser.add_argument(
+        "--models-dir",
+        type=Path,
+        default=Path("models/managed"),
+        help="Directory containing verified model artifacts.",
+    )
+    web_parser.add_argument(
+        "--runs-dir",
+        type=Path,
+        default=Path("runs"),
+        help="Directory containing durable generation runs.",
+    )
+
     return parser
 
 
@@ -1147,6 +1187,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (AdapterError, ArtifactError, ConfigError, RunStoreError, WorkerError) as error:
             parser.error(str(error))
         _print_run(record, store, as_json=args.json)
+        return 0
+
+    if args.command == "web":
+        if not 1 <= args.port <= 65_535:
+            parser.error("--port must be between 1 and 65535")
+        # Import lazily so normal CLI commands do not initialize the HTTP layer.
+        from whoopy.webui.server import serve
+
+        serve(
+            host=args.host,
+            port=args.port,
+            project_root=Path.cwd(),
+            config_directory=args.config_dir,
+            models_directory=args.models_dir,
+            runs_directory=args.runs_dir,
+            open_browser=args.open,
+        )
         return 0
 
     parser.print_help()
