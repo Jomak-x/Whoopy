@@ -1,3 +1,4 @@
+# mypy: disable_error_code = import-not-found
 """Persistent JSON-lines bridge for the optional local Fish Speech 1.4 runtime.
 
 This script runs inside Fish's isolated Python 3.10 environment. Whoopy keeps

@@ -1,3 +1,4 @@
+# mypy: disable_error_code = import-not-found
 """Persistent JSON-lines bridge for optional MOSS-TTS v1.5 checkpoints.
 
 Both the 5B Local Transformer and 8B flagship expose the same processor API,
