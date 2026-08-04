@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import threading
+import time
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
@@ -1304,12 +1305,21 @@ class RunStore:
         """Load and validate a run record from disk."""
 
         path = self.record_path(run_id)
-        try:
-            return RunRecord.model_validate_json(path.read_text(encoding="utf-8"))
-        except FileNotFoundError as error:
-            raise RunNotFoundError(f"Run record not found: {path}") from error
-        except (OSError, ValidationError) as error:
-            raise RunStoreError(f"Could not load run record {path}: {error}") from error
+        for attempt in range(5):
+            try:
+                return RunRecord.model_validate_json(path.read_text(encoding="utf-8"))
+            except PermissionError as error:
+                # Windows can briefly deny a concurrent reader while another
+                # process replaces run.json. Retrying keeps the atomic record
+                # boundary observable without weakening validation.
+                if attempt == 4:
+                    raise RunStoreError(f"Could not load run record {path}: {error}") from error
+                time.sleep(0.01)
+            except FileNotFoundError as error:
+                raise RunNotFoundError(f"Run record not found: {path}") from error
+            except (OSError, ValidationError) as error:
+                raise RunStoreError(f"Could not load run record {path}: {error}") from error
+        raise AssertionError("run record retry loop did not return or raise")
 
     def save(self, record: RunRecord) -> None:
         """Atomically replace a run record so readers never see partial JSON."""

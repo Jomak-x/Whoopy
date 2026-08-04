@@ -36,7 +36,7 @@ Voice and meditation quality require human acceptance.
 | Phase 3 | Merged | segment cache, checkpoints, retry, resume, and audio integrity |
 | Phase 3.5 | Merged through PRs 5–11 | local artifacts, llama.cpp/Qwen planning, Kokoro speech, end-to-end CLI, temporary web studio |
 | Phase 3.6 | Merged through PR 12; not human-accepted | slower Kokoro, adaptive pacing prototype, technique fields, Fish 1.4, MOSS 5B/8B adapters, model controls, smoothing, and expanded tests |
-| PR 13 durable recovery | 179 local tests and static checks pass; CI pending | durable lifecycle state, recovery controls, worker coordination, and bounded diagnostics |
+| PR 13 durable recovery | 180 local tests and static checks pass; CI pending | durable lifecycle state, recovery controls, worker coordination, and bounded diagnostics |
 | Permanent Phase 4 | Not started | intentionally waits for the local exit gate |
 
 PR 12 is merged. PR 13 passes the full local check suite and now awaits remote

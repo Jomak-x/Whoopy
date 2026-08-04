@@ -1,7 +1,7 @@
 # PR 13: Durable Recovery
 
 This guide explains the recovery work in the current Whoopy PR in plain
-language. All 179 local tests and static checks pass, but it is **not merged or
+language. All 180 local tests and static checks pass, but it is **not merged or
 accepted** until remote macOS, Linux, and Windows CI pass.
 
 The aim is simple: closing a terminal, closing the browser, a laptop sleeping,

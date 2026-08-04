@@ -565,6 +565,32 @@ def test_atomic_write_flushes_file_and_parent_directory(
     assert len(flushes) == expected_flushes
 
 
+def test_run_load_retries_a_transient_permission_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = RunStore(tmp_path)
+    record = store.create("A durable read.", run_id=RUN_ID)
+    original_read_text = Path.read_text
+    attempts = 0
+
+    def transient_read(
+        path: Path,
+        encoding: str | None = None,
+        errors: str | None = None,
+    ) -> str:
+        nonlocal attempts
+        if path == store.record_path(RUN_ID) and attempts == 0:
+            attempts += 1
+            raise PermissionError("temporary Windows replace boundary")
+        return original_read_text(path, encoding=encoding, errors=errors)
+
+    monkeypatch.setattr(Path, "read_text", transient_read)
+
+    assert store.load(RUN_ID) == record
+    assert attempts == 1
+
+
 def test_pending_generation_run_atomically_saves_every_resume_input(tmp_path: Path) -> None:
     store = RunStore(tmp_path)
     request = _pending_generation()
