@@ -711,8 +711,23 @@ class LocalWebApplication:
                 now = datetime.now(UTC)
                 attempt_id = uuid4()
                 resumed = record.status in (RunStatus.FAILED, RunStatus.INTERRUPTED)
-                running = record.transition(
-                    RunStatus.RUNNING,
+                stage = (
+                    RunStage.PLANNING
+                    if record.status is RunStatus.QUEUED and record.script_artifact is None
+                    else RunStage.COMPILING
+                )
+                stopped_execution = RunExecution(
+                    stage=stage,
+                    attempt_id=attempt_id,
+                    owner_id=f"web:{socket.gethostname()}:{os.getpid()}",
+                    pid=os.getpid(),
+                    started_at=now,
+                    heartbeat_at=now,
+                    lease_expires_at=now + timedelta(seconds=1),
+                    message="The local command could not start.",
+                ).finish(message=message or "Local command failed without an error message.")
+                failed = record.transition(
+                    RunStatus.FAILED,
                     updated_at=now,
                     recovery=record.recovery.model_copy(
                         update={
@@ -721,28 +736,12 @@ class LocalWebApplication:
                             "failed_segment_id": None,
                         }
                     ),
-                    execution=RunExecution(
-                        stage=(
-                            RunStage.PLANNING
-                            if record.status is RunStatus.QUEUED and record.script_artifact is None
-                            else RunStage.COMPILING
-                        ),
-                        attempt_id=attempt_id,
-                        owner_id=f"web:{socket.gethostname()}:{os.getpid()}",
-                        pid=os.getpid(),
-                        started_at=now,
-                        heartbeat_at=now,
-                        lease_expires_at=now + timedelta(seconds=1),
-                        message="The local command could not start.",
-                    ),
-                )
-                store.save(running)
-                store.fail_active_run(
-                    run_id,
-                    attempt_id=attempt_id,
+                    execution=stopped_execution,
                     error=message or "Local command failed without an error message.",
-                    failed_at=now,
                 )
+                # One atomic record replacement prevents observers from seeing
+                # an artificial RUNNING state for a command that never started.
+                store.save(failed)
         except (OSError, RunLockUnavailable, RunStoreError, ValueError):
             return
 
