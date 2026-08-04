@@ -17,9 +17,10 @@ class SpeechProcessingSettings:
     """Every post-processing value that changes segment PCM."""
 
     trim_threshold_dbfs: float = -45.0
-    edge_residual_ms: int = 25
-    edge_fade_ms: int = 10
+    edge_residual_ms: int = 60
+    edge_fade_ms: int = 40
     target_peak_dbfs: float = -6.0
+    max_gain_db: float = 3.0
 
     def __post_init__(self) -> None:
         if not -90 <= self.trim_threshold_dbfs <= -20:
@@ -30,6 +31,8 @@ class SpeechProcessingSettings:
             raise ValueError("edge fade must be between 0 and 100 ms")
         if not -20 <= self.target_peak_dbfs <= -1:
             raise ValueError("target peak must be between -20 and -1 dBFS")
+        if not 0 <= self.max_gain_db <= 12:
+            raise ValueError("maximum gain must be between 0 and 12 dB")
         if self.target_peak_dbfs <= self.trim_threshold_dbfs:
             raise ValueError("target peak must be louder than the trim threshold")
 
@@ -66,6 +69,7 @@ class ProcessedSpeechSynthesizer:
                 f"edge_residual_ms={self.settings.edge_residual_ms}",
                 f"edge_fade_ms={self.settings.edge_fade_ms}",
                 f"target_peak_dbfs={self.settings.target_peak_dbfs}",
+                f"max_gain_db={self.settings.max_gain_db}",
             ),
         )
         self.cache_identity = self.metadata.cache_identity
@@ -89,7 +93,10 @@ class ProcessedSpeechSynthesizer:
 
         peak = max(abs(sample) for sample in trimmed)
         target_peak = round(32_767 * 10 ** (self.settings.target_peak_dbfs / 20))
-        gain = target_peak / peak
+        # Never greatly amplify a quiet segment: independent peak normalization
+        # used to magnify low-level synthesis noise at every new utterance.
+        maximum_gain = 10 ** (self.settings.max_gain_db / 20)
+        gain = min(target_peak / peak, maximum_gain)
         fade_frames = round(self.sample_rate * self.settings.edge_fade_ms / 1_000)
         normalized = array("h")
         for index, sample in enumerate(trimmed):

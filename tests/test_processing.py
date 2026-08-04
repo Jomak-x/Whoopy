@@ -50,8 +50,8 @@ def test_processing_trims_edges_normalizes_and_fades_boundaries() -> None:
     if byteorder != "little":
         samples.byteswap()
 
-    assert audio.frame_count == 2_200
-    expected_peak = round(32_767 * 10 ** (-6 / 20))
+    assert audio.frame_count == 3_000
+    expected_peak = round(4_000 * 10 ** (3 / 20))
     assert max(abs(sample) for sample in samples) == expected_peak
     assert abs(samples[0]) <= 1_000
     assert abs(samples[-1]) <= 1_000

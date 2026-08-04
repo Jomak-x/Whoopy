@@ -23,6 +23,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 from uuid import UUID, uuid4
 
+from whoopy.adapters.tts import MOSS_LANGUAGES, FishSpeech14Adapter, MossTTSAdapter
 from whoopy.artifacts import (
     ArtifactError,
     ArtifactState,
@@ -128,11 +129,61 @@ class LocalWebApplication:
                     "messages": diagnosis.messages,
                     "artifact_count": len(states),
                 }
+            fish_runtime = self.project_root / "models" / "experimental" / "fish-speech-1.4-runtime"
+            fish_error = FishSpeech14Adapter.availability_error(fish_runtime)
+            moss_runtime = self.project_root / "models" / "experimental" / "moss-tts-runtime"
+            moss_reference = fish_runtime / "whoopy-reference.wav"
+            moss_models = {
+                "moss-local-v1.5": moss_runtime / "checkpoints" / "MOSS-TTS-Local-Transformer-v1.5",
+                "moss-v1.5": moss_runtime / "checkpoints" / "MOSS-TTS-v1.5",
+            }
+            moss_codec = moss_runtime / "checkpoints" / "MOSS-Audio-Tokenizer-v2"
             return {
                 "ok": True,
                 "system": f"{target.operating_system} {target.architecture}",
                 "profiles": profile_reports,
                 "privacy": "Models and generation stay on this laptop.",
+                "speech_models": {
+                    "kokoro": {
+                        "ready": profile_reports["basic"]["installed"],
+                        "license": "Apache-2.0",
+                        "expression": "voice preset",
+                    },
+                    "fish-1.4": {
+                        "ready": fish_error is None,
+                        "license": "CC-BY-NC-SA-4.0",
+                        "expression": "reference voice; no bracket tags",
+                        "error": fish_error,
+                    },
+                    "fish-s2": {
+                        "ready": False,
+                        "license": "Fish Audio Research License",
+                        "expression": "[emotion] tags",
+                        "error": "requires a much larger Linux/WSL GPU setup",
+                    },
+                    **{
+                        model: {
+                            "ready": (
+                                MossTTSAdapter.availability_error(
+                                    moss_runtime,
+                                    path,
+                                    moss_codec,
+                                    moss_reference,
+                                )
+                                is None
+                            ),
+                            "license": "Apache-2.0",
+                            "expression": "language + free-form delivery instruction",
+                            "error": MossTTSAdapter.availability_error(
+                                moss_runtime,
+                                path,
+                                moss_codec,
+                                moss_reference,
+                            ),
+                        }
+                        for model, path in moss_models.items()
+                    },
+                },
             }
         except (ArtifactError, OSError, ValueError) as error:
             return {"ok": False, "error": str(error), "profiles": {}}
@@ -163,6 +214,8 @@ class LocalWebApplication:
     def _run_summary(record: RunRecord, directory: Path) -> dict[str, Any]:
         duration_seconds: float | None = None
         quality_passed: bool | None = None
+        tts_model: str | None = None
+        voice: str | None = None
         try:
             manifest = json.loads((directory / "audio-manifest.json").read_text(encoding="utf-8"))
             duration_seconds = round(float(manifest["duration_ms"]) / 1_000, 2)
@@ -171,6 +224,12 @@ class LocalWebApplication:
         try:
             quality = json.loads((directory / "quality.json").read_text(encoding="utf-8"))
             quality_passed = bool(quality["passed"])
+        except (FileNotFoundError, OSError, KeyError, TypeError, json.JSONDecodeError):
+            pass
+        try:
+            resolved = json.loads((directory / "resolved-config.json").read_text(encoding="utf-8"))
+            tts_model = str(resolved["tts"].get("backend", "kokoro"))
+            voice = str(resolved["tts"]["voice_name"])
         except (FileNotFoundError, OSError, KeyError, TypeError, json.JSONDecodeError):
             pass
         return {
@@ -182,6 +241,8 @@ class LocalWebApplication:
             "updated_at": record.updated_at.isoformat(),
             "duration_seconds": duration_seconds,
             "quality_passed": quality_passed,
+            "tts_model": tts_model,
+            "voice": voice,
             "has_audio": record.audio_artifact is not None
             and (directory / "narration.wav").is_file(),
             "error": record.error,
@@ -205,8 +266,52 @@ class LocalWebApplication:
         if len(text) > 20_000:
             raise ValueError("Meditation input must contain at most 20,000 characters.")
         voice = payload.get("voice", "af_heart")
-        if voice not in KOKORO_ENGLISH_VOICES:
+        tts_model = payload.get("tts_model", "kokoro")
+        if tts_model not in (
+            "kokoro",
+            "fish-1.4",
+            "moss-local-v1.5",
+            "moss-v1.5",
+        ):
+            raise ValueError("Choose an available local speech model.")
+        if tts_model == "kokoro" and voice not in KOKORO_ENGLISH_VOICES:
             raise ValueError("Choose one of Whoopy's reviewed voices.")
+        if tts_model == "fish-1.4":
+            fish_runtime = self.project_root / "models" / "experimental" / "fish-speech-1.4-runtime"
+            fish_error = FishSpeech14Adapter.availability_error(fish_runtime)
+            if fish_error is not None:
+                raise ValueError(f"Fish Speech 1.4 is not ready: {fish_error}.")
+        moss_language = payload.get("moss_language", "English")
+        if moss_language not in MOSS_LANGUAGES:
+            raise ValueError("Choose one of MOSS-TTS v1.5's 31 supported languages.")
+        moss_instruction = payload.get(
+            "moss_instruction",
+            "Speak slowly, softly, and warmly, with a meditative delivery.",
+        )
+        if not isinstance(moss_instruction, str) or len(moss_instruction) > 300:
+            raise ValueError("MOSS delivery instructions must contain at most 300 characters.")
+        moss_use_reference = payload.get("moss_use_reference", True)
+        if not isinstance(moss_use_reference, bool):
+            raise ValueError("MOSS voice source must be a boolean.")
+        if tts_model.startswith("moss-"):
+            moss_runtime = self.project_root / "models" / "experimental" / "moss-tts-runtime"
+            model_name = (
+                "MOSS-TTS-Local-Transformer-v1.5"
+                if tts_model == "moss-local-v1.5"
+                else "MOSS-TTS-v1.5"
+            )
+            moss_error = MossTTSAdapter.availability_error(
+                moss_runtime,
+                moss_runtime / "checkpoints" / model_name,
+                moss_runtime / "checkpoints" / "MOSS-Audio-Tokenizer-v2",
+                self.project_root
+                / "models"
+                / "experimental"
+                / "fish-speech-1.4-runtime"
+                / "whoopy-reference.wav",
+            )
+            if moss_error is not None:
+                raise ValueError(f"{tts_model} is not ready: {moss_error}.")
         try:
             speed = float(payload.get("speed", 0.6))
         except (TypeError, ValueError) as error:
@@ -227,7 +332,17 @@ class LocalWebApplication:
             self._tasks[task_id] = task
         thread = threading.Thread(
             target=self._run_generation,
-            args=(task, text, voice, speed, minutes),
+            args=(
+                task,
+                text,
+                tts_model,
+                voice,
+                speed,
+                minutes,
+                moss_language,
+                moss_instruction,
+                moss_use_reference,
+            ),
             name=f"whoopy-{task_id[:8]}",
             daemon=True,
         )
@@ -267,9 +382,13 @@ class LocalWebApplication:
         self,
         task: GenerationTask,
         text: str,
+        tts_model: str,
         voice: str,
         speed: float,
         minutes: float,
+        moss_language: str,
+        moss_instruction: str,
+        moss_use_reference: bool,
     ) -> None:
         input_path: Path | None = None
         with self._task_lock:
@@ -284,10 +403,16 @@ class LocalWebApplication:
             "whoopy",
             "generate",
             "--json",
+            "--tts-model",
+            tts_model,
             "--voice",
             voice,
             "--speed",
             str(speed),
+            "--moss-language",
+            moss_language,
+            "--moss-instruction",
+            moss_instruction,
             "--config-dir",
             str(self.config_directory),
             "--models-dir",
@@ -295,6 +420,8 @@ class LocalWebApplication:
             "--runs-dir",
             str(self.runs_directory),
         ]
+        if not moss_use_reference:
+            command.append("--moss-direct-voice")
         if task.mode == "prompt":
             command.extend(
                 [

@@ -33,6 +33,52 @@ from whoopy.ports import ScriptGenerationRequest, ScriptGenerator
 from whoopy.timeline import Timeline, build_script_timeline
 
 WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
+SLEEP_REQUEST_PATTERN = re.compile(
+    r"\b(?:bedtime|fall asleep|good[\s-]?night|insomnia|sleep|sleeping)\b",
+    re.I,
+)
+TECHNIQUE_GUIDANCE = {
+    "arrival": (
+        "Orient to the present through contact, sound, or posture. Give one concrete "
+        "choice for comfort; do not promise relaxation."
+    ),
+    "body_scan": (
+        "Move in a clear sequence through two to four body areas. Invite neutral "
+        "observation of pressure, temperature, tension, or ease without forcing change."
+    ),
+    "focused_attention": (
+        "Choose one physical anchor such as natural breathing or contact with the chair. "
+        "Acknowledge wandering once and show how to return without judgment."
+    ),
+    "loving_kindness": (
+        "Offer one or two simple, secular well-wishes. Keep them invitational and do not "
+        "claim that the listener already feels them."
+    ),
+    "noting": (
+        "Invite the listener to notice a thought, feeling, or sound; give it a simple "
+        "mental label; then return attention to a physical anchor."
+    ),
+    "reflection": (
+        "Ask one clear, gentle question connected to the user's intention. Do not answer "
+        "it for the listener; leave space for their own response."
+    ),
+    "resting_awareness": (
+        "Release the narrow anchor and notice the whole field of sound, sensation, and "
+        "thought without selecting or changing anything."
+    ),
+    "return": (
+        "Reorient through sounds, contact, and a small optional movement. Close simply "
+        "without motivational slogans or a new exercise."
+    ),
+    "sleep_transition": (
+        "Let the guidance taper toward quiet rest. Do not reorient to the room, ask the "
+        "listener to open their eyes, or promise that they will wake refreshed."
+    ),
+    "visualization": (
+        "Develop one coherent, concrete image with no more than three sensory details. "
+        "Connect the image to the user's intention instead of adding decorative poetry."
+    ),
+}
 CONTENT_STOP_WORDS = {
     "a",
     "and",
@@ -182,6 +228,20 @@ def _json_object(text: str) -> dict[str, Any]:
     return value
 
 
+def _validate_plan_for_request(value: dict[str, Any], *, prompt: str) -> ProposedPlan:
+    """Require an arrival and the correct waking or sleep-specific ending."""
+
+    plan = ProposedPlan.model_validate(value)
+    if plan.sections[0].technique != "arrival":
+        raise ValueError("the first section technique must be 'arrival'")
+    expected_ending = "sleep_transition" if SLEEP_REQUEST_PATTERN.search(prompt) else "return"
+    if plan.sections[-1].technique != expected_ending:
+        raise ValueError(
+            f"the final section technique must be {expected_ending!r} for this request"
+        )
+    return plan
+
+
 def _allocate_plan(
     proposed: ProposedPlan,
     duration_seconds: int,
@@ -224,6 +284,7 @@ def _allocate_plan(
                 id=section.id,
                 title=section.title,
                 purpose=section.purpose,
+                technique=section.technique,
                 target_speech_seconds=speech_seconds,
                 pause_after_ms=pause_ms,
                 minimum_words=max(8, round(target_words * 0.65)),
@@ -365,7 +426,7 @@ class LocalMeditationGenerator:
                 system_prompt=self.prompts.plan.text,
                 prompt=plan_prompt,
                 seed=seed,
-                validator=ProposedPlan.model_validate,
+                validator=lambda value: _validate_plan_for_request(value, prompt=prompt),
                 raw_attempts=raw_attempts,
             )
             focused_proposal = _compact_plan_for_duration(
@@ -391,6 +452,8 @@ class LocalMeditationGenerator:
                 f"Overall intention: {plan.intention}\n"
                 f"Section ID: {planned.id}\n"
                 f"Section purpose: {planned.purpose}\n"
+                f"Primary technique: {planned.technique}\n"
+                f"Technique instructions: {TECHNIQUE_GUIDANCE[planned.technique]}\n"
                 f"Word range: {planned.minimum_words}-{planned.maximum_words} words.\n"
                 "The complete text, not each sentence, must fit this word range. "
                 "Stop once the range is satisfied.\n"
@@ -415,7 +478,7 @@ class LocalMeditationGenerator:
                     )
                 fitted_text = _fit_complete_sentences(
                     proposed_draft.text,
-                    purpose=planned.purpose,
+                    purpose=(f"{planned.purpose} {TECHNIQUE_GUIDANCE[planned.technique]}"),
                     minimum_words=planned.minimum_words,
                     maximum_words=planned.maximum_words,
                 )

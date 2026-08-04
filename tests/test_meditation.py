@@ -64,6 +64,7 @@ def _plan() -> str:
                     "id": "arrive",
                     "title": "Arrive",
                     "purpose": "Invite awareness of support.",
+                    "technique": "arrival",
                     "weight": 1,
                     "pause_seconds": 6,
                 },
@@ -71,6 +72,7 @@ def _plan() -> str:
                     "id": "notice",
                     "title": "Notice",
                     "purpose": "Notice simple body sensations.",
+                    "technique": "body_scan",
                     "weight": 1,
                     "pause_seconds": 6,
                 },
@@ -78,6 +80,7 @@ def _plan() -> str:
                     "id": "return",
                     "title": "Return",
                     "purpose": "Return attention to the room.",
+                    "technique": "return",
                     "weight": 1,
                     "pause_seconds": 6,
                 },
@@ -99,8 +102,8 @@ def test_prompt_bundle_loads_reviewable_versions() -> None:
     prompts = load_prompt_bundle(Path("config/prompts"))
 
     assert prompts.plan.prompt_id == "whoopy.plan"
-    assert prompts.plan.version == 2
-    assert prompts.section.version == 2
+    assert prompts.plan.version == 4
+    assert prompts.section.version == 3
     assert "Return exactly one JSON object" in prompts.section.text
 
 
@@ -139,16 +142,16 @@ def test_plan_first_generation_produces_valid_script_and_timeline() -> None:
         "return",
     ]
     assert result.script.startswith("# A Steady Moment")
-    assert len(result.timeline.segments) == 18
+    assert len(result.timeline.segments) == 16
     assert (
         sum(
             segment.duration_ms
             for segment in result.timeline.segments
             if isinstance(segment, SilenceSegment)
         )
-        == 33_800
+        == 30_000
     )
-    assert result.estimated_duration_seconds == pytest.approx(63.0683, rel=0.001)
+    assert result.estimated_duration_seconds == pytest.approx(59.2683, rel=0.001)
 
 
 def test_invalid_json_is_repaired_with_a_bounded_retry() -> None:
@@ -176,6 +179,35 @@ def test_invalid_json_is_repaired_with_a_bounded_retry() -> None:
     assert "previous response was invalid" in adapter.requests[1].prompt
 
 
+def test_sleep_request_repairs_a_plan_that_would_wake_the_listener() -> None:
+    corrected = json.loads(_plan())
+    corrected["sections"][-1]["purpose"] = "Let guidance taper into quiet rest."
+    corrected["sections"][-1]["technique"] = "sleep_transition"
+    adapter = SequenceGenerator(
+        [
+            _plan(),
+            json.dumps(corrected),
+            _section("arrive", "settle"),
+            _section("notice", "notice"),
+            _section("return", "rest"),
+        ]
+    )
+
+    result = LocalMeditationGenerator(
+        adapter,
+        load_prompt_bundle(Path("config/prompts")),
+    ).generate(
+        prompt="Generate me a good night meditation.",
+        duration_seconds=60,
+        run_id=RUN_ID,
+        created_at=CREATED_AT,
+    )
+
+    assert result.plan.sections[-1].technique == "sleep_transition"
+    assert result.raw_attempts[0].validation_error is not None
+    assert "sleep_transition" in result.raw_attempts[0].validation_error
+
+
 def test_unsafe_section_cannot_reach_the_timeline() -> None:
     unsafe = json.dumps(
         {
@@ -201,13 +233,17 @@ def test_unsafe_section_cannot_reach_the_timeline() -> None:
     "text",
     [
         "Breathe in deeply and hold it for a moment.",
-        "Let each inhale fill you with calm.",
+        "Take a deep breath and fill your lungs.",
         "Exhale slowly for four counts.",
     ],
 )
 def test_prescribed_breath_control_is_rejected(text: str) -> None:
     with pytest.raises(ContentSafetyError):
         validate_meditation_text(text)
+
+
+def test_natural_breath_observation_is_not_mistaken_for_breath_control() -> None:
+    validate_meditation_text("Let each inhale feel natural, and let each exhale remain gentle.")
 
 
 def test_section_outside_word_budget_is_rejected() -> None:
@@ -277,6 +313,7 @@ def test_six_section_short_plan_never_rounds_below_minimum() -> None:
                     "id": f"part-{index}",
                     "title": f"Part {index}",
                     "purpose": "Guide one brief step.",
+                    "technique": "focused_attention",
                     "weight": 5 if index == 1 else 1,
                     "pause_seconds": 6,
                 }
@@ -304,6 +341,17 @@ def test_short_plan_keeps_requested_middle_section_between_arrival_and_return() 
                     "id": section_id,
                     "title": title,
                     "purpose": purpose,
+                    "technique": (
+                        "arrival"
+                        if section_id == "arrive"
+                        else "sleep_transition"
+                        if section_id == "return"
+                        else "reflection"
+                        if section_id == "day"
+                        else "body_scan"
+                        if section_id == "body"
+                        else "focused_attention"
+                    ),
                     "weight": weight,
                     "pause_seconds": 10,
                 }

@@ -38,7 +38,11 @@ These sources support the direction, but they do not establish one universal
 "Headspace pause duration." Whoopy's exact values are an explicit product
 decision that can be measured and revised.
 
-## The New Pacing Contract
+## The First Pacing Contract
+
+This section records the first listening iteration. It has since been replaced
+by the adaptive pacing contract in
+[`phase-3-6-voice-and-meditation-lab.md`](./phase-3-6-voice-and-meditation-lab.md).
 
 Generated narration now uses three deterministic pause levels:
 
@@ -152,13 +156,17 @@ Comparison WAV files are kept locally under:
 runs/.experiments/fish-speech/
 ```
 
-The result is a deliberate decision:
+That first experiment produced a provisional decision:
 
 - keep Kokoro at `0.6` as the supported portable default;
 - keep the adapter boundary so Fish or another TTS can be added later;
 - do not ship a non-commercial Fish checkpoint as a default dependency;
 - evaluate Fish again when there is a suitable licensed model, a consented
   reference voice, and a cross-platform runtime that fits ordinary laptops.
+
+Fish 1.4 has now been connected as an explicitly non-commercial local
+experiment, and MOSS-TTS has been added as the Apache-2.0 comparison. See the
+new lab document above for the current implementation and limitations.
 
 ## How To Try It
 

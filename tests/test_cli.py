@@ -329,6 +329,13 @@ class _DraftFixture:
                         "id": section_id,
                         "title": section_id.title(),
                         "purpose": f"Guide the {section_id} section.",
+                        "technique": (
+                            "arrival"
+                            if section_id == "arrive"
+                            else "return"
+                            if section_id == "return"
+                            else "focused_attention"
+                        ),
                         "weight": 1,
                         "pause_seconds": 6,
                     }

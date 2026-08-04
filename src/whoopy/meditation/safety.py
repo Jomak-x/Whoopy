@@ -39,10 +39,6 @@ UNSAFE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r"\b(?:breathe in|inhale|exhale|breathe out) (?:slowly|deeply|for)\b", re.I),
         "prescribed breath timing",
     ),
-    (
-        re.compile(r"\blet each (?:inhale|exhale)\b", re.I),
-        "prescribed breath control",
-    ),
     (re.compile(r"\byou (?:should|must) (?:not )?feel\b", re.I), "prescriptive emotional claim"),
 )
 CONTROL_SYNTAX = re.compile(r"(?:\[pause\s*:|<speak>|</?[a-z]+>|^#{1,6}\s|```)", re.I | re.M)

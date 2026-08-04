@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,8 @@ from whoopy.adapters.llm.llama_cpp import (
     LlamaCppSettings,
     _assistant_text,
 )
+from whoopy.adapters.tts.fish_speech import FishSpeech14Adapter
+from whoopy.adapters.tts.moss_tts import MossTTSAdapter, MossTTSSettings
 from whoopy.adapters.tts.sherpa_onnx import (
     SherpaOnnxKokoroAdapter,
     SherpaOnnxSettings,
@@ -300,3 +303,79 @@ def test_kokoro_wrong_sample_rate_is_invalid_output(tmp_path: Path) -> None:
 
     with pytest.raises(InvalidSynthesisOutput, match="requires 24000"):
         adapter.synthesize(SpeechSegment(id="speech-1", text="Welcome."))
+
+
+def test_fish_availability_names_missing_local_components(tmp_path: Path) -> None:
+    error = FishSpeech14Adapter.availability_error(tmp_path)
+
+    assert error is not None
+    assert "python" in error
+    assert "model.pth" in error
+    assert "whoopy-reference.wav" in error
+
+
+def test_moss_metadata_records_license_style_and_reference_hash(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.wav"
+    reference.write_bytes(b"reference-audio")
+    settings = MossTTSSettings(
+        runtime_directory=tmp_path / "runtime",
+        worker_script=tmp_path / "worker.py",
+        model_directory=tmp_path / "model",
+        codec_directory=tmp_path / "codec",
+        variant="moss-local-v1.5",
+        reference_audio=reference,
+        language="English",
+        instruction="Speak gently.",
+    )
+
+    adapter = MossTTSAdapter(settings)
+    changed = MossTTSAdapter(replace(settings, instruction="Speak brightly."))
+
+    assert adapter.metadata.license_id == "Apache-2.0"
+    assert "instruction=Speak gently." in adapter.metadata.settings
+    assert adapter.cache_identity != changed.cache_identity
+
+
+def test_moss_availability_requires_runtime_checkpoint_and_reference(tmp_path: Path) -> None:
+    error = MossTTSAdapter.availability_error(
+        tmp_path / "runtime",
+        tmp_path / "checkpoint",
+        tmp_path / "codec",
+        tmp_path / "reference.wav",
+    )
+
+    assert error == (
+        "missing isolated Python runtime, model checkpoint, audio tokenizer, reference voice"
+    )
+
+
+def test_moss_availability_rejects_incomplete_sharded_checkpoint(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    (runtime / ".venv" / "bin").mkdir(parents=True)
+    (runtime / ".venv" / "bin" / "python").touch()
+    model = tmp_path / "model"
+    model.mkdir()
+    (model / "config.json").write_text("{}")
+    (model / "model.safetensors.index.json").write_text(
+        json.dumps(
+            {
+                "weight_map": {
+                    "first": "model-00001-of-00002.safetensors",
+                    "second": "model-00002-of-00002.safetensors",
+                }
+            }
+        )
+    )
+    (model / "model-00001-of-00002.safetensors").write_bytes(b"partial")
+    codec = tmp_path / "codec"
+    codec.mkdir()
+    (codec / "config.json").write_text("{}")
+    (codec / "model.safetensors").write_bytes(b"complete")
+    reference = tmp_path / "reference.wav"
+    reference.write_bytes(b"reference")
+
+    error = MossTTSAdapter.availability_error(runtime, model, codec, reference)
+
+    assert error == "missing model checkpoint"

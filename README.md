@@ -7,6 +7,13 @@ Whoopy is a local-first, timeline-driven system for generating guided meditation
 
 ## Current Status
 
+The current source of truth is
+[`docs/local-first-master-plan.md`](./docs/local-first-master-plan.md). It
+separates what is merged, implemented locally, machine-verified, and actually
+accepted by listening. The project is now deliberately staying local until
+crash recovery, managed voice comparisons, meditation quality, pacing, and
+reviewed breathing exercises pass one explicit exit gate.
+
 Phases 0–3 established the portable repository, durable worker boundary,
 deterministic WAV assembly, caching, retry, and recovery. Phase 3.5 now adds
 verified native artifacts and replaceable llama.cpp and sherpa/Kokoro adapters.
@@ -17,9 +24,10 @@ audio checkpoints, final WAV, manifest, and quality report. The first recorded
 bake-off keeps Standard Qwen3-4B for prompt mode, rejects
 the current Lite model as a dependable fallback after a 0/6 strict result, and
 keeps Basic authored-script mode as the lower-resource path. Human voice review
-remains deliberately pending. Phase 3.6 adds sentence-level deterministic
-pauses, a calibrated `0.6` meditation pace, stricter natural-breathing safety,
-browser audio range streaming, and a documented Fish Speech feasibility trial.
+remains deliberately pending. Phase 3.6 is still an open PR containing slower
+sentence-level timing, broader adaptive pacing, Fish/MOSS voice work, and
+content changes. None of that work should be described as merged or
+human-accepted yet.
 
 The functional commands are:
 
@@ -203,27 +211,28 @@ The `src/` layout prevents tests from accidentally importing an uninstalled work
 
 Read in this order:
 
-1. [`docs/architecture.md`](./docs/architecture.md) — concise system explanation
-2. [`system-design.md`](./system-design.md) — canonical design specification
-3. [`docs/repository-layout.md`](./docs/repository-layout.md) — where code belongs
-4. [`docs/setup.md`](./docs/setup.md) — machine and build sequence
-5. [`docs/roadmap.md`](./docs/roadmap.md) — implementation phases
-6. [`docs/native-portability.md`](./docs/native-portability.md) — automatic cross-platform runtime and weak-laptop behavior
-7. [`docs/phase-1-local-core.md`](./docs/phase-1-local-core.md) — the first executable flow
-8. [`docs/phase-2-deterministic-audio.md`](./docs/phase-2-deterministic-audio.md) — exact audio assembly
-9. [`docs/phase-3-quality-caching-recovery.md`](./docs/phase-3-quality-caching-recovery.md) — cache, retry, and resume
-10. [`docs/phase-3-5-overall-guide.md`](./docs/phase-3-5-overall-guide.md) — start here for the from-zero explanation and local tester
-11. [`docs/phase-3-5-first-local-meditation.md`](./docs/phase-3-5-first-local-meditation.md) — real local models and the first offline meditation
-12. [`docs/phase-3-5-runtime-adapters.md`](./docs/phase-3-5-runtime-adapters.md) — ports, metadata, error taxonomy, and native adapters
-13. [`docs/phase-3-5-real-script-speech.md`](./docs/phase-3-5-real-script-speech.md) — first real speech, script syntax, processing, and recovery
-14. [`docs/phase-3-5-local-generation.md`](./docs/phase-3-5-local-generation.md) — plan-first generation, validation, safety, and draft resume
-15. [`docs/phase-3-5-end-to-end.md`](./docs/phase-3-5-end-to-end.md) — one-command prompt/script audio flow and recovery
-16. [`docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md`](./docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md) — Lite/Standard measurements, failures, and decision
-17. [`docs/evaluations/voice-listening-rubric.md`](./docs/evaluations/voice-listening-rubric.md) — anonymous voice samples and human review
-18. [`docs/phase-3-6-meditation-pacing-and-fish-evaluation.md`](./docs/phase-3-6-meditation-pacing-and-fish-evaluation.md) — slower narration, deterministic sentence rests, log fix, and Fish trial
-19. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
-20. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
-21. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
+1. [`docs/local-first-master-plan.md`](./docs/local-first-master-plan.md) — current state, model inventory, quality contract, and authoritative PR-by-PR path to Local V1
+2. [`docs/architecture.md`](./docs/architecture.md) — concise system explanation
+3. [`system-design.md`](./system-design.md) — canonical design specification
+4. [`docs/repository-layout.md`](./docs/repository-layout.md) — where code belongs
+5. [`docs/setup.md`](./docs/setup.md) — machine and build sequence
+6. [`docs/roadmap.md`](./docs/roadmap.md) — implementation phases
+7. [`docs/native-portability.md`](./docs/native-portability.md) — automatic cross-platform runtime and weak-laptop behavior
+8. [`docs/phase-1-local-core.md`](./docs/phase-1-local-core.md) — the first executable flow
+9. [`docs/phase-2-deterministic-audio.md`](./docs/phase-2-deterministic-audio.md) — exact audio assembly
+10. [`docs/phase-3-quality-caching-recovery.md`](./docs/phase-3-quality-caching-recovery.md) — cache, retry, and resume
+11. [`docs/phase-3-5-overall-guide.md`](./docs/phase-3-5-overall-guide.md) — start here for the from-zero explanation and local tester
+12. [`docs/phase-3-5-first-local-meditation.md`](./docs/phase-3-5-first-local-meditation.md) — real local models and the first offline meditation
+13. [`docs/phase-3-5-runtime-adapters.md`](./docs/phase-3-5-runtime-adapters.md) — ports, metadata, error taxonomy, and native adapters
+14. [`docs/phase-3-5-real-script-speech.md`](./docs/phase-3-5-real-script-speech.md) — first real speech, script syntax, processing, and recovery
+15. [`docs/phase-3-5-local-generation.md`](./docs/phase-3-5-local-generation.md) — plan-first generation, validation, safety, and draft resume
+16. [`docs/phase-3-5-end-to-end.md`](./docs/phase-3-5-end-to-end.md) — one-command prompt/script audio flow and recovery
+17. [`docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md`](./docs/evaluations/phase-3-5-model-bakeoff-2026-07-26.md) — Lite/Standard measurements, failures, and decision
+18. [`docs/evaluations/voice-listening-rubric.md`](./docs/evaluations/voice-listening-rubric.md) — anonymous voice samples and human review
+19. [`docs/phase-3-6-meditation-pacing-and-fish-evaluation.md`](./docs/phase-3-6-meditation-pacing-and-fish-evaluation.md) — slower narration, deterministic sentence rests, log fix, and Fish trial
+20. [`docs/implementation-pr-plan.md`](./docs/implementation-pr-plan.md) — one bounded PR at a time
+21. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — contribution and review workflow
+22. [`docs/ai-collaboration.md`](./docs/ai-collaboration.md) — bounded AI-assisted work
 
 [`previous-chat.md`](./previous-chat.md) preserves the original discussion for historical context; it is not a current source of truth.
 

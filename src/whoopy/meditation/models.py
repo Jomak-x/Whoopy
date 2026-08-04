@@ -22,6 +22,18 @@ SpokenText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=5_000),
 ]
+MeditationTechnique = Literal[
+    "arrival",
+    "body_scan",
+    "focused_attention",
+    "loving_kindness",
+    "noting",
+    "reflection",
+    "resting_awareness",
+    "return",
+    "sleep_transition",
+    "visualization",
+]
 
 
 class ProposedSection(BaseModel):
@@ -32,6 +44,7 @@ class ProposedSection(BaseModel):
     id: SectionId
     title: ShortText
     purpose: ShortText
+    technique: MeditationTechnique
     weight: int = Field(ge=1, le=5)
     pause_seconds: float = Field(ge=6, le=20)
 
@@ -61,6 +74,7 @@ class PlannedSection(BaseModel):
     id: SectionId
     title: ShortText
     purpose: ShortText
+    technique: MeditationTechnique = "focused_attention"
     target_speech_seconds: int = Field(ge=8)
     # Very short requests with many sections may scale the model's generous
     # proposal down, while normal practices retain the requested 6-20 seconds.
