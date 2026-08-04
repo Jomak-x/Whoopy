@@ -17,8 +17,8 @@ required files, and local resource expectations. The actual multi-gigabyte
 downloads live under `models/`, which is deliberately not committed to Git.
 
 Voice cloning has a separate safety declaration in
-`config/voice_references.yaml`. It names one user-provided recording and
-transcript, records explicit local-experiment consent, and pins both byte sizes
+`config/voice_references.yaml`. It names one explicitly selected local recording
+and transcript, records its local-experiment scope, and pins both byte sizes
 and SHA-256 digests. Generation, resume, one-segment regeneration, the Studio,
 and smoke tests all resolve that declaration. They reject missing, changed, or
 symlinked files and never search the laptop for a convenient recording.

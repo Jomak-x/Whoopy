@@ -21,7 +21,7 @@ Implementation status:
 - **Phase 3.6 — merged; human acceptance pending:** adaptive pacing and
   additional voice adapters are merged, but voice and meditation quality are
   not accepted until listening review.
-- **Local stabilization — PR 14 active:** durable recovery is merged and cross-platform CI is green;
+- **Local stabilization — PR 14 implemented:** durable recovery is merged and cross-platform CI is green;
   managed voice packs are being made installable, verifiable, removable, and
   testable before wider voice comparison. Blind voice
   selection, meditation evaluation, technique blueprints, pacing v2, reviewed

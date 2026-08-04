@@ -87,7 +87,7 @@ class VoiceReferenceSpec(BaseModel):
     transcript_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     consent_confirmed: bool
     consent_scope: Literal["local_voice_cloning_experiment_only"]
-    source_kind: Literal["user_provided"]
+    source_kind: Literal["user_provided", "project_generated"]
 
     @model_validator(mode="after")
     def _safe_identity(self) -> VoiceReferenceSpec:

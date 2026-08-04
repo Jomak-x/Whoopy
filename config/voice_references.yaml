@@ -1,4 +1,4 @@
-# Local voice-cloning references are explicit user assets, never files chosen
+# Local voice-cloning references are explicitly selected assets, never files chosen
 # by a recursive directory search. The audio itself stays ignored under
 # models/; this checked-in declaration binds its identity, consent scope, byte
 # size, and digest so Fish/MOSS cannot silently clone a different recording.
@@ -16,4 +16,4 @@ references:
     transcript_sha256: ee57bbdd383143a6e2e7b0a2ef748e507b6b2f6f5e8f6d3ec645098d550bb213
     consent_confirmed: true
     consent_scope: local_voice_cloning_experiment_only
-    source_kind: user_provided
+    source_kind: project_generated

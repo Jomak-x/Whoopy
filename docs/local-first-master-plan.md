@@ -298,7 +298,7 @@ Exit criteria:
 
 ### PR 14: Turn Experimental Voices Into Managed Local Models
 
-Status: **implemented locally and machine-verified; review/CI pending**. See [PR 14 managed model packs](./phase-4-pr14-managed-model-packs.md)
+Status: **implemented and machine-verified in PR 14**. See [PR 14 managed model packs](./phase-4-pr14-managed-model-packs.md)
 for the beginner-facing commands and safety boundaries.
 
 Goal: make the current comparison reproducible and safe before adding more
