@@ -75,3 +75,6 @@ class SpeechSynthesizer(Protocol):
 
     def synthesize(self, segment: SpeechSegment) -> PcmAudio:
         """Generate mono signed 16-bit PCM or raise a classified error."""
+
+    def close(self) -> None:
+        """Release model memory and any owned subprocesses deterministically."""

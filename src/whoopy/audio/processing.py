@@ -116,3 +116,16 @@ class ProcessedSpeechSynthesizer:
             pcm_s16le=normalized.tobytes(),
             sample_rate=self.sample_rate,
         )
+
+    def close(self) -> None:
+        """Release the wrapped model or subprocess exactly once per worker."""
+
+        self.inner.close()
+
+    def diagnostics(self) -> tuple[str, ...]:
+        """Expose bounded inner-worker diagnostics without widening the TTS port."""
+
+        diagnostics = getattr(self.inner, "diagnostics", None)
+        if not callable(diagnostics):
+            return ()
+        return tuple(str(message) for message in diagnostics())

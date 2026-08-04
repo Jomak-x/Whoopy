@@ -9,17 +9,23 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
+import re
+import signal
+import socket
 import subprocess
 import sys
 import threading
 import webbrowser
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from collections.abc import Callable
+from contextlib import suppress
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import unquote, urlparse
 from uuid import UUID, uuid4
 
@@ -32,11 +38,16 @@ from whoopy.artifacts import (
     load_artifact_lock,
 )
 from whoopy.hardware import diagnose, inspect_hardware, load_runtime_profiles
-from whoopy.pipeline import RunRecord
+from whoopy.pipeline import RunExecution, RunRecord, RunStage, RunStatus, RunStore
+from whoopy.pipeline.locks import RunLock, RunLockUnavailable
+from whoopy.pipeline.runs import RunNotFoundError, RunStoreError
+from whoopy.timeline import SpeechSegment
 from whoopy.voices import KOKORO_ENGLISH_VOICES
 
 MAX_REQUEST_BYTES = 64_000
 MAX_RECENT_RUNS = 24
+PROCESS_STOP_TIMEOUT_SECONDS = 2.0
+SEGMENT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 ALLOWED_ARTIFACTS = {
     "run": "run.json",
     "script": "script.md",
@@ -48,37 +59,26 @@ ALLOWED_ARTIFACTS = {
 }
 
 
-def _utc_now_text() -> str:
-    return datetime.now(UTC).isoformat()
-
-
 @dataclass
 class GenerationTask:
-    """In-memory status for one process launched from the browser."""
+    """Ephemeral process handle for a durable browser-initiated run.
+
+    This deliberately does *not* own status or progress.  Those values live in
+    ``run.json`` so a restarted web server can still show the real run state.
+    """
 
     task_id: str
-    mode: str
-    title: str
-    status: str = "queued"
-    created_at: str = field(default_factory=_utc_now_text)
-    updated_at: str = field(default_factory=_utc_now_text)
-    run_id: str | None = None
-    error: str | None = None
-    process: subprocess.Popen[str] | None = field(default=None, repr=False)
+    run_id: str
+    mode: str | None = None
+    process: Any | None = None
+    launching: bool = True
+    cancel_requested: bool = False
 
-    def public(self) -> dict[str, Any]:
-        """Return only values intended for the JSON API."""
+    @property
+    def active(self) -> bool:
+        """Include the pre-Popen window in duplicate/cancel decisions."""
 
-        return {
-            "task_id": self.task_id,
-            "mode": self.mode,
-            "title": self.title,
-            "status": self.status,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-            "run_id": self.run_id,
-            "error": self.error,
-        }
+        return self.launching or (self.process is not None and self.process.poll() is None)
 
 
 class LocalWebApplication:
@@ -91,6 +91,7 @@ class LocalWebApplication:
         config_directory: Path,
         models_directory: Path,
         runs_directory: Path,
+        command_launcher: Callable[..., Any] | None = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.config_directory = self._resolve(config_directory)
@@ -98,6 +99,8 @@ class LocalWebApplication:
         self.runs_directory = self._resolve(runs_directory)
         self._tasks: dict[str, GenerationTask] = {}
         self._task_lock = threading.Lock()
+        # Injection keeps web tests independent from a shell child process.
+        self._command_launcher: Callable[..., Any] = command_launcher or subprocess.Popen
 
     def _resolve(self, path: Path) -> Path:
         return path.resolve() if path.is_absolute() else (self.project_root / path).resolve()
@@ -216,6 +219,7 @@ class LocalWebApplication:
         quality_passed: bool | None = None
         tts_model: str | None = None
         voice: str | None = None
+        execution = record.execution
         try:
             manifest = json.loads((directory / "audio-manifest.json").read_text(encoding="utf-8"))
             duration_seconds = round(float(manifest["duration_ms"]) / 1_000, 2)
@@ -249,7 +253,26 @@ class LocalWebApplication:
             "recovery": (
                 record.recovery.model_dump(mode="json") if record.recovery is not None else None
             ),
+            # Lifecycle stage, heartbeat, lease, and segment position are all
+            # persisted by the worker. Returning them verbatim avoids a second,
+            # lossy web-only progress model.
+            "execution": (execution.model_dump(mode="json") if execution is not None else None),
         }
+
+    def run(self, run_id: str) -> dict[str, Any] | None:
+        """Read one durable record; this works after a web-server restart."""
+
+        try:
+            record = RunStore(self.runs_directory).load(run_id)
+        except (ValueError, RunNotFoundError, RunStoreError):
+            return None
+        return self._run_summary(record, self.runs_directory / str(record.run_id))
+
+    def _record(self, run_id: str) -> RunRecord | None:
+        try:
+            return RunStore(self.runs_directory).load(run_id)
+        except (ValueError, RunNotFoundError, RunStoreError):
+            return None
 
     def start_generation(self, payload: Any) -> dict[str, Any]:
         """Validate a browser request and start it without blocking HTTP."""
@@ -325,11 +348,13 @@ class LocalWebApplication:
         if mode == "prompt" and not 1 <= minutes <= 30:
             raise ValueError("Prompt duration must be between 1 and 30 minutes.")
 
-        task_id = str(uuid4())
-        title = text if len(text) <= 90 else f"{text[:87]}..."
-        task = GenerationTask(task_id=task_id, mode=mode, title=title)
+        # Allocating the UUID and record before the child begins means the UI
+        # can follow this run through planning and even after a web restart.
+        record = RunStore(self.runs_directory).create(text)
+        run_id = str(record.run_id)
+        task = GenerationTask(task_id=run_id, run_id=run_id, mode=mode)
         with self._task_lock:
-            self._tasks[task_id] = task
+            self._tasks[run_id] = task
         thread = threading.Thread(
             target=self._run_generation,
             args=(
@@ -343,11 +368,11 @@ class LocalWebApplication:
                 moss_instruction,
                 moss_use_reference,
             ),
-            name=f"whoopy-{task_id[:8]}",
+            name=f"whoopy-{run_id[:8]}",
             daemon=True,
         )
         thread.start()
-        return task.public()
+        return self._task_public(task)
 
     def task(self, task_id: str) -> dict[str, Any] | None:
         try:
@@ -356,10 +381,15 @@ class LocalWebApplication:
             return None
         with self._task_lock:
             task = self._tasks.get(task_id)
-            return None if task is None else task.public()
+        if task is not None:
+            return self._task_public(task)
+        # The historical /api/tasks endpoint remains a compatibility alias,
+        # but it now recovers its answer from the durable record.
+        run = self.run(task_id)
+        return None if run is None else {"task_id": task_id, **run}
 
     def cancel_task(self, task_id: str) -> dict[str, Any] | None:
-        """Stop only the selected child process; durable checkpoints remain."""
+        """Request cancellation without losing the pre-launch race window."""
 
         try:
             UUID(task_id)
@@ -367,16 +397,108 @@ class LocalWebApplication:
             return None
         with self._task_lock:
             task = self._tasks.get(task_id)
-            if task is None:
-                return None
-            if task.status in ("completed", "failed", "cancelled"):
-                return task.public()
-            task.status = "cancelled"
-            task.updated_at = _utc_now_text()
-            process = task.process
-        if process is not None and process.poll() is None:
-            process.terminate()
-        return task.public()
+            if task is not None and task.active:
+                task.cancel_requested = True
+                process = task.process
+            else:
+                process = None
+        if task is None or not task.active:
+            return self.cancel_run(task_id)
+        if process is not None:
+            self._stop_process(process)
+        return self._task_public(task)
+
+    def cancel_run(self, run_id: str) -> dict[str, Any] | None:
+        """Cancel through the CLI so it also works after a web restart."""
+
+        record = self._record(run_id)
+        if record is None:
+            return None
+        if record.status is RunStatus.QUEUED:
+            self._persist_prelaunch_cancel(run_id)
+            run = self.run(run_id)
+            return None if run is None else {"task_id": run_id, **run}
+        if record.status is not RunStatus.RUNNING:
+            raise ValueError(
+                f"Run {run_id} is {record.status.value}; only queued or running runs can cancel."
+            )
+        return self._launch_recovery_command(run_id, "cancel", prevalidated=True)
+
+    def resume_run(self, run_id: str) -> dict[str, Any] | None:
+        """Launch the CLI's durable resume path without inventing web state."""
+
+        try:
+            record = RunStore(self.runs_directory).reconcile_stale_run(run_id)
+        except (ValueError, RunNotFoundError, RunStoreError):
+            return None
+        if record.status not in (RunStatus.FAILED, RunStatus.INTERRUPTED):
+            raise ValueError(
+                f"Run {run_id} is {record.status.value}; only failed or interrupted runs resume."
+            )
+        return self._launch_recovery_command(run_id, "resume", prevalidated=True)
+
+    def regenerate_segment(self, run_id: str, segment_id: str) -> dict[str, Any] | None:
+        """Ask the CLI to invalidate and rebuild one named speech segment."""
+
+        record = self._record(run_id)
+        if record is None:
+            return None
+        if record.status not in (
+            RunStatus.COMPLETED,
+            RunStatus.FAILED,
+            RunStatus.INTERRUPTED,
+        ):
+            raise ValueError(
+                f"Run {run_id} is {record.status.value}; only stopped runs regenerate."
+            )
+        try:
+            timeline = RunStore(self.runs_directory).load_timeline(run_id)
+        except RunStoreError as error:
+            raise ValueError(f"Run {run_id} has no valid timeline to regenerate.") from error
+        matching = [segment for segment in timeline.segments if segment.id == segment_id]
+        if not matching:
+            raise ValueError(f"Segment {segment_id} is not present in run {run_id}.")
+        if not isinstance(matching[0], SpeechSegment):
+            raise ValueError(f"Segment {segment_id} is not a speech segment.")
+        return self._launch_recovery_command(
+            run_id,
+            "regenerate-segment",
+            segment_id,
+            prevalidated=True,
+        )
+
+    def _task_public(self, task: GenerationTask) -> dict[str, Any]:
+        run = self.run(task.run_id)
+        if run is None:
+            # The record was successfully created before the task was stored;
+            # this branch is only defensive against external manual deletion.
+            return {"task_id": task.task_id, "run_id": task.run_id, "status": "missing"}
+        return {"task_id": task.task_id, **run}
+
+    def _launch_recovery_command(
+        self,
+        run_id: str,
+        command_name: str,
+        segment_id: str | None = None,
+        *,
+        prevalidated: bool = False,
+    ) -> dict[str, Any] | None:
+        if not prevalidated and self.run(run_id) is None:
+            return None
+        task = GenerationTask(task_id=run_id, run_id=run_id)
+        with self._task_lock:
+            existing = self._tasks.get(run_id)
+            if existing is not None and existing.active:
+                raise ValueError("This run already has an active local worker.")
+            self._tasks[run_id] = task
+        thread = threading.Thread(
+            target=self._run_recovery_command,
+            args=(task, command_name, segment_id),
+            name=f"whoopy-{command_name}-{run_id[:8]}",
+            daemon=True,
+        )
+        thread.start()
+        return self._task_public(task)
 
     def _run_generation(
         self,
@@ -391,92 +513,270 @@ class LocalWebApplication:
         moss_use_reference: bool,
     ) -> None:
         input_path: Path | None = None
-        with self._task_lock:
-            if task.status == "cancelled":
-                return
-            task.status = "running"
-            task.updated_at = _utc_now_text()
-
-        command = [
-            sys.executable,
-            "-m",
-            "whoopy",
-            "generate",
-            "--json",
-            "--tts-model",
-            tts_model,
-            "--voice",
-            voice,
-            "--speed",
-            str(speed),
-            "--moss-language",
-            moss_language,
-            "--moss-instruction",
-            moss_instruction,
-            "--config-dir",
-            str(self.config_directory),
-            "--models-dir",
-            str(self.models_directory),
-            "--runs-dir",
-            str(self.runs_directory),
-        ]
-        if not moss_use_reference:
-            command.append("--moss-direct-voice")
-        if task.mode == "prompt":
-            command.extend(
-                [
-                    text,
-                    "--minutes",
-                    str(minutes),
-                    "--profile",
-                    "standard",
-                    "--draft-id",
-                    task.task_id,
-                ]
-            )
-        else:
-            input_directory = self.runs_directory / ".web-inputs"
-            input_directory.mkdir(parents=True, exist_ok=True)
-            input_path = input_directory / f"{task.task_id}.md"
-            input_path.write_text(text + "\n", encoding="utf-8")
-            command.extend(["--script-file", str(input_path), "--profile", "basic"])
-
         try:
-            process = subprocess.Popen(
+            with self._task_lock:
+                cancelled_before_launch = task.cancel_requested
+            if cancelled_before_launch:
+                self._persist_prelaunch_cancel(task.run_id)
+                return
+            command = [
+                sys.executable,
+                "-m",
+                "whoopy",
+                "generate",
+                "--json",
+                "--run-id",
+                task.run_id,
+                "--tts-model",
+                tts_model,
+                "--voice",
+                voice,
+                "--speed",
+                str(speed),
+                "--moss-language",
+                moss_language,
+                "--moss-instruction",
+                moss_instruction,
+                "--config-dir",
+                str(self.config_directory),
+                "--models-dir",
+                str(self.models_directory),
+                "--runs-dir",
+                str(self.runs_directory),
+            ]
+            if not moss_use_reference:
+                command.append("--moss-direct-voice")
+            if task.mode == "prompt":
+                command.extend(
+                    [
+                        text,
+                        "--minutes",
+                        str(minutes),
+                        "--profile",
+                        "standard",
+                    ]
+                )
+            else:
+                input_directory = self.runs_directory / ".web-inputs"
+                input_directory.mkdir(parents=True, exist_ok=True)
+                input_path = input_directory / f"{task.task_id}.md"
+                input_path.write_text(text + "\n", encoding="utf-8")
+                command.extend(["--script-file", str(input_path), "--profile", "basic"])
+            process = self._command_launcher(
                 command,
                 cwd=self.project_root,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                **self._process_group_options(),
             )
             with self._task_lock:
                 task.process = process
-                cancelled = task.status == "cancelled"
-            if cancelled:
-                process.terminate()
+                task.launching = False
+                cancel_after_launch = task.cancel_requested
+            if cancel_after_launch:
+                self._stop_process(process)
             stdout, stderr = process.communicate()
+            # The CLI owns all durable transitions and errors.  Do not write a
+            # competing status from the web process merely because its child
+            # exited; the record remains the source of truth.
             with self._task_lock:
-                if task.status == "cancelled":
-                    return
-                if process.returncode == 0:
-                    result = json.loads(stdout)
-                    task.run_id = str(result["run_id"])
-                    task.status = "completed"
-                else:
-                    task.status = "failed"
-                    task.error = self._friendly_process_error(stderr)
-                task.updated_at = _utc_now_text()
-        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-            with self._task_lock:
-                if task.status != "cancelled":
-                    task.status = "failed"
-                    task.error = str(error)
-                    task.updated_at = _utc_now_text()
+                cancelled = task.cancel_requested
+            if cancelled:
+                self._persist_prelaunch_cancel(task.run_id)
+            elif process.returncode not in (0, 130, 143):
+                self._persist_process_failure(task.run_id, self._friendly_process_error(stderr))
+            _ = stdout
+        except OSError as error:
+            self._persist_process_failure(task.run_id, f"Could not launch generation: {error}")
         finally:
             with self._task_lock:
+                task.launching = False
                 task.process = None
             if input_path is not None:
-                input_path.unlink(missing_ok=True)
+                with suppress(OSError):
+                    input_path.unlink(missing_ok=True)
+
+    def _run_recovery_command(
+        self,
+        task: GenerationTask,
+        command_name: str,
+        segment_id: str | None,
+    ) -> None:
+        command = [
+            sys.executable,
+            "-m",
+            "whoopy",
+            "run",
+            command_name,
+            task.run_id,
+        ]
+        if segment_id is not None:
+            command.append(segment_id)
+        command.extend(
+            [
+                "--json",
+                "--config-dir",
+                str(self.config_directory),
+                "--models-dir",
+                str(self.models_directory),
+                "--runs-dir",
+                str(self.runs_directory),
+            ]
+        )
+        try:
+            process = self._command_launcher(
+                command,
+                cwd=self.project_root,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                **self._process_group_options(),
+            )
+            with self._task_lock:
+                task.process = process
+                task.launching = False
+                cancel_after_launch = task.cancel_requested
+            if cancel_after_launch and command_name != "cancel":
+                self._stop_process(process)
+            _stdout, stderr = process.communicate()
+            with self._task_lock:
+                cancelled = task.cancel_requested
+            if cancelled:
+                self._persist_prelaunch_cancel(task.run_id)
+            elif process.returncode not in (0, 130, 143):
+                self._persist_process_failure(
+                    task.run_id,
+                    self._friendly_process_error(stderr),
+                )
+        except OSError as error:
+            self._persist_process_failure(
+                task.run_id,
+                f"Could not launch {command_name}: {error}",
+            )
+        finally:
+            with self._task_lock:
+                task.launching = False
+                task.process = None
+
+    @staticmethod
+    def _process_group_options() -> dict[str, object]:
+        if os.name == "posix":
+            return {"start_new_session": True}
+        creation_flag = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        return {"creationflags": creation_flag} if creation_flag else {}
+
+    @staticmethod
+    def _stop_process(process: Any) -> None:
+        """Bound cancellation so the HTTP request never waits indefinitely."""
+
+        if process.poll() is not None:
+            return
+        try:
+            if os.name == "posix" and isinstance(getattr(process, "pid", None), int):
+                cast(Any, os).killpg(process.pid, signal.SIGTERM)
+            else:
+                process.terminate()
+            process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+            return
+        except (OSError, ProcessLookupError):
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        try:
+            if os.name == "posix" and isinstance(getattr(process, "pid", None), int):
+                cast(Any, os).killpg(
+                    process.pid,
+                    getattr(signal, "SIGKILL", signal.SIGTERM),
+                )
+            else:
+                process.kill()
+            process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+        except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
+            return
+
+    def _persist_process_failure(self, run_id: str, message: str) -> None:
+        """Keep launcher/CLI failures from becoming permanently queued runs."""
+
+        store = RunStore(self.runs_directory)
+        try:
+            with RunLock(store.run_directory(run_id)):
+                record = store.load(run_id)
+                if record.recovery is None or record.status not in (
+                    RunStatus.QUEUED,
+                    RunStatus.FAILED,
+                    RunStatus.INTERRUPTED,
+                ):
+                    return
+                now = datetime.now(UTC)
+                attempt_id = uuid4()
+                resumed = record.status in (RunStatus.FAILED, RunStatus.INTERRUPTED)
+                stage = (
+                    RunStage.PLANNING
+                    if record.status is RunStatus.QUEUED and record.script_artifact is None
+                    else RunStage.COMPILING
+                )
+                stopped_execution = RunExecution(
+                    stage=stage,
+                    attempt_id=attempt_id,
+                    owner_id=f"web:{socket.gethostname()}:{os.getpid()}",
+                    pid=os.getpid(),
+                    started_at=now,
+                    heartbeat_at=now,
+                    lease_expires_at=now + timedelta(seconds=1),
+                    message="The local command could not start.",
+                ).finish(message=message or "Local command failed without an error message.")
+                failed = record.transition(
+                    RunStatus.FAILED,
+                    updated_at=now,
+                    recovery=record.recovery.model_copy(
+                        update={
+                            "process_attempts": record.recovery.process_attempts + 1,
+                            "resume_count": record.recovery.resume_count + int(resumed),
+                            "failed_segment_id": None,
+                        }
+                    ),
+                    execution=stopped_execution,
+                    error=message or "Local command failed without an error message.",
+                )
+                # One atomic record replacement prevents observers from seeing
+                # an artificial RUNNING state for a command that never started.
+                store.save(failed)
+        except (OSError, RunLockUnavailable, RunStoreError, ValueError):
+            return
+
+    def _persist_prelaunch_cancel(self, run_id: str) -> None:
+        """Turn a queued web request into a durable, resumable interruption."""
+
+        store = RunStore(self.runs_directory)
+        try:
+            with RunLock(store.run_directory(run_id)):
+                record = store.load(run_id)
+                if record.status is not RunStatus.QUEUED or record.recovery is None:
+                    return
+                now = datetime.now(UTC)
+                interrupted = record.transition(
+                    RunStatus.INTERRUPTED,
+                    updated_at=now,
+                    recovery=record.recovery.model_copy(
+                        update={"process_attempts": record.recovery.process_attempts + 1}
+                    ),
+                    execution=RunExecution(
+                        stage=(
+                            RunStage.PLANNING
+                            if record.script_artifact is None
+                            else RunStage.COMPILING
+                        ),
+                        interruption_kind="user_cancelled",
+                        message=(
+                            "Generation was cancelled before the local command started; "
+                            "the durable request can be resumed."
+                        ),
+                    ),
+                )
+                store.save(interrupted)
+        except (OSError, RunLockUnavailable, RunStoreError, ValueError):
+            return
 
     @staticmethod
     def _friendly_process_error(stderr: str) -> str:
@@ -567,7 +867,12 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
                     return
                 self._send_json(task, status=HTTPStatus.ACCEPTED)
                 return
+            if parsed.path.startswith("/api/runs/"):
+                self._post_run_action(parsed.path)
+                return
             if parsed.path.startswith("/api/tasks/") and parsed.path.endswith("/cancel"):
+                # Compatibility with the temporary Phase 3 tester. New code
+                # uses the durable run endpoint below.
                 task_id = parsed.path.removeprefix("/api/tasks/").removesuffix("/cancel")
                 cancelled_task = application.cancel_task(task_id)
                 if cancelled_task is None:
@@ -577,8 +882,58 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
                 return
             self._send_error(HTTPStatus.NOT_FOUND, "Endpoint not found.")
 
+        def _post_run_action(self, path: str) -> None:
+            parts = path.strip("/").split("/")
+            if len(parts) < 4 or parts[:2] != ["api", "runs"]:
+                self._send_error(HTTPStatus.NOT_FOUND, "Run action not found.")
+                return
+            run_id = parts[2]
+            try:
+                UUID(run_id)
+            except ValueError:
+                self._send_error(HTTPStatus.NOT_FOUND, "Run not found.")
+                return
+            try:
+                payload = self._read_json()
+                if not isinstance(payload, dict):
+                    raise ValueError("Request body must be a JSON object.")
+                if len(parts) == 4 and parts[3] == "cancel":
+                    if payload:
+                        raise ValueError("Cancel does not accept request fields.")
+                    task = application.cancel_task(run_id)
+                elif len(parts) == 4 and parts[3] == "resume":
+                    if payload:
+                        raise ValueError("Resume does not accept request fields.")
+                    task = application.resume_run(run_id)
+                elif len(parts) == 6 and parts[3] == "segments" and parts[5] == "regenerate":
+                    segment_id = parts[4]
+                    if not SEGMENT_ID_PATTERN.fullmatch(segment_id):
+                        raise ValueError(
+                            "Segment ID must contain only lowercase letters, digits, _ or -."
+                        )
+                    if payload:
+                        raise ValueError("Regenerate does not accept request fields.")
+                    task = application.regenerate_segment(run_id, segment_id)
+                else:
+                    self._send_error(HTTPStatus.NOT_FOUND, "Run action not found.")
+                    return
+            except ValueError as error:
+                self._send_error(HTTPStatus.BAD_REQUEST, str(error))
+                return
+            if task is None:
+                self._send_error(HTTPStatus.NOT_FOUND, "Run not found.")
+            else:
+                self._send_json(task, status=HTTPStatus.ACCEPTED)
+
         def _serve_run_path(self, path: str) -> None:
             parts = path.strip("/").split("/")
+            if len(parts) == 3 and parts[:2] == ["api", "runs"]:
+                run = application.run(parts[2])
+                if run is None:
+                    self._send_error(HTTPStatus.NOT_FOUND, "Run not found.")
+                else:
+                    self._send_json(run)
+                return
             if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "audio":
                 audio = application.audio_path(parts[2])
                 if audio is None:
@@ -673,9 +1028,18 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
         def _origin_is_local(self) -> bool:
             origin = self.headers.get("Origin")
             if origin is None:
+                # Native clients do not send Origin. The server is loopback-only,
+                # so they retain access without pretending to be a browser page.
                 return True
-            hostname = urlparse(origin).hostname
-            return hostname in ("127.0.0.1", "localhost")
+            parsed = urlparse(origin)
+            host = self.headers.get("Host", "").lower()
+            return (
+                parsed.scheme == "http"
+                and parsed.username is None
+                and parsed.password is None
+                and parsed.hostname in ("127.0.0.1", "localhost")
+                and parsed.netloc.lower() == host
+            )
 
         def _send_json(
             self,

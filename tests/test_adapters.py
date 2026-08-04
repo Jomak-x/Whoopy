@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -17,6 +18,7 @@ from whoopy.adapters.llm.llama_cpp import (
     LlamaCppScriptGenerator,
     LlamaCppSettings,
     _assistant_text,
+    _run_process,
 )
 from whoopy.adapters.tts.fish_speech import FishSpeech14Adapter
 from whoopy.adapters.tts.moss_tts import MossTTSAdapter, MossTTSSettings
@@ -111,6 +113,14 @@ def test_llama_adapter_classifies_timeout_as_transient(tmp_path: Path) -> None:
 
     with pytest.raises(TransientAdapterError, match="timeout"):
         adapter.generate(ScriptGenerationRequest(prompt="A prompt."))
+
+
+def test_default_llama_runner_bounds_and_reaps_a_hung_process() -> None:
+    with pytest.raises(subprocess.TimeoutExpired):
+        _run_process(
+            [sys.executable, "-c", "import time; time.sleep(120)"],
+            0.05,
+        )
 
 
 def test_llama_adapter_classifies_nonzero_exit_as_fatal(tmp_path: Path) -> None:

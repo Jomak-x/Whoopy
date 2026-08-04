@@ -45,7 +45,10 @@ whoopy generate --script-file examples/first-meditation.md
 whoopy evaluate --output-dir evaluations/local/my-bakeoff
 whoopy run create "A short grounding meditation."
 whoopy run show <run-id>
+whoopy run reconcile [<run-id>]
 whoopy run resume <run-id>
+whoopy run cancel <run-id>
+whoopy run regenerate-segment <run-id> <segment-id>
 whoopy worker process <run-id>
 whoopy cache stats
 ```
@@ -161,6 +164,10 @@ Repeat the same prompt to observe cache hits in `run.json`, inspect them with
 `whoopy cache stats`, or recover a failed/interrupted run with
 `whoopy run resume <run-id>`. See
 [`docs/phase-3-quality-caching-recovery.md`](./docs/phase-3-quality-caching-recovery.md).
+PR 13 adds durable stages, two-second heartbeats, 15-second leases, exclusive
+run locks, bounded logs, cancellation, stale-run reconciliation, and one-segment
+regeneration. See
+[`docs/phase-4-pr13-durable-recovery.md`](./docs/phase-4-pr13-durable-recovery.md).
 
 ## Configuration
 

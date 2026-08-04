@@ -72,3 +72,6 @@ class FixtureSpeechSynthesizer:
         if byteorder != "little":
             samples.byteswap()
         return PcmAudio(pcm_s16le=samples.tobytes(), sample_rate=self.sample_rate)
+
+    def close(self) -> None:
+        """The dependency-free fixture owns no resources."""

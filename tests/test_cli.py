@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import signal
+import socket
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import UUID
 
+import pytest
 import yaml
 from pytest import CaptureFixture, MonkeyPatch
 
@@ -12,7 +17,32 @@ from whoopy.adapters.tts import SherpaOnnxKokoroAdapter
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.cli import main
 from whoopy.hardware import HardwareSnapshot
+from whoopy.pipeline.generation import PendingGenerationConfig
+from whoopy.pipeline.locks import RunLock
+from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore
 from whoopy.ports import AdapterMetadata, ScriptGenerationRequest, ScriptGenerationResult
+
+RUN_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+
+
+def _standard_snapshot() -> HardwareSnapshot:
+    return HardwareSnapshot(
+        operating_system="linux",
+        architecture="x86_64",
+        cpu_count=8,
+        total_ram_gb=16,
+        available_ram_gb=9,
+        free_disk_gb=20,
+        accelerators=["cpu"],
+    )
+
+
+class _ClosableFixture(FixtureSpeechSynthesizer):
+    def __init__(self) -> None:
+        self.close_calls = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
 
 
 def test_help_exits_successfully(capsys: CaptureFixture[str]) -> None:
@@ -266,10 +296,17 @@ def test_generate_script_file_writes_real_flow_artifacts_with_adapter_contract(
         accelerators=["cpu"],
     )
     monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: snapshot)
+    synthesizers: list[_ClosableFixture] = []
+
+    def synthesizer_factory(**_kwargs: object) -> _ClosableFixture:
+        synthesizer = _ClosableFixture()
+        synthesizers.append(synthesizer)
+        return synthesizer
+
     monkeypatch.setattr(
         SherpaOnnxKokoroAdapter,
         "from_artifact_store",
-        classmethod(lambda _cls, **_kwargs: FixtureSpeechSynthesizer()),
+        classmethod(lambda _cls, **kwargs: synthesizer_factory(**kwargs)),
     )
     script_path = tmp_path / "meditation.md"
     script_path.write_text(
@@ -296,7 +333,7 @@ def test_generate_script_file_writes_real_flow_artifacts_with_adapter_contract(
 
     completed = json.loads(capsys.readouterr().out)
     run_directory = runs_dir / completed["run_id"]
-    assert completed["schema_version"] == 4
+    assert completed["schema_version"] == 6
     assert completed["status"] == "completed"
     assert completed["source_kind"] == "script_file"
     assert (run_directory / "script.md").read_text(encoding="utf-8").startswith("# Test")
@@ -307,6 +344,8 @@ def test_generate_script_file_writes_real_flow_artifacts_with_adapter_contract(
     assert (run_directory / "audio-manifest.json").is_file()
     quality = json.loads((run_directory / "quality.json").read_text(encoding="utf-8"))
     assert quality["passed"] is True
+    assert len(synthesizers) == 2
+    assert [synthesizer.close_calls for synthesizer in synthesizers] == [1, 1]
 
 
 class _DraftFixture:
@@ -357,6 +396,17 @@ class _DraftFixture:
             metadata=self.metadata,
             elapsed_seconds=0.01,
         )
+
+
+class _InterruptOnceDraft(_DraftFixture):
+    def __init__(self) -> None:
+        self.interruptions_remaining = 1
+
+    def generate(self, request: ScriptGenerationRequest) -> ScriptGenerationResult:
+        if self.interruptions_remaining:
+            self.interruptions_remaining -= 1
+            raise KeyboardInterrupt
+        return super().generate(request)
 
 
 def test_draft_command_persists_validated_local_generation(
@@ -460,7 +510,7 @@ def test_generate_prompt_joins_validated_draft_to_real_audio_contract(
     run = runs_dir / completed["run_id"]
     timeline = json.loads((run / "timeline.json").read_text(encoding="utf-8"))
     metadata = json.loads((run / "model-metadata.json").read_text(encoding="utf-8"))
-    assert completed["schema_version"] == 5
+    assert completed["schema_version"] == 6
     assert completed["source_kind"] == "generated_prompt"
     assert completed["status"] == "completed"
     assert timeline["source"] == "generated_prompt"
@@ -470,3 +520,290 @@ def test_generate_prompt_joins_validated_draft_to_real_audio_contract(
     assert len(list((run / "raw-model-output").glob("*.json"))) == 4
     assert (run / "narration.wav").is_file()
     assert json.loads((run / "quality.json").read_text(encoding="utf-8"))["passed"] is True
+
+
+def test_generate_adopts_an_explicit_preallocated_run_id(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    runs_dir = tmp_path / "runs"
+    prompt = "A gentle grounding pause."
+    RunStore(runs_dir).create(prompt, run_id=RUN_ID)
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: _standard_snapshot())
+    monkeypatch.setattr(
+        LlamaCppScriptGenerator,
+        "from_artifact_store",
+        classmethod(lambda _cls, **_kwargs: _DraftFixture()),
+    )
+    monkeypatch.setattr(
+        SherpaOnnxKokoroAdapter,
+        "from_artifact_store",
+        classmethod(lambda _cls, **_kwargs: FixtureSpeechSynthesizer()),
+    )
+
+    assert (
+        main(
+            [
+                "generate",
+                prompt,
+                "--run-id",
+                str(RUN_ID),
+                "--minutes",
+                "1",
+                "--profile",
+                "standard",
+                "--models-dir",
+                str(tmp_path / "models"),
+                "--runs-dir",
+                str(runs_dir),
+                "--json",
+            ]
+        )
+        == 0
+    )
+
+    completed = json.loads(capsys.readouterr().out)
+    assert completed["run_id"] == str(RUN_ID)
+    assert completed["status"] == "completed"
+    assert isinstance(RunStore(runs_dir).load_generation_request(RUN_ID), PendingGenerationConfig)
+
+
+def test_generate_refuses_to_adopt_a_run_id_for_a_different_prompt(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    runs_dir = tmp_path / "runs"
+    store = RunStore(runs_dir)
+    store.create("The original request.", run_id=RUN_ID)
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: _standard_snapshot())
+    monkeypatch.setattr(
+        SherpaOnnxKokoroAdapter,
+        "from_artifact_store",
+        classmethod(lambda _cls, **_kwargs: FixtureSpeechSynthesizer()),
+    )
+
+    with pytest.raises(SystemExit, match="2"):
+        main(
+            [
+                "generate",
+                "A different request.",
+                "--run-id",
+                str(RUN_ID),
+                "--profile",
+                "standard",
+                "--models-dir",
+                str(tmp_path / "models"),
+                "--runs-dir",
+                str(runs_dir),
+            ]
+        )
+
+    assert store.load(RUN_ID).status is RunStatus.QUEUED
+    assert not store.generation_request_path(RUN_ID).exists()
+
+
+def test_run_resume_reconciles_an_expired_planning_lease_and_reuses_the_request(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    runs_dir = tmp_path / "runs"
+    draft = _InterruptOnceDraft()
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: _standard_snapshot())
+    monkeypatch.setattr(
+        LlamaCppScriptGenerator,
+        "from_artifact_store",
+        classmethod(lambda _cls, **_kwargs: draft),
+    )
+    monkeypatch.setattr(
+        SherpaOnnxKokoroAdapter,
+        "from_artifact_store",
+        classmethod(lambda _cls, **_kwargs: FixtureSpeechSynthesizer()),
+    )
+    prompt = "A gentle grounding pause."
+    generate_arguments = [
+        "generate",
+        prompt,
+        "--run-id",
+        str(RUN_ID),
+        "--minutes",
+        "1",
+        "--profile",
+        "standard",
+        "--models-dir",
+        str(tmp_path / "models"),
+        "--runs-dir",
+        str(runs_dir),
+        "--json",
+    ]
+
+    assert main(generate_arguments) == 130
+    capsys.readouterr()
+    store = RunStore(runs_dir)
+    interrupted = store.load(RUN_ID)
+    assert interrupted.status is RunStatus.INTERRUPTED
+    store.restart_generation(
+        RUN_ID,
+        owner_id="expired-worker",
+        pid=999_999,
+        started_at=datetime(2020, 1, 1, tzinfo=UTC),
+        lease_seconds=1,
+    )
+
+    assert (
+        main(
+            [
+                "run",
+                "resume",
+                str(RUN_ID),
+                "--runs-dir",
+                str(runs_dir),
+                "--models-dir",
+                str(tmp_path / "models"),
+                "--json",
+            ]
+        )
+        == 0
+    )
+
+    completed = json.loads(capsys.readouterr().out)
+    assert completed["run_id"] == str(RUN_ID)
+    assert completed["status"] == "completed"
+    assert completed["recovery"]["resume_count"] == 2
+
+
+def test_run_reconcile_command_marks_an_expired_attempt_interrupted(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    store = RunStore(tmp_path)
+    queued = store.create("A durable test.", run_id=RUN_ID)
+    assert queued.recovery is not None
+    started = datetime(2020, 1, 1, tzinfo=UTC)
+    store.save(
+        queued.transition(
+            RunStatus.RUNNING,
+            updated_at=started,
+            recovery=queued.recovery.model_copy(update={"process_attempts": 1}),
+            execution=RunExecution(
+                stage=RunStage.SYNTHESIZING,
+                attempt_id=UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+                owner_id="old-worker",
+                pid=999_999,
+                started_at=started,
+                heartbeat_at=started,
+                lease_expires_at=started + timedelta(seconds=15),
+            ),
+        )
+    )
+
+    assert (
+        main(
+            [
+                "run",
+                "reconcile",
+                str(RUN_ID),
+                "--runs-dir",
+                str(tmp_path),
+                "--json",
+            ]
+        )
+        == 0
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["runs"][0]["status"] == "interrupted"
+    assert output["runs"][0]["execution"]["interruption_kind"] == "lease_expired"
+
+
+def test_run_cancel_signals_only_a_locked_live_local_owner(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    store = RunStore(tmp_path)
+    queued = store.create("A durable test.", run_id=RUN_ID)
+    assert queued.recovery is not None
+    now = datetime.now(UTC)
+    target_pid = 999_999
+    store.save(
+        queued.transition(
+            RunStatus.RUNNING,
+            updated_at=now,
+            recovery=queued.recovery.model_copy(update={"process_attempts": 1}),
+            execution=RunExecution(
+                stage=RunStage.SYNTHESIZING,
+                attempt_id=UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+                owner_id=f"{socket.gethostname()}:{target_pid}",
+                pid=target_pid,
+                started_at=now,
+                heartbeat_at=now,
+                lease_expires_at=now + timedelta(seconds=15),
+            ),
+        )
+    )
+    signals: list[tuple[int, int]] = []
+    monkeypatch.setattr("whoopy.cli.os.kill", lambda pid, sig: signals.append((pid, sig)))
+
+    with RunLock(store.run_directory(RUN_ID)):
+        assert (
+            main(
+                [
+                    "run",
+                    "cancel",
+                    str(RUN_ID),
+                    "--runs-dir",
+                    str(tmp_path),
+                    "--json",
+                ]
+            )
+            == 0
+        )
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["run_id"] == str(RUN_ID)
+    assert signals == [(target_pid, 0), (target_pid, signal.SIGTERM)]
+
+
+def test_run_cancel_refuses_to_signal_without_the_worker_lock(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    store = RunStore(tmp_path)
+    queued = store.create("A durable test.", run_id=RUN_ID)
+    assert queued.recovery is not None
+    now = datetime.now(UTC)
+    target_pid = 999_999
+    store.save(
+        queued.transition(
+            RunStatus.RUNNING,
+            updated_at=now,
+            recovery=queued.recovery.model_copy(update={"process_attempts": 1}),
+            execution=RunExecution(
+                stage=RunStage.SYNTHESIZING,
+                attempt_id=UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+                owner_id=f"{socket.gethostname()}:{target_pid}",
+                pid=target_pid,
+                started_at=now,
+                heartbeat_at=now,
+                lease_expires_at=now + timedelta(seconds=15),
+            ),
+        )
+    )
+    signals: list[tuple[int, int]] = []
+    monkeypatch.setattr("whoopy.cli.os.kill", lambda pid, sig: signals.append((pid, sig)))
+
+    with pytest.raises(SystemExit, match="2"):
+        main(
+            [
+                "run",
+                "cancel",
+                str(RUN_ID),
+                "--runs-dir",
+                str(tmp_path),
+                "--json",
+            ]
+        )
+
+    assert signals == []

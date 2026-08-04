@@ -81,3 +81,36 @@ class RunModelMetadata(BaseModel):
     schema_version: Literal[1] = 1
     tts: AdapterMetadata
     llm: AdapterMetadata | None = None
+
+
+class PendingGenerationConfig(BaseModel):
+    """Immutable inputs required to restart prompt planning exactly.
+
+    Unlike :class:`GenerationRunSettings`, this record is written before the
+    first LLM call, so it deliberately excludes values such as estimated
+    duration that only exist after a draft has been compiled.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    profile: Literal["lite", "standard"]
+    target: TargetPlatform
+    tts: TTSRunSettings
+    processing: SpeechProcessingSettings
+    duration_seconds: int = Field(ge=60, le=1_800)
+    seed: int
+    plan_prompt_id: str = Field(min_length=1)
+    plan_prompt_version: int = Field(ge=1)
+    section_prompt_id: str = Field(min_length=1)
+    section_prompt_version: int = Field(ge=1)
+    max_parallel_sections: int = Field(ge=1, le=2)
+    model_metadata: RunModelMetadata
+
+    @model_validator(mode="after")
+    def require_llm_metadata(self) -> PendingGenerationConfig:
+        """A resumable prompt request must identify both model adapters."""
+
+        if self.model_metadata.llm is None:
+            raise ValueError("pending generation config requires LLM metadata")
+        return self

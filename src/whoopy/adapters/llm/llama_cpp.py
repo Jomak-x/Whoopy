@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import tempfile
 import time
 from collections.abc import Callable, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 from whoopy.artifacts import ArtifactLock, ArtifactSpec, ArtifactStore, TargetPlatform
 from whoopy.ports import (
@@ -54,13 +58,59 @@ def _run_process(
     command: Sequence[str],
     timeout_seconds: float,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    process = subprocess.Popen(
         list(command),
-        check=False,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=timeout_seconds,
+        start_new_session=os.name == "posix",
+        creationflags=(
+            int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200))
+            if os.name == "nt"
+            else 0
+        ),
     )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+    except BaseException:
+        _stop_process_tree(process)
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _stop_process_tree(process: subprocess.Popen[str]) -> None:
+    """Bound cleanup so cancellation cannot leave a local LLM child behind."""
+
+    if os.name == "posix":
+        try:
+            cast(Any, os).killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+    elif process.poll() is None:
+        # Windows has no stdlib process-group kill primitive. ``taskkill /T``
+        # is part of Windows and follows descendants before forcing shutdown.
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                capture_output=True,
+                timeout=2,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            process.kill()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        if os.name == "posix":
+            with suppress(ProcessLookupError):
+                cast(Any, os).killpg(
+                    process.pid,
+                    getattr(signal, "SIGKILL", signal.SIGTERM),
+                )
+        else:
+            process.kill()
+        with suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=2)
 
 
 def _one_file(root: Path, names: set[str], description: str) -> Path:

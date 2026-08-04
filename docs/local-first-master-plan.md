@@ -35,12 +35,14 @@ Voice and meditation quality require human acceptance.
 | Phase 2 | Merged | exact silence and deterministic WAV assembly |
 | Phase 3 | Merged | segment cache, checkpoints, retry, resume, and audio integrity |
 | Phase 3.5 | Merged through PRs 5–11 | local artifacts, llama.cpp/Qwen planning, Kokoro speech, end-to-end CLI, temporary web studio |
-| Phase 3.6 | Open PR 12; not merged or human-accepted | slower Kokoro, adaptive pacing prototype, technique fields, Fish 1.4, MOSS 5B/8B adapters, model controls, smoothing, and expanded tests |
+| Phase 3.6 | Merged through PR 12; not human-accepted | slower Kokoro, adaptive pacing prototype, technique fields, Fish 1.4, MOSS 5B/8B adapters, model controls, smoothing, and expanded tests |
+| PR 13 durable recovery | 180 local tests and static checks pass; CI pending | durable lifecycle state, recovery controls, worker coordination, and bounded diagnostics |
 | Permanent Phase 4 | Not started | intentionally waits for the local exit gate |
 
-Open remote work: [PR 12 — Phase 3.6: slower meditation pacing and voice evaluation](https://github.com/Jomak-x/Whoopy/pull/12).
-The complete PR must pass remote checks again before merge; passing the first
-commit's checks does not validate later additions.
+PR 12 is merged. PR 13 passes the full local check suite and now awaits remote
+macOS, Linux, and Windows CI before it can merge. See
+[PR 13 durable recovery](./phase-4-pr13-durable-recovery.md) for the exact
+lifecycle contract, commands, artifacts, and review checklist.
 
 ## What Actually Works Today
 
@@ -246,7 +248,8 @@ failure-injection steps where relevant.
 
 ### PR 12: Reconcile And Finish The Current Phase 3.6 Work
 
-Status: **in progress**.
+Status: **merged**. Its voice and meditation-quality work remains subject to
+later listening acceptance; merging code does not choose a final voice.
 
 Scope:
 
@@ -268,6 +271,8 @@ Exit criteria:
 - no claim that meditation or voice quality is final.
 
 ### PR 13: Make Interrupted Runs Recoverable
+
+Status: **implemented locally; checks and CI pending**.
 
 Goal: no process death may leave a run permanently pretending to be active.
 
@@ -492,8 +497,9 @@ Exit criteria:
 
 Only move to the permanent Phase 4 UI when all are true:
 
-- [ ] PR 12 is merged and the working tree is clean.
-- [ ] Abandoned runs become interrupted and resumable automatically.
+- [x] PR 12 is merged.
+- [ ] PR 13 passes checks and CI, and its working tree is clean.
+- [x] Abandoned runs become interrupted and resumable automatically.
 - [ ] Model packs install and report readiness reproducibly.
 - [ ] The complete compatible voice comparison set has been rendered.
 - [ ] Jakob has completed a blind voice rating and chosen a direction.
@@ -508,7 +514,7 @@ the finished Whoopy product.
 
 ## The Next Action
 
-Finish and merge PR 12. Then begin PR 13, because downloading more models into
-a workflow that can leave jobs stuck in `running` would make testing slower and
-less trustworthy. Voice acquisition follows immediately in PRs 14–16, before
-the content and pacing acceptance cycle in PRs 17–20.
+Verify and merge PR 13 before downloading more models. A workflow that can
+leave jobs stuck in `running` makes model experiments slower and less
+trustworthy. Voice acquisition follows immediately in PRs 14–16, before the
+content and pacing acceptance cycle in PRs 17–20.

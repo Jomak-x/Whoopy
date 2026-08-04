@@ -32,6 +32,9 @@ class CountingSynthesizer:
         self.calls.append(segment.text)
         return self.fixture.synthesize(segment)
 
+    def close(self) -> None:
+        """Test double owns no model process."""
+
 
 def _process(
     store: RunStore,

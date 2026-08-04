@@ -312,6 +312,7 @@ class LocalMeditationGenerator:
         max_parallel_sections: int = 1,
         articulation_words_per_minute: int = 123,
         workspace: GenerationWorkspace | None = None,
+        progress_callback: Callable[[str], None] | None = None,
     ) -> None:
         if max_validation_attempts < 1:
             raise ValueError("max_validation_attempts must be positive")
@@ -325,6 +326,7 @@ class LocalMeditationGenerator:
         self.max_parallel_sections = max_parallel_sections
         self.articulation_words_per_minute = articulation_words_per_minute
         self.workspace = workspace
+        self.progress_callback = progress_callback
 
     def _validated_generate(
         self,
@@ -416,6 +418,8 @@ class LocalMeditationGenerator:
         else:
             plan = None
         if plan is None:
+            if self.progress_callback is not None:
+                self.progress_callback("planning")
             plan_prompt = (
                 f"User request: {prompt.strip()}\n"
                 f"Requested duration: {duration_seconds} seconds.\n"
@@ -441,6 +445,9 @@ class LocalMeditationGenerator:
             )
             if self.workspace is not None:
                 self.workspace.save_plan(plan)
+
+        if self.progress_callback is not None:
+            self.progress_callback("drafting")
 
         def draft(planned: PlannedSection) -> DraftedSection:
             if self.workspace is not None:

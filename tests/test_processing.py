@@ -35,9 +35,15 @@ class _StaticSynthesizer:
 
     def __init__(self, values: list[int]) -> None:
         self.values = values
+        self.closed = False
 
     def synthesize(self, _segment: SpeechSegment) -> PcmAudio:
         return PcmAudio(_pcm(self.values), sample_rate=self.sample_rate)
+
+    def close(self) -> None:
+        """Test double owns no external resources."""
+
+        self.closed = True
 
 
 def test_processing_trims_edges_normalizes_and_fades_boundaries() -> None:
@@ -65,6 +71,15 @@ def test_processing_settings_change_cache_identity() -> None:
     )
 
     assert first.cache_identity != second.cache_identity
+
+
+def test_processing_close_releases_the_inner_synthesizer() -> None:
+    inner = _StaticSynthesizer([4_000] * 100)
+    synthesizer = ProcessedSpeechSynthesizer(inner)
+
+    synthesizer.close()
+
+    assert inner.closed is True
 
 
 def test_processing_rejects_audio_below_trim_threshold() -> None:
