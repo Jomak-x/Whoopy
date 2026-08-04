@@ -19,6 +19,7 @@ from pathlib import Path
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--runtime", type=Path, required=True)
+    parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--reference-audio", type=Path, required=True)
     parser.add_argument("--reference-text", type=Path, required=True)
     return parser.parse_args()
@@ -44,7 +45,7 @@ def main() -> int:
     if not torch.backends.mps.is_available():
         raise RuntimeError("Fish Speech 1.4 currently requires Apple Metal in Whoopy")
     device = torch.device("mps")
-    checkpoint = runtime / "checkpoints" / "fish-speech-1.4"
+    checkpoint = args.checkpoint.resolve()
     decoder_checkpoint = checkpoint / "firefly-gan-vq-fsq-8x1024-21hz-generator.pth"
 
     text_model, decode_one_token = load_model(
@@ -80,7 +81,7 @@ def main() -> int:
     if not prompt_text:
         raise RuntimeError("Fish reference transcript is empty")
 
-    _reply({"status": "ready", "sample_rate": 24_000})
+    _reply({"status": "ready", "sample_rate": 24_000, "device": str(device)})
     for line in sys.stdin:
         request_id: object = None
         try:

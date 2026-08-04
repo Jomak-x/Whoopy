@@ -113,6 +113,13 @@ class JsonLineProcessController:
     def running(self) -> bool:
         return self._process is not None and self._process.poll() is None
 
+    @property
+    def process_id(self) -> int | None:
+        """Return the owned worker PID without exposing the Popen handle."""
+
+        process = self._process
+        return process.pid if process is not None and process.poll() is None else None
+
     def _offer(
         self,
         item: dict[str, object] | WorkerProtocolError | _StreamClosed,

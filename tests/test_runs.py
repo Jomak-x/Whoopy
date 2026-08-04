@@ -887,3 +887,37 @@ def test_interrupted_pending_generation_restarts_from_immutable_request(tmp_path
     assert restarted.execution is not None
     assert restarted.execution.stage is RunStage.PLANNING
     assert store.load_generation_request(RUN_ID) == request
+
+
+def test_active_failure_keeps_long_diagnostic_without_breaking_execution_summary(
+    tmp_path: Path,
+) -> None:
+    store = RunStore(tmp_path)
+    request = _pending_generation()
+    store.create_pending_generation_run(
+        prompt="A five-minute grounding practice.",
+        generation_request=request,
+        run_id=RUN_ID,
+        created_at=CREATED_AT,
+    )
+    active = store.start_generation(
+        RUN_ID,
+        owner_id="generation-worker",
+        pid=123,
+        started_at=CREATED_AT + timedelta(seconds=1),
+    )
+    assert active.execution is not None
+    assert active.execution.attempt_id is not None
+    diagnostic = "large model traceback " * 300
+
+    failed = store.fail_active_run(
+        RUN_ID,
+        attempt_id=active.execution.attempt_id,
+        error=diagnostic,
+        failed_at=CREATED_AT + timedelta(seconds=2),
+    )
+
+    assert failed.status is RunStatus.FAILED
+    assert failed.error == diagnostic
+    assert failed.execution is not None
+    assert failed.execution.message == diagnostic[:2_000]

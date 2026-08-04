@@ -21,6 +21,11 @@ from whoopy.audio.synthesis import (
     InvalidSynthesisOutput,
     TransientSynthesisError,
 )
+from whoopy.model_packs.operations import (
+    HeavyweightModelSlot,
+    HeavyweightModelSlotUnavailable,
+    models_root_for_runtime,
+)
 from whoopy.ports import AdapterMetadata
 from whoopy.timeline import SpeechSegment
 
@@ -94,6 +99,7 @@ class MossTTSSettings:
     startup_timeout_seconds: float = 900
     request_timeout_seconds: float = 600
     shutdown_timeout_seconds: float = 5
+    models_root: Path | None = None
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -113,7 +119,13 @@ class MossTTSAdapter:
     def __init__(self, settings: MossTTSSettings) -> None:
         self.settings = settings
         self._controller: JsonLineProcessController | None = None
+        self._runtime_device: str | None = None
         self._diagnostics = BoundedDiagnostics()
+        pack_id = "moss-local-5b" if settings.variant == "moss-local-v1.5" else "moss-8b"
+        self._runtime_slot = HeavyweightModelSlot(
+            settings.models_root or models_root_for_runtime(settings.runtime_directory),
+            pack_id,
+        )
         reference_hash = (
             hashlib.sha256(settings.reference_audio.read_bytes()).hexdigest()
             if settings.reference_audio.is_file()
@@ -169,8 +181,9 @@ class MossTTSAdapter:
         if self._controller is not None and self._controller.running:
             return self._controller
         if self._controller is not None:
-            self._controller.close()
-            self._controller = None
+            # A worker can die between requests. Closing only the controller
+            # would strand this adapter's heavyweight slot until destruction.
+            self._drop_controller()
         error = self.availability_error(
             self.settings.runtime_directory,
             self.settings.model_directory,
@@ -199,7 +212,11 @@ class MossTTSAdapter:
         )
         self._controller = controller
         try:
+            self._runtime_slot.acquire()
             ready = controller.start()
+        except HeavyweightModelSlotUnavailable as error:
+            self._drop_controller()
+            raise TransientSynthesisError(str(error)) from error
         except WorkerTimeoutError as error:
             self._drop_controller()
             raise TransientSynthesisError(f"MOSS-TTS startup failed: {error}") from error
@@ -209,7 +226,25 @@ class MossTTSAdapter:
         if ready.get("status") != "ready" or ready.get("sample_rate") != self.sample_rate:
             self._drop_controller()
             raise FatalSynthesisError(f"MOSS-TTS did not become ready: {ready}")
+        self._runtime_device = str(ready.get("device") or "unknown")
         return controller
+
+    def prepare(self) -> None:
+        """Load and validate the isolated runtime without rendering audio yet."""
+
+        self._start()
+
+    @property
+    def runtime_process_id(self) -> int | None:
+        """Expose only the owned worker PID for resource measurement."""
+
+        return self._controller.process_id if self._controller is not None else None
+
+    @property
+    def runtime_device(self) -> str | None:
+        """Report the accelerator selected by the isolated runtime."""
+
+        return self._runtime_device
 
     def synthesize(self, segment: SpeechSegment) -> PcmAudio:
         controller = self._start()
@@ -251,8 +286,11 @@ class MossTTSAdapter:
 
     def _drop_controller(self) -> None:
         controller, self._controller = self._controller, None
-        if controller is not None:
-            controller.close()
+        try:
+            if controller is not None:
+                controller.close()
+        finally:
+            self._runtime_slot.release()
 
     def close(self) -> None:
         self._drop_controller()

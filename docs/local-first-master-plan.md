@@ -36,11 +36,11 @@ Voice and meditation quality require human acceptance.
 | Phase 3 | Merged | segment cache, checkpoints, retry, resume, and audio integrity |
 | Phase 3.5 | Merged through PRs 5–11 | local artifacts, llama.cpp/Qwen planning, Kokoro speech, end-to-end CLI, temporary web studio |
 | Phase 3.6 | Merged through PR 12; not human-accepted | slower Kokoro, adaptive pacing prototype, technique fields, Fish 1.4, MOSS 5B/8B adapters, model controls, smoothing, and expanded tests |
-| PR 13 durable recovery | 180 local tests and static checks pass; CI pending | durable lifecycle state, recovery controls, worker coordination, and bounded diagnostics |
+| PR 13 durable recovery | Merged; local and macOS/Linux/Windows CI pass | durable lifecycle state, recovery controls, worker coordination, and bounded diagnostics |
 | Permanent Phase 4 | Not started | intentionally waits for the local exit gate |
 
-PR 12 is merged. PR 13 passes the full local check suite and now awaits remote
-macOS, Linux, and Windows CI before it can merge. See
+PRs 12 and 13 are merged. PR 13 passed the full local check suite and remote
+macOS, Linux, and Windows CI. See
 [PR 13 durable recovery](./phase-4-pr13-durable-recovery.md) for the exact
 lifecycle contract, commands, artifacts, and review checklist.
 
@@ -54,8 +54,9 @@ lifecycle contract, commands, artifacts, and review checklist.
 - Repeated healthy segments can be reused from verified checkpoints or cache.
 - The temporary web studio can start a run, show recent runs, play audio, and
   inspect important artifacts.
-- The current local working tree can select Kokoro, Fish 1.4, MOSS Local 5B,
-  or the MOSS 8B entry when its checkpoint becomes complete.
+- The current local working tree has checksum-complete Kokoro, Fish 1.4,
+  MOSS Local 5B, Audio Tokenizer v2, and MOSS 8B packs. Readiness still
+  requires a machine-scoped offline smoke test.
 - Twenty durable runs in `runs/` are marked completed.
 
 That list proves an engine exists. It does **not** prove that the meditation is
@@ -78,11 +79,11 @@ measured; disk fit alone does not prove that simultaneous inference is safe.
 
 | Model | License | Local state | Honest status |
 | --- | --- | --- | --- |
-| Kokoro | Apache-2.0 | Installed | portable baseline; multiple presets; slower `0.6` path works |
-| Fish Speech 1.4 | CC BY-NC-SA 4.0 | Installed, about 2.5 GB | machine-verified non-commercial experiment; expression comes from reference audio |
-| MOSS Audio Tokenizer v2 | Apache-2.0 | Installed, about 7.9 GB | required shared codec for MOSS v1.5 |
-| MOSS Local Transformer v1.5 5B | Apache-2.0 | Installed, about 8.5 GB | machine-verified on Apple Metal; offline startup also verified |
-| MOSS-TTS v1.5 8B | Apache-2.0 | only about 4.4 GB of a roughly 17 GB download | incomplete and correctly disabled; never claim it was tested |
+| Kokoro | Apache-2.0 | Ready | portable baseline; offline managed smoke passed |
+| Fish Speech 1.4 | CC BY-NC-SA 4.0 | Ready, about 2.5 GB runtime | machine-verified Apple-Metal experiment; non-commercial only |
+| MOSS Audio Tokenizer v2 | Apache-2.0 | Ready, about 7.9 GB | encode/decode paths passed inside real MOSS synthesis |
+| MOSS Local Transformer v1.5 5B | Apache-2.0 | Ready, about 8.5 GB weights | machine-verified on Apple Metal; 17.55 GB peak worker memory |
+| MOSS-TTS v1.5 8B | Apache-2.0 | Ready, about 17 GB weights | machine-verified on CPU; 35.68 GB peak because this PyTorch Metal path is unstable |
 | Qwen3-TTS 0.6B/1.7B family | Apache-2.0 | not installed | high-priority comparison because it offers preset voices, cloning, voice design, and instruction control |
 | Fish S1-mini | CC BY-NC-SA 4.0 | not installed; gated | optional non-commercial comparison, not a product default |
 | Fish S2 Pro | research/non-commercial license | not installed | official path recommends at least 24 GB GPU VRAM and Linux/WSL; not a supported Apple-local candidate |
@@ -93,7 +94,7 @@ set**, not every TTS repository on the internet. The local comparison set is:
 1. Kokoro as the portable baseline.
 2. Fish 1.4 as the already-working non-commercial reference experiment.
 3. MOSS Local 5B.
-4. MOSS flagship 8B once complete and stable.
+4. MOSS flagship 8B as a high-memory CPU comparison on this Mac.
 5. Qwen3-TTS 0.6B CustomVoice.
 6. Qwen3-TTS 1.7B CustomVoice.
 7. Qwen3-TTS 1.7B VoiceDesign.
@@ -297,6 +298,9 @@ Exit criteria:
 
 ### PR 14: Turn Experimental Voices Into Managed Local Models
 
+Status: **implemented locally and machine-verified; review/CI pending**. See [PR 14 managed model packs](./phase-4-pr14-managed-model-packs.md)
+for the beginner-facing commands and safety boundaries.
+
 Goal: make the current comparison reproducible and safe before adding more
 models.
 
@@ -304,7 +308,8 @@ Scope:
 
 - extend the artifact manifest to optional TTS packs;
 - make Fish and MOSS paths configuration-driven rather than source constants;
-- verify runtime, checkpoint, codec, reference, license, and complete shards;
+- verify runtime, checkpoint, codec, explicit consented reference, license,
+  complete shards, and Kokoro's complete extracted tree;
 - finish the MOSS 8B download;
 - add install/status/remove commands with disk and memory preflight;
 - prevent two heavyweight TTS models from being loaded simultaneously;
@@ -313,7 +318,9 @@ Scope:
 
 Exit criteria:
 
-- a clean setup can install each declared pack intentionally;
+- the portable Kokoro baseline installs from a clean setup, and optional
+  checkpoint packs install intentionally while missing isolated runtimes stay
+  visibly `installed` rather than falsely `ready`;
 - interrupted downloads resume safely;
 - Kokoro, Fish 1.4, MOSS 5B, and MOSS 8B each pass the same short synthesis
   contract or show an honest incompatible state;
@@ -331,6 +338,8 @@ cloning, plus 1.7B VoiceDesign with natural-language control:
 
 Scope:
 
+- finish a versioned clean-machine installer for the optional Fish/MOSS/Qwen
+  isolated runtimes instead of copying `.venv` directories;
 - add an isolated Qwen3-TTS runtime and typed adapter;
 - support 0.6B and 1.7B CustomVoice;
 - support 1.7B VoiceDesign;
@@ -498,7 +507,7 @@ Exit criteria:
 Only move to the permanent Phase 4 UI when all are true:
 
 - [x] PR 12 is merged.
-- [ ] PR 13 passes checks and CI, and its working tree is clean.
+- [x] PR 13 passes checks and CI, and is merged.
 - [x] Abandoned runs become interrupted and resumable automatically.
 - [ ] Model packs install and report readiness reproducibly.
 - [ ] The complete compatible voice comparison set has been rendered.

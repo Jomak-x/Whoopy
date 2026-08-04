@@ -1,0 +1,19 @@
+# Local voice-cloning references are explicit user assets, never files chosen
+# by a recursive directory search. The audio itself stays ignored under
+# models/; this checked-in declaration binds its identity, consent scope, byte
+# size, and digest so Fish/MOSS cannot silently clone a different recording.
+schema_version: 1
+default_reference_id: whoopy-local-reference-v1
+
+references:
+  - reference_id: whoopy-local-reference-v1
+    display_name: Whoopy local slow reference
+    audio_path: experimental/fish-speech-1.4-runtime/whoopy-reference.wav
+    audio_size_bytes: 912752
+    audio_sha256: c4a54008905442d34ec82fb5eb88638e505d3ff66f1f8d252478be98858d303f
+    transcript_path: experimental/fish-speech-1.4-runtime/whoopy-reference.txt
+    transcript_size_bytes: 228
+    transcript_sha256: ee57bbdd383143a6e2e7b0a2ef748e507b6b2f6f5e8f6d3ec645098d550bb213
+    consent_confirmed: true
+    consent_scope: local_voice_cloning_experiment_only
+    source_kind: user_provided

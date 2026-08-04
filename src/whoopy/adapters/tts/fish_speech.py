@@ -19,6 +19,11 @@ from whoopy.audio.synthesis import (
     InvalidSynthesisOutput,
     TransientSynthesisError,
 )
+from whoopy.model_packs.operations import (
+    HeavyweightModelSlot,
+    HeavyweightModelSlotUnavailable,
+    models_root_for_runtime,
+)
 from whoopy.ports import AdapterMetadata
 from whoopy.timeline import SpeechSegment
 
@@ -31,10 +36,12 @@ class FishSpeechSettings:
     worker_script: Path
     reference_audio: Path
     reference_text: Path
+    checkpoint_directory: Path | None = None
     seed: int = 42
     startup_timeout_seconds: float = 600
     request_timeout_seconds: float = 300
     shutdown_timeout_seconds: float = 5
+    models_root: Path | None = None
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -54,7 +61,12 @@ class FishSpeech14Adapter:
     def __init__(self, settings: FishSpeechSettings) -> None:
         self.settings = settings
         self._controller: JsonLineProcessController | None = None
+        self._runtime_device: str | None = None
         self._diagnostics = BoundedDiagnostics()
+        self._runtime_slot = HeavyweightModelSlot(
+            settings.models_root or models_root_for_runtime(settings.runtime_directory),
+            "fish-speech-1.4",
+        )
         reference_hash = hashlib.sha256()
         for path in (settings.reference_audio, settings.reference_text):
             if path.is_file():
@@ -80,18 +92,23 @@ class FishSpeech14Adapter:
         self.cache_identity = self.metadata.cache_identity
 
     @staticmethod
-    def availability_error(runtime_directory: Path) -> str | None:
+    def availability_error(
+        runtime_directory: Path,
+        checkpoint_directory: Path | None = None,
+        reference_audio: Path | None = None,
+        reference_text: Path | None = None,
+    ) -> str | None:
         """Return a human-readable missing component instead of loading a model."""
 
+        checkpoint = checkpoint_directory or (runtime_directory / "checkpoints" / "fish-speech-1.4")
+        selected_audio = reference_audio or (runtime_directory / "whoopy-reference.wav")
+        selected_text = reference_text or (runtime_directory / "whoopy-reference.txt")
         required = (
             runtime_directory / ".venv" / "bin" / "python",
-            runtime_directory / "checkpoints" / "fish-speech-1.4" / "model.pth",
-            runtime_directory
-            / "checkpoints"
-            / "fish-speech-1.4"
-            / "firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
-            runtime_directory / "whoopy-reference.wav",
-            runtime_directory / "whoopy-reference.txt",
+            checkpoint / "model.pth",
+            checkpoint / "firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
+            selected_audio,
+            selected_text,
         )
         missing = [path.name for path in required if not path.is_file()]
         return None if not missing else f"missing {', '.join(missing)}"
@@ -100,10 +117,19 @@ class FishSpeech14Adapter:
         if self._controller is not None and self._controller.running:
             return self._controller
         if self._controller is not None:
-            self._controller.close()
-            self._controller = None
+            # A worker can die between requests. Closing only the controller
+            # would strand this adapter's heavyweight slot until destruction.
+            self._drop_controller()
         runtime = self.settings.runtime_directory
-        error = self.availability_error(runtime)
+        checkpoint = self.settings.checkpoint_directory or (
+            runtime / "checkpoints" / "fish-speech-1.4"
+        )
+        error = self.availability_error(
+            runtime,
+            checkpoint,
+            self.settings.reference_audio,
+            self.settings.reference_text,
+        )
         if error is not None:
             raise FatalSynthesisError(f"Fish Speech 1.4 is not ready: {error}.")
         command = [
@@ -111,6 +137,8 @@ class FishSpeech14Adapter:
             str(self.settings.worker_script),
             "--runtime",
             str(runtime),
+            "--checkpoint",
+            str(checkpoint),
             "--reference-audio",
             str(self.settings.reference_audio),
             "--reference-text",
@@ -126,7 +154,11 @@ class FishSpeech14Adapter:
         )
         self._controller = controller
         try:
+            self._runtime_slot.acquire()
             ready = controller.start()
+        except HeavyweightModelSlotUnavailable as error:
+            self._drop_controller()
+            raise TransientSynthesisError(str(error)) from error
         except WorkerTimeoutError as error:
             self._drop_controller()
             raise TransientSynthesisError(f"Fish Speech startup failed: {error}") from error
@@ -136,7 +168,25 @@ class FishSpeech14Adapter:
         if ready.get("status") != "ready" or ready.get("sample_rate") != self.sample_rate:
             self._drop_controller()
             raise FatalSynthesisError(f"Fish Speech 1.4 did not become ready: {ready}")
+        self._runtime_device = str(ready.get("device") or "unknown")
         return controller
+
+    def prepare(self) -> None:
+        """Load and validate the isolated runtime without rendering audio yet."""
+
+        self._start()
+
+    @property
+    def runtime_process_id(self) -> int | None:
+        """Expose only the owned worker PID for resource measurement."""
+
+        return self._controller.process_id if self._controller is not None else None
+
+    @property
+    def runtime_device(self) -> str | None:
+        """Report the accelerator selected by the isolated runtime."""
+
+        return self._runtime_device
 
     def synthesize(self, segment: SpeechSegment) -> PcmAudio:
         controller = self._start()
@@ -175,8 +225,11 @@ class FishSpeech14Adapter:
 
     def _drop_controller(self) -> None:
         controller, self._controller = self._controller, None
-        if controller is not None:
-            controller.close()
+        try:
+            if controller is not None:
+                controller.close()
+        finally:
+            self._runtime_slot.release()
 
     def close(self) -> None:
         self._drop_controller()

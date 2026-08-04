@@ -65,6 +65,12 @@ class _SegmentProcessingError(RuntimeError):
     """Internal error carrying a clear segment-level failure message."""
 
 
+def _execution_message(error: BaseException) -> str:
+    """Fit diagnostics inside the durable execution-message contract."""
+
+    return f"{type(error).__name__}: {error}"[:2_000]
+
+
 class _HeartbeatLoop:
     """Renew a worker lease while a blocking model call is in progress."""
 
@@ -479,7 +485,7 @@ class LocalWorker:
             )
             failed_execution = self._required_execution(running).finish(
                 current_segment_id=current_segment_id,
-                message=f"{type(error).__name__}: {error}",
+                message=_execution_message(error),
             )
             failed = running.transition(
                 RunStatus.FAILED,

@@ -23,13 +23,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib import import_module
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import unquote, urlparse
 from uuid import UUID, uuid4
 
-from whoopy.adapters.tts import MOSS_LANGUAGES, FishSpeech14Adapter, MossTTSAdapter
+from whoopy.adapters.tts import MOSS_LANGUAGES
 from whoopy.artifacts import (
     ArtifactError,
     ArtifactState,
@@ -38,6 +39,11 @@ from whoopy.artifacts import (
     load_artifact_lock,
 )
 from whoopy.hardware import diagnose, inspect_hardware, load_runtime_profiles
+from whoopy.model_packs.resolution import (
+    OptionalTTSBackend,
+    models_root_from_artifact_store,
+    resolve_tts_model_pack,
+)
 from whoopy.pipeline import RunExecution, RunRecord, RunStage, RunStatus, RunStore
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
 from whoopy.pipeline.runs import RunNotFoundError, RunStoreError
@@ -48,6 +54,7 @@ MAX_REQUEST_BYTES = 64_000
 MAX_RECENT_RUNS = 24
 PROCESS_STOP_TIMEOUT_SECONDS = 2.0
 SEGMENT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+MODEL_PACK_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]{0,127}$")
 ALLOWED_ARTIFACTS = {
     "run": "run.json",
     "script": "script.md",
@@ -57,6 +64,26 @@ ALLOWED_ARTIFACTS = {
     "manifest": "audio-manifest.json",
     "models": "model-metadata.json",
 }
+
+
+def _model_pack_service(registry_path: Path, models_root: Path) -> Any:
+    """Build the optional-pack facade only when a pack endpoint is used."""
+
+    manager_type = import_module("whoopy.model_packs").ManagedModelPacks
+    return manager_type.from_paths(
+        registry_path=registry_path,
+        models_root=models_root,
+    )
+
+
+def _model_pack_payload(value: Any) -> dict[str, Any]:
+    """Normalize a typed pack report for the dependency-free HTTP server."""
+
+    model_dump = getattr(value, "model_dump", None)
+    payload = model_dump(mode="json") if callable(model_dump) else value
+    if not isinstance(payload, dict):
+        raise ValueError("Model-pack operations must return a JSON object.")
+    return cast(dict[str, Any], payload)
 
 
 @dataclass
@@ -92,18 +119,88 @@ class LocalWebApplication:
         models_directory: Path,
         runs_directory: Path,
         command_launcher: Callable[..., Any] | None = None,
+        model_pack_service_factory: Callable[[Path, Path], Any] | None = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.config_directory = self._resolve(config_directory)
         self.models_directory = self._resolve(models_directory)
+        self.model_pack_models_root = models_root_from_artifact_store(self.models_directory)
         self.runs_directory = self._resolve(runs_directory)
         self._tasks: dict[str, GenerationTask] = {}
         self._task_lock = threading.Lock()
         # Injection keeps web tests independent from a shell child process.
         self._command_launcher: Callable[..., Any] = command_launcher or subprocess.Popen
+        # The web layer deliberately receives an already-composed service. It
+        # never imports a TTS runtime or reconstructs pack file paths itself.
+        self._model_pack_service_factory = model_pack_service_factory or _model_pack_service
 
     def _resolve(self, path: Path) -> Path:
         return path.resolve() if path.is_absolute() else (self.project_root / path).resolve()
+
+    def list_model_packs(self) -> dict[str, Any]:
+        """Return declarative pack readiness without loading a voice model."""
+
+        return _model_pack_payload(
+            self._model_pack_service_factory(
+                self.config_directory / "model_packs.yaml", self.model_pack_models_root
+            ).list()
+        )
+
+    def model_pack_action(
+        self,
+        action: str,
+        pack_id: str | None,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Run one allow-listed pack operation from the loopback Studio.
+
+        Pack IDs are declarations, not paths. This is the same safety boundary
+        used by the terminal: the browser cannot point removal or installation
+        at an arbitrary location on the laptop.
+        """
+
+        service = self._model_pack_service_factory(
+            self.config_directory / "model_packs.yaml", self.model_pack_models_root
+        )
+        if action in {"install", "verify", "smoke-test", "remove"} and (
+            pack_id is None or not MODEL_PACK_ID_PATTERN.fullmatch(pack_id)
+        ):
+            raise ValueError("Choose a declared model pack.")
+        if action == "install":
+            allow_network = payload.get("allow_network", False)
+            if not isinstance(allow_network, bool):
+                raise ValueError("allow_network must be a boolean.")
+            if set(payload) - {"allow_network"}:
+                raise ValueError("Install accepts only allow_network.")
+            result = service.install(pack_id, offline_directory=None, allow_network=allow_network)
+        elif action == "verify":
+            if payload:
+                raise ValueError("Verify does not accept request fields.")
+            result = service.verify(pack_id)
+        elif action == "smoke-test":
+            if payload:
+                raise ValueError("Smoke test does not accept request fields.")
+            result = service.smoke_test(pack_id)
+        elif action == "unload":
+            if payload:
+                raise ValueError("Unload does not accept request fields.")
+            result = service.unload()
+        elif action == "remove":
+            if set(payload) != {"confirm"} or payload["confirm"] is not True:
+                raise ValueError('Remove requires exactly {"confirm": true}.')
+            result = service.remove(pack_id, confirmed=True)
+        elif action == "restore":
+            receipt_id = payload.get("receipt_id")
+            if (
+                not isinstance(receipt_id, str)
+                or not receipt_id.strip()
+                or set(payload) != {"receipt_id"}
+            ):
+                raise ValueError("Restore requires exactly one non-empty receipt_id.")
+            result = service.restore(receipt_id)
+        else:
+            raise ValueError("Unknown model-pack action.")
+        return _model_pack_payload(result)
 
     def environment_status(self) -> dict[str, Any]:
         """Report compatibility and downloads without loading any model."""
@@ -132,15 +229,28 @@ class LocalWebApplication:
                     "messages": diagnosis.messages,
                     "artifact_count": len(states),
                 }
-            fish_runtime = self.project_root / "models" / "experimental" / "fish-speech-1.4-runtime"
-            fish_error = FishSpeech14Adapter.availability_error(fish_runtime)
-            moss_runtime = self.project_root / "models" / "experimental" / "moss-tts-runtime"
-            moss_reference = fish_runtime / "whoopy-reference.wav"
-            moss_models = {
-                "moss-local-v1.5": moss_runtime / "checkpoints" / "MOSS-TTS-Local-Transformer-v1.5",
-                "moss-v1.5": moss_runtime / "checkpoints" / "MOSS-TTS-v1.5",
+            pack_report = self.list_model_packs()
+            pack_statuses = {
+                item["pack_id"]: item
+                for item in pack_report.get("packs", [])
+                if isinstance(item, dict) and isinstance(item.get("pack_id"), str)
             }
-            moss_codec = moss_runtime / "checkpoints" / "MOSS-Audio-Tokenizer-v2"
+
+            def optional_status(pack_id: str) -> dict[str, Any]:
+                status = pack_statuses.get(pack_id, {})
+                state = status.get("state", "missing")
+                failed_checks = [
+                    check.get("message")
+                    for check in status.get("checks", [])
+                    if isinstance(check, dict) and check.get("passed") is False
+                ]
+                return {
+                    "ready": state == "ready",
+                    "error": (
+                        None if state == "ready" else (failed_checks[0] if failed_checks else state)
+                    ),
+                }
+
             return {
                 "ok": True,
                 "system": f"{target.operating_system} {target.architecture}",
@@ -148,15 +258,14 @@ class LocalWebApplication:
                 "privacy": "Models and generation stay on this laptop.",
                 "speech_models": {
                     "kokoro": {
-                        "ready": profile_reports["basic"]["installed"],
+                        **optional_status("kokoro"),
                         "license": "Apache-2.0",
                         "expression": "voice preset",
                     },
                     "fish-1.4": {
-                        "ready": fish_error is None,
+                        **optional_status("fish-speech-1.4"),
                         "license": "CC-BY-NC-SA-4.0",
                         "expression": "reference voice; no bracket tags",
-                        "error": fish_error,
                     },
                     "fish-s2": {
                         "ready": False,
@@ -166,25 +275,14 @@ class LocalWebApplication:
                     },
                     **{
                         model: {
-                            "ready": (
-                                MossTTSAdapter.availability_error(
-                                    moss_runtime,
-                                    path,
-                                    moss_codec,
-                                    moss_reference,
-                                )
-                                is None
-                            ),
+                            **optional_status(pack_id),
                             "license": "Apache-2.0",
                             "expression": "language + free-form delivery instruction",
-                            "error": MossTTSAdapter.availability_error(
-                                moss_runtime,
-                                path,
-                                moss_codec,
-                                moss_reference,
-                            ),
                         }
-                        for model, path in moss_models.items()
+                        for model, pack_id in {
+                            "moss-local-v1.5": "moss-local-5b",
+                            "moss-v1.5": "moss-8b",
+                        }.items()
                     },
                 },
             }
@@ -300,10 +398,12 @@ class LocalWebApplication:
         if tts_model == "kokoro" and voice not in KOKORO_ENGLISH_VOICES:
             raise ValueError("Choose one of Whoopy's reviewed voices.")
         if tts_model == "fish-1.4":
-            fish_runtime = self.project_root / "models" / "experimental" / "fish-speech-1.4-runtime"
-            fish_error = FishSpeech14Adapter.availability_error(fish_runtime)
-            if fish_error is not None:
-                raise ValueError(f"Fish Speech 1.4 is not ready: {fish_error}.")
+            resolve_tts_model_pack(
+                "fish-1.4",
+                registry_path=self.config_directory / "model_packs.yaml",
+                references_path=self.config_directory / "voice_references.yaml",
+                models_root=self.model_pack_models_root,
+            )
         moss_language = payload.get("moss_language", "English")
         if moss_language not in MOSS_LANGUAGES:
             raise ValueError("Choose one of MOSS-TTS v1.5's 31 supported languages.")
@@ -317,24 +417,12 @@ class LocalWebApplication:
         if not isinstance(moss_use_reference, bool):
             raise ValueError("MOSS voice source must be a boolean.")
         if tts_model.startswith("moss-"):
-            moss_runtime = self.project_root / "models" / "experimental" / "moss-tts-runtime"
-            model_name = (
-                "MOSS-TTS-Local-Transformer-v1.5"
-                if tts_model == "moss-local-v1.5"
-                else "MOSS-TTS-v1.5"
+            resolve_tts_model_pack(
+                cast(OptionalTTSBackend, tts_model),
+                registry_path=self.config_directory / "model_packs.yaml",
+                references_path=self.config_directory / "voice_references.yaml",
+                models_root=self.model_pack_models_root,
             )
-            moss_error = MossTTSAdapter.availability_error(
-                moss_runtime,
-                moss_runtime / "checkpoints" / model_name,
-                moss_runtime / "checkpoints" / "MOSS-Audio-Tokenizer-v2",
-                self.project_root
-                / "models"
-                / "experimental"
-                / "fish-speech-1.4-runtime"
-                / "whoopy-reference.wav",
-            )
-            if moss_error is not None:
-                raise ValueError(f"{tts_model} is not ready: {moss_error}.")
         try:
             speed = float(payload.get("speed", 0.6))
         except (TypeError, ValueError) as error:
@@ -824,6 +912,12 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
             if path == "/api/status":
                 self._send_json(application.environment_status())
                 return
+            if path == "/api/model-packs":
+                try:
+                    self._send_json(application.list_model_packs())
+                except (OSError, ValueError) as error:
+                    self._send_error(HTTPStatus.BAD_REQUEST, str(error))
+                return
             if path == "/api/runs":
                 self._send_json({"runs": application.list_runs()})
                 return
@@ -867,6 +961,9 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
                     return
                 self._send_json(task, status=HTTPStatus.ACCEPTED)
                 return
+            if parsed.path.startswith("/api/model-packs"):
+                self._post_model_pack_action(parsed.path)
+                return
             if parsed.path.startswith("/api/runs/"):
                 self._post_run_action(parsed.path)
                 return
@@ -881,6 +978,34 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
                     self._send_json(cancelled_task)
                 return
             self._send_error(HTTPStatus.NOT_FOUND, "Endpoint not found.")
+
+        def _post_model_pack_action(self, path: str) -> None:
+            """Dispatch only the explicit, local model-pack action routes."""
+
+            parts = path.strip("/").split("/")
+            action: str
+            pack_id: str | None
+            if parts == ["api", "model-packs", "unload"]:
+                action, pack_id = "unload", None
+            elif parts == ["api", "model-packs", "restore"]:
+                action, pack_id = "restore", None
+            elif len(parts) == 4 and parts[:2] == ["api", "model-packs"]:
+                pack_id, action = parts[2], parts[3]
+            else:
+                self._send_error(HTTPStatus.NOT_FOUND, "Model-pack action not found.")
+                return
+            if action not in {"install", "verify", "smoke-test", "unload", "remove", "restore"}:
+                self._send_error(HTTPStatus.NOT_FOUND, "Model-pack action not found.")
+                return
+            try:
+                payload = self._read_json()
+                if not isinstance(payload, dict):
+                    raise ValueError("Request body must be a JSON object.")
+                report = application.model_pack_action(action, pack_id, payload)
+            except (OSError, ValueError) as error:
+                self._send_error(HTTPStatus.BAD_REQUEST, str(error))
+                return
+            self._send_json(report)
 
         def _post_run_action(self, path: str) -> None:
             parts = path.strip("/").split("/")

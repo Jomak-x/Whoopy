@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import inspect
 import json
 import os
 import sys
@@ -46,13 +47,26 @@ def main() -> int:
     import torchaudio
     from transformers import AutoModel, AutoProcessor
 
-    # Prefer Apple Metal on a capable Mac, but retain the official CPU path so
-    # the optional model fails gracefully into slower execution on other
-    # laptops instead of being needlessly tied to one operating system.
-    use_mps = torch.backends.mps.is_available()
-    device = torch.device("mps" if use_mps else "cpu")
-    dtype = torch.float16 if use_mps else torch.float32
     model_path = str(args.model.resolve())
+    try:
+        model_type = str(
+            json.loads((args.model / "config.json").read_text(encoding="utf-8"))["model_type"]
+        )
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        model_type = "unknown"
+    use_cuda = torch.cuda.is_available()
+    # PyTorch 2.9's Metal backend is currently unstable for the 8B delay
+    # architecture: float16 yields invalid probabilities and float32 can hit
+    # an empty-placeholder MPS assertion. Use its verified CPU path on macOS;
+    # the 5B Local Transformer remains stable and much faster on Metal.
+    use_mps = torch.backends.mps.is_available() and model_type != "moss_tts_delay"
+    if use_cuda:
+        device = torch.device("cuda")
+    elif use_mps:
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    dtype = torch.float16 if use_cuda or use_mps else torch.float32
 
     processor = AutoProcessor.from_pretrained(
         model_path,
@@ -69,17 +83,42 @@ def main() -> int:
     ).to(device)
     model.eval()
 
-    # Encoding the same reference for every sentence is expensive. The MOSS
-    # processor accepts its token matrix directly, so compute it once.
-    reference_codes = processor.encode_audios_from_path(
-        [str(args.reference_audio.resolve())],
-        n_vq=processor.model_config.n_vq,
-    )[0]
+    # Encoding the same reference for every sentence is expensive. MOSS v1.5
+    # uses the stereo Audio Tokenizer v2, while the flagship processor's helper
+    # currently downmixes before calling that tokenizer. Prepare the required
+    # channel count explicitly so a normal mono consented reference remains
+    # usable without changing the original recording on disk.
+    reference_waveform, reference_rate = torchaudio.load(str(args.reference_audio.resolve()))
+    native_rate = int(processor.model_config.sampling_rate)
+    if int(reference_rate) != native_rate:
+        reference_waveform = torchaudio.functional.resample(
+            reference_waveform,
+            int(reference_rate),
+            native_rate,
+        )
+    required_channels = int(getattr(processor.audio_tokenizer, "number_channels", 1))
+    if reference_waveform.shape[0] == 1 and required_channels == 2:
+        reference_waveform = reference_waveform.repeat(2, 1)
+    elif reference_waveform.shape[0] != required_channels:
+        reference_waveform = reference_waveform[:required_channels]
+    prepared_reference = processor.loudness_normalize(reference_waveform).to(device)
+    encoded_reference = processor.audio_tokenizer.batch_encode(
+        [prepared_reference],
+        num_quantizers=processor.model_config.n_vq,
+    )
+    reference_length = int(encoded_reference.audio_codes_lengths[0].item())
+    reference_codes = (
+        encoded_reference.audio_codes[:, 0, :reference_length]
+        .transpose(0, 1)
+        .contiguous()
+        .cpu()
+        .long()
+    )
     _reply(
         {
             "status": "ready",
             "sample_rate": 24_000,
-            "native_rate": processor.model_config.sampling_rate,
+            "native_rate": native_rate,
             "device": str(device),
         }
     )
@@ -108,15 +147,30 @@ def main() -> int:
             )
             batch = processor([[user_message]], mode="generation")
             with torch.no_grad():
+                # The 5B Local Transformer follows the broader Transformers
+                # generation signature and accepts ``do_sample``. The 8B
+                # delay model exposes its own explicit sampler and derives the
+                # sampling mode from temperature instead. Filter optional
+                # controls against the loaded model's real signature so both
+                # official checkpoints share this worker without pretending
+                # their APIs are identical.
+                generation_options: dict[str, object] = {
+                    "input_ids": batch["input_ids"].to(device),
+                    "attention_mask": batch["attention_mask"].to(device),
+                    "max_new_tokens": 2_048,
+                    "do_sample": True,
+                    "audio_temperature": 1.7,
+                    "audio_top_p": 0.8,
+                    "audio_top_k": 25,
+                    "audio_repetition_penalty": 1.0,
+                }
+                accepted_options = inspect.signature(model.generate).parameters
                 outputs = model.generate(
-                    input_ids=batch["input_ids"].to(device),
-                    attention_mask=batch["attention_mask"].to(device),
-                    max_new_tokens=2_048,
-                    do_sample=True,
-                    audio_temperature=1.7,
-                    audio_top_p=0.8,
-                    audio_top_k=25,
-                    audio_repetition_penalty=1.0,
+                    **{
+                        name: value
+                        for name, value in generation_options.items()
+                        if name in accepted_options
+                    }
                 )
                 messages = [message for message in processor.decode(outputs) if message]
             if not messages or not messages[0].audio_codes_list:

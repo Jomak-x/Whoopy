@@ -171,6 +171,29 @@ def test_failed_segment_resumes_without_resynthesizing_completed_segment(
     assert len(checkpoint.failures) == 2
 
 
+def test_long_model_diagnostics_cannot_prevent_failure_persistence(tmp_path: Path) -> None:
+    class LongDiagnosticSynthesizer(SwitchableSynthesizer):
+        def synthesize(self, segment: SpeechSegment) -> PcmAudio:
+            raise FatalSynthesisError("model diagnostic " * 300)
+
+    store = RunStore(tmp_path / "runs")
+    cache = SegmentCache(tmp_path / "cache")
+    store.create("Breathe slowly.", run_id=RUN_ID, created_at=START)
+    synthesizer = LongDiagnosticSynthesizer(
+        failing_segment="speech-0001",
+        failures_remaining=0,
+    )
+
+    with pytest.raises(WorkerError):
+        _worker(store, cache, synthesizer).process(RUN_ID)
+
+    failed = store.load(RUN_ID)
+    assert failed.status is RunStatus.FAILED
+    assert failed.execution is not None
+    assert failed.execution.message is not None
+    assert len(failed.execution.message) == 2_000
+
+
 def test_interrupted_running_run_can_resume_from_completed_checkpoint(
     tmp_path: Path,
 ) -> None:

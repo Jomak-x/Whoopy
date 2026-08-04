@@ -14,6 +14,7 @@ from whoopy.adapters.tts._json_process import (
     WorkerTimeoutError,
 )
 from whoopy.adapters.tts.fish_speech import FishSpeech14Adapter, FishSpeechSettings
+from whoopy.adapters.tts.moss_tts import MossTTSAdapter, MossTTSSettings
 from whoopy.audio.synthesis import TransientSynthesisError
 from whoopy.timeline import SpeechSegment
 
@@ -259,3 +260,101 @@ def test_fish_adapter_restarts_cleanly_after_request_timeout(tmp_path: Path) -> 
     adapter.close()
     assert any("first process stalled" in line for line in adapter.diagnostics())
     assert any("timed out" in line for line in adapter.diagnostics())
+
+
+class _DeadController:
+    running = False
+
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def close(self) -> None:
+        self.events.append("close-dead")
+
+
+class _ReadyController:
+    running = False
+    process_id = 123
+
+    def __init__(self, events: list[str], **_arguments: object) -> None:
+        self.events = events
+
+    def start(self) -> dict[str, object]:
+        self.events.append("start-new")
+        self.running = True
+        return {"status": "ready", "sample_rate": 24_000, "device": "cpu"}
+
+    def close(self) -> None:
+        self.running = False
+        self.events.append("close-new")
+
+
+class _RecordingSlot:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def acquire(self) -> None:
+        self.events.append("acquire-slot")
+
+    def release(self) -> None:
+        self.events.append("release-slot")
+
+
+def test_fish_dead_controller_releases_slot_before_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = _fish_runtime(tmp_path, "# worker is replaced by the test controller")
+    adapter = FishSpeech14Adapter(settings)
+    events: list[str] = []
+    adapter._controller = _DeadController(events)  # type: ignore[assignment]
+    adapter._runtime_slot = _RecordingSlot(events)  # type: ignore[assignment]
+    monkeypatch.setattr(
+        "whoopy.adapters.tts.fish_speech.JsonLineProcessController",
+        lambda **arguments: _ReadyController(events, **arguments),
+    )
+
+    adapter.prepare()
+
+    assert events[:4] == ["close-dead", "release-slot", "acquire-slot", "start-new"]
+    adapter.close()
+
+
+def test_moss_dead_controller_releases_slot_before_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runtime = tmp_path / "runtime"
+    python = runtime / ".venv/bin/python"
+    python.parent.mkdir(parents=True)
+    python.symlink_to(sys.executable)
+    model = tmp_path / "model"
+    codec = tmp_path / "codec"
+    for directory in (model, codec):
+        directory.mkdir()
+        (directory / "config.json").write_text("{}", encoding="utf-8")
+        (directory / "model.safetensors").write_bytes(b"checkpoint")
+    reference = tmp_path / "reference.wav"
+    reference.write_bytes(b"reference")
+    worker = tmp_path / "worker.py"
+    worker.write_text("# worker is replaced by the test controller", encoding="utf-8")
+    adapter = MossTTSAdapter(
+        MossTTSSettings(
+            runtime_directory=runtime,
+            worker_script=worker,
+            model_directory=model,
+            codec_directory=codec,
+            variant="moss-local-v1.5",
+            reference_audio=reference,
+        )
+    )
+    events: list[str] = []
+    adapter._controller = _DeadController(events)  # type: ignore[assignment]
+    adapter._runtime_slot = _RecordingSlot(events)  # type: ignore[assignment]
+    monkeypatch.setattr(
+        "whoopy.adapters.tts.moss_tts.JsonLineProcessController",
+        lambda **arguments: _ReadyController(events, **arguments),
+    )
+
+    adapter.prepare()
+
+    assert events[:4] == ["close-dead", "release-slot", "acquire-slot", "start-new"]
+    adapter.close()
