@@ -35,8 +35,15 @@ class EvaluationFixtureGenerator:
                         "id": section_id,
                         "title": section_id.title(),
                         "purpose": f"Guide the {section_id} section.",
+                        "technique": (
+                            "arrival"
+                            if section_id == "arrive"
+                            else "return"
+                            if section_id == "return"
+                            else "focused_attention"
+                        ),
                         "weight": 1,
-                        "pause_seconds": 3,
+                        "pause_seconds": 6,
                     }
                     for section_id in ("arrive", "notice", "return")
                 ],
@@ -45,9 +52,12 @@ class EvaluationFixtureGenerator:
             section_id = request.prompt.split("Section ID: ", 1)[1].splitlines()[0]
             match = re.search(r"Word range: (\d+)-(\d+)", request.prompt)
             assert match is not None
-            word_count = int(match.group(1))
+            word_count = int(match.group(2))
             words = ["You", "might", *([section_id] * (word_count - 2))]
-            value = {"section_id": section_id, "text": " ".join(words)}
+            sentences = [
+                " ".join(words[index : index + 10]) + "." for index in range(0, len(words), 10)
+            ]
+            value = {"section_id": section_id, "text": " ".join(sentences)}
         return ScriptGenerationResult(
             text=json.dumps(value),
             metadata=self.metadata,

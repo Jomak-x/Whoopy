@@ -16,12 +16,21 @@ class TTSRunSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    backend: Literal[
+        "kokoro",
+        "fish-1.4",
+        "moss-local-v1.5",
+        "moss-v1.5",
+    ] = "kokoro"
     voice_name: str = Field(min_length=1)
     speaker_id: int = Field(ge=0)
     speed: float = Field(gt=0)
     num_threads: int = Field(ge=1)
     provider: str = Field(min_length=1)
     language: str = Field(min_length=1)
+    seed: int = 42
+    instruction: str = ""
+    use_reference: bool = True
 
 
 class GenerationRunSettings(BaseModel):

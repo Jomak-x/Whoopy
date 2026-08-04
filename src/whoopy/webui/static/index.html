@@ -65,6 +65,16 @@
               <input id="minutes" type="range" min="1" max="10" value="3" step="1">
             </label>
             <label class="setting">
+              <span>Speech model</span>
+              <select id="tts-model">
+                <option value="kokoro">Kokoro · portable</option>
+                <option value="fish-1.4">Fish 1.4 · local experiment</option>
+                <option value="moss-local-v1.5">MOSS Local v1.5 · 5B</option>
+                <option value="moss-v1.5">MOSS flagship v1.5 · 8B</option>
+                <option value="fish-s2" disabled>Fish S2 · unavailable here</option>
+              </select>
+            </label>
+            <label class="setting">
               <span>Voice</span>
               <select id="voice">
                 <option value="af_heart">Heart · warm</option>
@@ -76,10 +86,67 @@
             <label class="setting">
               <span>Pace</span>
               <select id="speed">
-                <option value="0.8">Slower</option>
-                <option value="0.9" selected>Gentle</option>
-                <option value="1.0">Natural</option>
+                <option value="0.55">Very slow</option>
+                <option value="0.6" selected>Meditative</option>
+                <option value="0.7">Gentle</option>
+                <option value="0.8">Unhurried</option>
               </select>
+            </label>
+          </div>
+          <p class="input-help model-detail" id="tts-model-detail">
+            Kokoro is the portable Apache-2.0 default. Choose a voice preset below.
+          </p>
+          <div class="moss-controls hidden" id="moss-controls">
+            <label class="setting">
+              <span>Language tag</span>
+              <select id="moss-language">
+                <option>English</option>
+                <option>German</option>
+                <option>French</option>
+                <option>Spanish</option>
+                <option>Italian</option>
+                <option>Portuguese</option>
+                <option>Dutch</option>
+                <option>Swedish</option>
+                <option>Danish</option>
+                <option>Finnish</option>
+                <option>Polish</option>
+                <option>Czech</option>
+                <option>Romanian</option>
+                <option>Hungarian</option>
+                <option>Greek</option>
+                <option>Turkish</option>
+                <option>Russian</option>
+                <option>Chinese</option>
+                <option>Cantonese</option>
+                <option>Japanese</option>
+                <option>Korean</option>
+                <option>Arabic</option>
+                <option>Hebrew</option>
+                <option>Persian (Farsi)</option>
+                <option>Hindi</option>
+                <option>Malay</option>
+                <option>Swahili</option>
+                <option>Tagalog</option>
+                <option>Thai</option>
+                <option>Vietnamese</option>
+                <option>Macedonian</option>
+              </select>
+            </label>
+            <label class="setting">
+              <span>Voice source</span>
+              <select id="moss-voice-source">
+                <option value="reference">Whoopy slow reference</option>
+                <option value="direct">Model-generated voice</option>
+              </select>
+            </label>
+            <label class="setting moss-instruction-setting">
+              <span>Delivery instruction</span>
+              <input
+                id="moss-instruction"
+                maxlength="300"
+                value="Speak slowly, softly, and warmly, with a meditative delivery."
+              >
             </label>
           </div>
 
@@ -87,6 +154,9 @@
             <button class="primary-button" type="button" id="generate-button">
               <span>Create meditation</span>
               <span aria-hidden="true">→</span>
+            </button>
+            <button class="text-button" type="button" id="test-voice-button">
+              Test this voice
             </button>
             <p class="model-note" id="model-note">Standard local model · no upload</p>
           </div>
@@ -130,7 +200,7 @@
           </div>
           <div class="flow-note">
             <span class="flow-number">02</span>
-            <p><strong>Speak</strong><br>Kokoro creates each speech segment.</p>
+            <p><strong>Speak</strong><br>Your selected local voice creates each segment.</p>
           </div>
           <div class="flow-note">
             <span class="flow-number">03</span>

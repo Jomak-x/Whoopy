@@ -13,9 +13,16 @@ const elements = {
   inputHelp: byId("input-help"),
   minutes: byId("minutes"),
   minutesValue: byId("minutes-value"),
+  ttsModel: byId("tts-model"),
+  ttsModelDetail: byId("tts-model-detail"),
+  mossControls: byId("moss-controls"),
+  mossLanguage: byId("moss-language"),
+  mossVoiceSource: byId("moss-voice-source"),
+  mossInstruction: byId("moss-instruction"),
   voice: byId("voice"),
   speed: byId("speed"),
   generate: byId("generate-button"),
+  testVoice: byId("test-voice-button"),
   taskPanel: byId("task-panel"),
   taskTitle: byId("task-title"),
   taskMessage: byId("task-message"),
@@ -72,7 +79,7 @@ async function loadStatus() {
     const result = await api("/api/status");
     if (!result.ok) throw new Error(result.error);
     const labels = { basic: "Script & speech", standard: "Prompt to meditation" };
-    elements.status.innerHTML = Object.entries(result.profiles)
+    const profileRows = Object.entries(result.profiles)
       .map(([name, profile]) => {
         let badge = "Ready";
         let badgeClass = "";
@@ -90,6 +97,31 @@ async function loadStatus() {
           </div>`;
       })
       .join("");
+    const speechLabels = {
+      kokoro: "Kokoro",
+      "fish-1.4": "Fish 1.4",
+      "moss-local-v1.5": "MOSS Local 5B",
+      "moss-v1.5": "MOSS flagship 8B",
+    };
+    const speechRows = Object.entries(result.speech_models || {})
+      .filter(([name]) => name !== "fish-s2")
+      .map(([name, model]) => {
+        const option = elements.ttsModel.querySelector(`option[value="${name}"]`);
+        if (option) option.disabled = !model.ready;
+        return `
+          <div class="profile-status">
+            <span>${escapeHtml(speechLabels[name] || name)}</span>
+            <span class="status-badge ${model.ready ? "" : "missing"}">
+              ${model.ready ? "Ready" : "Not installed"}
+            </span>
+          </div>`;
+      })
+      .join("");
+    elements.status.innerHTML = profileRows + speechRows;
+    if (elements.ttsModel.selectedOptions[0]?.disabled) {
+      elements.ttsModel.value = "kokoro";
+      updateSpeechModel();
+    }
   } catch (error) {
     elements.status.innerHTML = `<p class="input-help">${escapeHtml(error.message)}</p>`;
   }
@@ -119,8 +151,12 @@ async function startGeneration() {
         mode: state.mode,
         text,
         minutes: Number(elements.minutes.value),
+        tts_model: elements.ttsModel.value,
         voice: elements.voice.value,
         speed: Number(elements.speed.value),
+        moss_language: elements.mossLanguage.value,
+        moss_instruction: elements.mossInstruction.value,
+        moss_use_reference: elements.mossVoiceSource.value === "reference",
       }),
     });
     state.taskId = task.task_id;
@@ -128,6 +164,55 @@ async function startGeneration() {
   } catch (error) {
     finishTask();
     showError(error.message);
+  }
+}
+
+async function testVoice() {
+  clearError();
+  elements.testVoice.disabled = true;
+  elements.taskPanel.classList.remove("hidden");
+  elements.taskTitle.textContent = "Creating a voice sample";
+  elements.taskMessage.textContent = "Loading the selected speech model locally…";
+  try {
+    const task = await api("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "script",
+        text:
+          "Notice the support beneath you.\\n\\n[pause: 2.4s]\\n\\nLet your breathing move at its own natural pace.",
+        tts_model: elements.ttsModel.value,
+        voice: elements.voice.value,
+        speed: Number(elements.speed.value),
+        moss_language: elements.mossLanguage.value,
+        moss_instruction: elements.mossInstruction.value,
+        moss_use_reference: elements.mossVoiceSource.value === "reference",
+      }),
+    });
+    state.taskId = task.task_id;
+    schedulePoll();
+  } catch (error) {
+    finishTask();
+    showError(error.message);
+  }
+}
+
+function updateSpeechModel() {
+  const fish = elements.ttsModel.value === "fish-1.4";
+  const moss = elements.ttsModel.value.startsWith("moss-");
+  elements.voice.disabled = fish || moss;
+  elements.speed.disabled = fish || moss;
+  elements.mossControls.classList.toggle("hidden", !moss);
+  if (fish) {
+    elements.ttsModelDetail.textContent =
+      "Fish 1.4 uses the slow local reference voice. License: CC BY-NC-SA 4.0 (non-commercial). It does not understand [emotion] tags; those are a Fish S2 feature, and S2 is too large for this laptop setup.";
+  } else if (moss) {
+    const size = elements.ttsModel.value === "moss-v1.5" ? "8B flagship" : "5B Local Transformer";
+    elements.ttsModelDetail.textContent =
+      `${size}, Apache-2.0. Supports a language tag, voice cloning, a free-form delivery instruction, and native [pause X.Ys] markup. Whoopy still uses its exact timeline pauses between blocks.`;
+  } else {
+    elements.ttsModelDetail.textContent =
+      "Kokoro is the portable Apache-2.0 default. Voice and pace controls below are active.";
   }
 }
 
@@ -174,6 +259,7 @@ function finishTask() {
   state.pollTimer = null;
   state.taskId = null;
   elements.generate.disabled = false;
+  elements.testVoice.disabled = false;
   window.setTimeout(() => elements.taskPanel.classList.add("hidden"), 650);
 }
 
@@ -202,6 +288,13 @@ async function loadRuns() {
     elements.runs.innerHTML = result.runs
       .map((run) => {
         const source = run.source_kind === "generated_prompt" ? "Local prompt" : "Your script";
+        const speechModels = {
+          kokoro: "Kokoro",
+          "fish-1.4": "Fish 1.4",
+          "moss-local-v1.5": "MOSS Local 5B",
+          "moss-v1.5": "MOSS flagship 8B",
+        };
+        const speechModel = speechModels[run.tts_model] || "";
         const duration = run.duration_seconds ? formatDuration(run.duration_seconds) : run.status;
         const quality =
           run.quality_passed === true
@@ -211,7 +304,7 @@ async function loadRuns() {
           <article class="run-card">
             <div>
               <div class="run-card-top">
-                <span class="run-type">${source}</span>
+                <span class="run-type">${source}${speechModel ? ` · ${speechModel}` : ""}</span>
                 ${quality}
               </div>
               <h3>${escapeHtml(cleanTitle(run.title))}</h3>
@@ -326,6 +419,8 @@ elements.minutes.addEventListener("input", () => {
   elements.minutesValue.textContent = `${elements.minutes.value} min`;
 });
 elements.generate.addEventListener("click", startGeneration);
+elements.testVoice.addEventListener("click", testVoice);
+elements.ttsModel.addEventListener("change", updateSpeechModel);
 elements.cancel.addEventListener("click", cancelTask);
 byId("refresh-status").addEventListener("click", loadStatus);
 byId("refresh-runs").addEventListener("click", loadRuns);
@@ -338,3 +433,4 @@ elements.dialog.addEventListener("close", () => {
 
 loadStatus();
 loadRuns();
+updateSpeechModel();

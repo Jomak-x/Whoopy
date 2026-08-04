@@ -14,7 +14,16 @@ from uuid import UUID, uuid4
 import yaml
 
 from whoopy.adapters.llm import LlamaCppScriptGenerator, LlamaCppSettings
-from whoopy.adapters.tts import SherpaOnnxKokoroAdapter, SherpaOnnxSettings
+from whoopy.adapters.tts import (
+    MOSS_LANGUAGES,
+    FishSpeech14Adapter,
+    FishSpeechSettings,
+    MossTTSAdapter,
+    MossTTSSettings,
+    MossVariant,
+    SherpaOnnxKokoroAdapter,
+    SherpaOnnxSettings,
+)
 from whoopy.artifacts import (
     ArtifactError,
     ArtifactInstaller,
@@ -49,9 +58,19 @@ from whoopy.pipeline import (
 )
 from whoopy.pipeline.runs import RunStoreError
 from whoopy.pipeline.worker import WorkerError
-from whoopy.ports import AdapterError
+from whoopy.ports import AdapterError, SpeechSynthesizer
 from whoopy.timeline import ScriptCompileError, Timeline, build_script_timeline
 from whoopy.voices import KOKORO_ENGLISH_VOICES, kokoro_speaker_id
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FISH_14_RUNTIME = PROJECT_ROOT / "models" / "experimental" / "fish-speech-1.4-runtime"
+MOSS_RUNTIME = PROJECT_ROOT / "models" / "experimental" / "moss-tts-runtime"
+MOSS_MODELS: dict[MossVariant, Path] = {
+    "moss-local-v1.5": MOSS_RUNTIME / "checkpoints" / "MOSS-TTS-Local-Transformer-v1.5",
+    "moss-v1.5": MOSS_RUNTIME / "checkpoints" / "MOSS-TTS-v1.5",
+}
+MOSS_CODEC = MOSS_RUNTIME / "checkpoints" / "MOSS-Audio-Tokenizer-v2"
+MOSS_REFERENCE = FISH_14_RUNTIME / "whoopy-reference.wav"
 
 
 def _add_run_location_arguments(parser: argparse.ArgumentParser) -> None:
@@ -163,21 +182,48 @@ def _real_script_worker(
     """Reconstruct a schema-v4 worker only from durable run configuration."""
 
     resolved = store.load_resolved_config(record.run_id)
-    tts_settings = SherpaOnnxSettings(
-        voice_name=resolved.tts.voice_name,
-        speaker_id=resolved.tts.speaker_id,
-        speed=resolved.tts.speed,
-        num_threads=resolved.tts.num_threads,
-        provider=resolved.tts.provider,
-        language=resolved.tts.language,
-    )
-    raw_synthesizer = SherpaOnnxKokoroAdapter.from_artifact_store(
-        artifact_lock=load_artifact_lock(artifact_lock_path),
-        store=ArtifactStore(models_dir),
-        profile_name=resolved.profile,
-        target=resolved.target,
-        settings=tts_settings,
-    )
+    raw_synthesizer: SpeechSynthesizer
+    if resolved.tts.backend == "fish-1.4":
+        raw_synthesizer = FishSpeech14Adapter(
+            FishSpeechSettings(
+                runtime_directory=FISH_14_RUNTIME,
+                worker_script=PROJECT_ROOT / "scripts" / "fish_speech_1_4_worker.py",
+                reference_audio=FISH_14_RUNTIME / "whoopy-reference.wav",
+                reference_text=FISH_14_RUNTIME / "whoopy-reference.txt",
+                seed=resolved.tts.seed,
+            )
+        )
+    elif resolved.tts.backend in MOSS_MODELS:
+        raw_synthesizer = MossTTSAdapter(
+            MossTTSSettings(
+                runtime_directory=MOSS_RUNTIME,
+                worker_script=PROJECT_ROOT / "scripts" / "moss_tts_worker.py",
+                model_directory=MOSS_MODELS[resolved.tts.backend],
+                codec_directory=MOSS_CODEC,
+                variant=resolved.tts.backend,
+                reference_audio=MOSS_REFERENCE,
+                language=resolved.tts.language,
+                instruction=resolved.tts.instruction,
+                use_reference=resolved.tts.use_reference,
+                seed=resolved.tts.seed,
+            )
+        )
+    else:
+        tts_settings = SherpaOnnxSettings(
+            voice_name=resolved.tts.voice_name,
+            speaker_id=resolved.tts.speaker_id,
+            speed=resolved.tts.speed,
+            num_threads=resolved.tts.num_threads,
+            provider=resolved.tts.provider,
+            language=resolved.tts.language,
+        )
+        raw_synthesizer = SherpaOnnxKokoroAdapter.from_artifact_store(
+            artifact_lock=load_artifact_lock(artifact_lock_path),
+            store=ArtifactStore(models_dir),
+            profile_name=resolved.profile,
+            target=resolved.target,
+            settings=tts_settings,
+        )
     synthesizer = ProcessedSpeechSynthesizer(
         raw_synthesizer,
         settings=resolved.processing,
@@ -477,6 +523,28 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("auto", "basic", "lite", "standard"),
         default="auto",
         help="Use Basic for scripts; prompt mode safely selects Lite or Standard.",
+    )
+    generate_parser.add_argument(
+        "--tts-model",
+        choices=("kokoro", "fish-1.4", "moss-local-v1.5", "moss-v1.5"),
+        default="kokoro",
+        help="Speech model; larger experimental models require local checkpoints.",
+    )
+    generate_parser.add_argument(
+        "--moss-language",
+        choices=MOSS_LANGUAGES,
+        default="English",
+        help="Explicit MOSS-TTS language tag (default: English).",
+    )
+    generate_parser.add_argument(
+        "--moss-instruction",
+        default="Speak slowly, softly, and warmly, with a meditative delivery.",
+        help="Free-form MOSS-TTS delivery instruction.",
+    )
+    generate_parser.add_argument(
+        "--moss-direct-voice",
+        action="store_true",
+        help="Let MOSS choose a voice instead of cloning Whoopy's slow reference.",
     )
     generate_parser.add_argument(
         "--voice",
@@ -974,30 +1042,97 @@ def main(argv: Sequence[str] | None = None) -> int:
             artifact_lock = load_artifact_lock(_artifact_lock_path(args))
             voice_name = args.voice or settings.tts.voice
             speed = args.speed if args.speed is not None else settings.tts.speed
-            tts_settings = SherpaOnnxSettings(
-                voice_name=voice_name,
-                speaker_id=kokoro_speaker_id(voice_name),
-                speed=speed,
-                num_threads=2,
-                provider="cpu",
-                language="en-us",
-            )
-            raw_synthesizer = SherpaOnnxKokoroAdapter.from_artifact_store(
-                artifact_lock=artifact_lock,
-                store=artifact_store,
-                profile_name=profile_name,
-                target=target,
-                settings=tts_settings,
-            )
+            if not 0.5 <= speed <= 1.2:
+                raise GenerationError("--speed must be between 0.5 and 1.2")
+            raw_synthesizer: SpeechSynthesizer
+            if args.tts_model == "fish-1.4":
+                fish_error = FishSpeech14Adapter.availability_error(FISH_14_RUNTIME)
+                if fish_error is not None:
+                    raise GenerationError(f"Fish Speech 1.4 is not ready: {fish_error}.")
+                raw_synthesizer = FishSpeech14Adapter(
+                    FishSpeechSettings(
+                        runtime_directory=FISH_14_RUNTIME,
+                        worker_script=PROJECT_ROOT / "scripts" / "fish_speech_1_4_worker.py",
+                        reference_audio=FISH_14_RUNTIME / "whoopy-reference.wav",
+                        reference_text=FISH_14_RUNTIME / "whoopy-reference.txt",
+                        seed=args.seed,
+                    )
+                )
+                durable_tts = TTSRunSettings(
+                    backend="fish-1.4",
+                    voice_name="whoopy-reference",
+                    speaker_id=0,
+                    speed=1.0,
+                    num_threads=1,
+                    provider="auto",
+                    language="en",
+                    seed=args.seed,
+                )
+            elif args.tts_model in MOSS_MODELS:
+                moss_model = MOSS_MODELS[args.tts_model]
+                moss_error = MossTTSAdapter.availability_error(
+                    MOSS_RUNTIME,
+                    moss_model,
+                    MOSS_CODEC,
+                    MOSS_REFERENCE,
+                )
+                if moss_error is not None:
+                    raise GenerationError(f"{args.tts_model} is not ready: {moss_error}.")
+                raw_synthesizer = MossTTSAdapter(
+                    MossTTSSettings(
+                        runtime_directory=MOSS_RUNTIME,
+                        worker_script=PROJECT_ROOT / "scripts" / "moss_tts_worker.py",
+                        model_directory=moss_model,
+                        codec_directory=MOSS_CODEC,
+                        variant=cast(MossVariant, args.tts_model),
+                        reference_audio=MOSS_REFERENCE,
+                        language=args.moss_language,
+                        instruction=args.moss_instruction,
+                        use_reference=not args.moss_direct_voice,
+                        seed=args.seed,
+                    )
+                )
+                durable_tts = TTSRunSettings(
+                    backend=args.tts_model,
+                    voice_name=(
+                        "direct-generated" if args.moss_direct_voice else "whoopy-reference"
+                    ),
+                    speaker_id=0,
+                    speed=1.0,
+                    num_threads=1,
+                    provider="mps",
+                    language=args.moss_language,
+                    seed=args.seed,
+                    instruction=args.moss_instruction,
+                    use_reference=not args.moss_direct_voice,
+                )
+            else:
+                tts_settings = SherpaOnnxSettings(
+                    voice_name=voice_name,
+                    speaker_id=kokoro_speaker_id(voice_name),
+                    speed=speed,
+                    num_threads=2,
+                    provider="cpu",
+                    language="en-us",
+                )
+                raw_synthesizer = SherpaOnnxKokoroAdapter.from_artifact_store(
+                    artifact_lock=artifact_lock,
+                    store=artifact_store,
+                    profile_name=profile_name,
+                    target=target,
+                    settings=tts_settings,
+                )
+                durable_tts = TTSRunSettings(
+                    backend="kokoro",
+                    voice_name=tts_settings.voice_name,
+                    speaker_id=tts_settings.speaker_id,
+                    speed=tts_settings.speed,
+                    num_threads=tts_settings.num_threads,
+                    provider=tts_settings.provider,
+                    language=tts_settings.language,
+                    seed=args.seed,
+                )
             processing = SpeechProcessingSettings()
-            durable_tts = TTSRunSettings(
-                voice_name=tts_settings.voice_name,
-                speaker_id=tts_settings.speaker_id,
-                speed=tts_settings.speed,
-                num_threads=tts_settings.num_threads,
-                provider=tts_settings.provider,
-                language=tts_settings.language,
-            )
 
             if prompt_mode:
                 assert args.prompt is not None
@@ -1023,6 +1158,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                     llm,
                     prompts,
                     max_parallel_sections=args.parallel_sections,
+                    # Kokoro's speech rate scales approximately with this input.
+                    # Real-device calibration measured about 122 WPM at 0.6.
+                    articulation_words_per_minute=(
+                        133
+                        if args.tts_model
+                        in (
+                            "fish-1.4",
+                            "moss-local-v1.5",
+                            "moss-v1.5",
+                        )
+                        else max(80, round(205 * speed))
+                    ),
                     workspace=workspace,
                 ).generate(
                     prompt=args.prompt,

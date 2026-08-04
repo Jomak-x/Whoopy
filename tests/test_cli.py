@@ -329,8 +329,15 @@ class _DraftFixture:
                         "id": section_id,
                         "title": section_id.title(),
                         "purpose": f"Guide the {section_id} section.",
+                        "technique": (
+                            "arrival"
+                            if section_id == "arrive"
+                            else "return"
+                            if section_id == "return"
+                            else "focused_attention"
+                        ),
                         "weight": 1,
-                        "pause_seconds": 3,
+                        "pause_seconds": 6,
                     }
                     for section_id in ("arrive", "notice", "return")
                 ],
@@ -339,7 +346,11 @@ class _DraftFixture:
             section_id = request.prompt.split("Section ID: ", 1)[1].splitlines()[0]
             value = {
                 "section_id": section_id,
-                "text": " ".join([section_id] * 46),
+                "text": (
+                    f"{section_id.title()} gently into this quiet moment. "
+                    "Notice the steady support beneath you. "
+                    "Let this simple experience be enough for now."
+                ),
             }
         return ScriptGenerationResult(
             text=json.dumps(value),

@@ -2,17 +2,31 @@
 
 This roadmap turns the spec into implementation phases. Each phase has a reason for existing, not just a deliverable list.
 
+> [!IMPORTANT]
+> The authoritative near-term sequence is now
+> [`local-first-master-plan.md`](./local-first-master-plan.md). It reconstructs
+> the real merged/local/model state and defines PRs 12–21 required before the
+> permanent Phase 4 UI begins. The broader phase descriptions below remain the
+> long-range product map.
+
 Implementation status:
 
 - **Phase 0 — complete:** the portable foundation is merged.
 - **Phase 1 — complete:** the local-core run and worker slice is merged.
 - **Phase 2 — complete:** deterministic fixture audio is merged.
 - **Phase 3 — complete:** segment caching, retry, recovery, and stronger integrity checks are merged.
-- **Phase 3.5 — implementation complete; human voice review pending:** install, replaceable adapters, authored
+- **Phase 3.5 — merged; human acceptance pending:** install, replaceable adapters, authored
   speech, validated generation, one-command audio, and automatic model
   evaluation are merged. Anonymous voice samples await listener ratings.
-- **Phase 4 — started:** a small private local tester exercises the real flow;
-  the permanent editor and product-polish work remain planned.
+- **Phase 3.6 — open PR and local work in progress:** adaptive pacing and
+  additional voice adapters exist, but the complete working tree has not yet
+  passed remote CI or human listening acceptance.
+- **Local stabilization — PRs 13–21 planned:** recovery, managed voice packs,
+  blind voice selection, meditation evaluation, technique blueprints, pacing
+  v2, reviewed breathing exercises, and an offline soak gate.
+- **Phase 4 — laboratory slice only:** a small private local tester exercises
+  the real flow; the permanent editor and product-polish work must wait for the
+  local V1 exit gate.
 - **Phases 5–6 — planned:** extended local capabilities and public-platform behavior are not implemented yet.
 
 ## Phase 0: Documentation And Repo Foundation
@@ -180,6 +194,11 @@ Done when:
 - model and voice implementations remain replaceable behind typed ports
 
 ## Phase 4: Local Product Polish
+
+Entry condition:
+
+- every item in the
+  [Local V1 exit gate](./local-first-master-plan.md#local-v1-exit-gate) passes.
 
 Current first slice:
 

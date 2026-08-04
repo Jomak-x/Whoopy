@@ -1,5 +1,11 @@
 # Whoopy Step-by-Step PR Plan
 
+> [!IMPORTANT]
+> This is the complete long-range backlog. For the current local-only critical
+> path, status reconstruction, and PRs 12–21, use
+> [`local-first-master-plan.md`](./local-first-master-plan.md). That plan takes
+> precedence until the local V1 exit gate passes.
+
 This document turns the Whoopy specification into a sequence of small pull requests. Each numbered step is one PR. Complete and merge them in order unless a PR explicitly says it can run in parallel.
 
 The initial repository is one documented exception: Milestone 0's PR 1–3 review
