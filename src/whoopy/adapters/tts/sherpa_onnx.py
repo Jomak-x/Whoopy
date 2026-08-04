@@ -238,3 +238,8 @@ class SherpaOnnxKokoroAdapter:
         if byteorder != "little":
             pcm.byteswap()
         return PcmAudio(pcm_s16le=pcm.tobytes(), sample_rate=self.sample_rate)
+
+    def close(self) -> None:
+        """Release the in-process Kokoro engine so its memory can be reclaimed."""
+
+        self._engine = None

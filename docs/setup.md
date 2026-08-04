@@ -126,10 +126,18 @@ uv run whoopy cache stats
 ```
 
 The second run's `run.json` reports two cache hits for the current two-speech
-fixture timeline. Recover a run left in `failed` or `running`:
+fixture timeline. Reconcile an abandoned lease, then recover a run left in
+`failed` or `interrupted`:
 
 ```bash
+uv run whoopy run reconcile <run-id>
 uv run whoopy run resume <run-id>
+```
+
+An active local owner can be asked to stop without deleting checkpoints:
+
+```bash
+uv run whoopy run cancel <run-id>
 ```
 
 Whoopy revalidates completed segment PCM before reusing it. Corrupt cache or

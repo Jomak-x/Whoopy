@@ -18,12 +18,14 @@ Implementation status:
 - **Phase 3.5 — merged; human acceptance pending:** install, replaceable adapters, authored
   speech, validated generation, one-command audio, and automatic model
   evaluation are merged. Anonymous voice samples await listener ratings.
-- **Phase 3.6 — open PR and local work in progress:** adaptive pacing and
-  additional voice adapters exist, but the complete working tree has not yet
-  passed remote CI or human listening acceptance.
-- **Local stabilization — PRs 13–21 planned:** recovery, managed voice packs,
-  blind voice selection, meditation evaluation, technique blueprints, pacing
-  v2, reviewed breathing exercises, and an offline soak gate.
+- **Phase 3.6 — merged; human acceptance pending:** adaptive pacing and
+  additional voice adapters are merged, but voice and meditation quality are
+  not accepted until listening review.
+- **Local stabilization — PR 13 locally verified; CI pending:** durable
+  recovery is the active PR. Managed voice packs, blind voice
+  selection, meditation evaluation, technique blueprints, pacing v2, reviewed
+  breathing exercises, the polished local UI, and an offline soak gate remain
+  PRs 14–22.
 - **Phase 4 — laboratory slice only:** a small private local tester exercises
   the real flow; the permanent editor and product-polish work must wait for the
   local V1 exit gate.

@@ -154,6 +154,32 @@ def test_plan_first_generation_produces_valid_script_and_timeline() -> None:
     assert result.estimated_duration_seconds == pytest.approx(59.2683, rel=0.001)
 
 
+def test_generation_reports_planning_then_drafting_progress() -> None:
+    adapter = SequenceGenerator(
+        [
+            _plan(),
+            _section("arrive", "settle"),
+            _section("notice", "notice"),
+            _section("return", "return"),
+        ]
+    )
+    stages: list[str] = []
+    generator = LocalMeditationGenerator(
+        adapter,
+        load_prompt_bundle(Path("config/prompts")),
+        progress_callback=stages.append,
+    )
+
+    generator.generate(
+        prompt="A short grounding meditation.",
+        duration_seconds=60,
+        run_id=RUN_ID,
+        created_at=CREATED_AT,
+    )
+
+    assert stages == ["planning", "drafting"]
+
+
 def test_invalid_json_is_repaired_with_a_bounded_retry() -> None:
     adapter = SequenceGenerator(
         [

@@ -5,11 +5,16 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from whoopy.adapters.tts._json_process import (
+    BoundedDiagnostics,
+    JsonLineProcessController,
+    WorkerProcessError,
+    WorkerTimeoutError,
+)
 from whoopy.audio.models import SAMPLE_RATE, PcmAudio
 from whoopy.audio.synthesis import (
     FatalSynthesisError,
@@ -86,6 +91,18 @@ class MossTTSSettings:
     instruction: str = "Speak slowly, softly, and warmly, with a meditative delivery."
     use_reference: bool = True
     seed: int = 42
+    startup_timeout_seconds: float = 900
+    request_timeout_seconds: float = 600
+    shutdown_timeout_seconds: float = 5
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("startup", self.startup_timeout_seconds),
+            ("request", self.request_timeout_seconds),
+            ("shutdown", self.shutdown_timeout_seconds),
+        ):
+            if value <= 0:
+                raise ValueError(f"{name} timeout must be positive")
 
 
 class MossTTSAdapter:
@@ -95,7 +112,8 @@ class MossTTSAdapter:
 
     def __init__(self, settings: MossTTSSettings) -> None:
         self.settings = settings
-        self._process: subprocess.Popen[str] | None = None
+        self._controller: JsonLineProcessController | None = None
+        self._diagnostics = BoundedDiagnostics()
         reference_hash = (
             hashlib.sha256(settings.reference_audio.read_bytes()).hexdigest()
             if settings.reference_audio.is_file()
@@ -147,9 +165,12 @@ class MossTTSAdapter:
             missing.append("reference voice")
         return None if not missing else f"missing {', '.join(missing)}"
 
-    def _start(self) -> subprocess.Popen[str]:
-        if self._process is not None and self._process.poll() is None:
-            return self._process
+    def _start(self) -> JsonLineProcessController:
+        if self._controller is not None and self._controller.running:
+            return self._controller
+        if self._controller is not None:
+            self._controller.close()
+            self._controller = None
         error = self.availability_error(
             self.settings.runtime_directory,
             self.settings.model_directory,
@@ -168,71 +189,73 @@ class MossTTSAdapter:
             "--reference-audio",
             str(self.settings.reference_audio),
         ]
+        controller = JsonLineProcessController(
+            command=command,
+            label="MOSS-TTS",
+            startup_timeout_seconds=self.settings.startup_timeout_seconds,
+            request_timeout_seconds=self.settings.request_timeout_seconds,
+            shutdown_timeout_seconds=self.settings.shutdown_timeout_seconds,
+            diagnostics=self._diagnostics,
+        )
+        self._controller = controller
         try:
-            self._process = subprocess.Popen(
-                command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=None,
-                text=True,
-                bufsize=1,
-            )
-            assert self._process.stdout is not None
-            ready = json.loads(self._process.stdout.readline())
-        except (OSError, ValueError, json.JSONDecodeError) as error:
-            self.close()
+            ready = controller.start()
+        except WorkerTimeoutError as error:
+            self._drop_controller()
+            raise TransientSynthesisError(f"MOSS-TTS startup failed: {error}") from error
+        except WorkerProcessError as error:
+            self._drop_controller()
             raise FatalSynthesisError(f"Could not start MOSS-TTS: {error}") from error
-        if ready.get("status") != "ready":
-            self.close()
+        if ready.get("status") != "ready" or ready.get("sample_rate") != self.sample_rate:
+            self._drop_controller()
             raise FatalSynthesisError(f"MOSS-TTS did not become ready: {ready}")
-        return self._process
+        return controller
 
     def synthesize(self, segment: SpeechSegment) -> PcmAudio:
-        process = self._start()
+        controller = self._start()
         try:
-            assert process.stdin is not None and process.stdout is not None
-            process.stdin.write(
-                json.dumps(
-                    {
-                        "text": segment.text,
-                        "seed": self.settings.seed,
-                        "language": self.settings.language,
-                        "instruction": self.settings.instruction,
-                        "use_reference": self.settings.use_reference,
-                    },
-                    separators=(",", ":"),
-                )
-                + "\n"
+            response = controller.request(
+                {
+                    "text": segment.text,
+                    "seed": self.settings.seed,
+                    "language": self.settings.language,
+                    "instruction": self.settings.instruction,
+                    "use_reference": self.settings.use_reference,
+                }
             )
-            process.stdin.flush()
-            response = json.loads(process.stdout.readline())
-        except (BrokenPipeError, OSError, json.JSONDecodeError) as error:
-            self.close()
+        except WorkerProcessError as error:
+            self._drop_controller()
             raise TransientSynthesisError(f"MOSS-TTS process failed: {error}") from error
         if response.get("status") != "ok":
+            self._drop_controller()
             raise TransientSynthesisError(
                 f"MOSS-TTS generation failed: {response.get('error', 'unknown error')}"
             )
         try:
-            pcm = base64.b64decode(response["pcm_s16le"], validate=True)
+            encoded_pcm = response["pcm_s16le"]
+            if not isinstance(encoded_pcm, (str, bytes)):
+                raise TypeError("pcm_s16le must be text or bytes")
+            pcm = base64.b64decode(encoded_pcm, validate=True)
         except (KeyError, TypeError, ValueError) as error:
+            self._drop_controller()
             raise InvalidSynthesisOutput("MOSS-TTS returned invalid PCM data") from error
         if not pcm:
+            self._drop_controller()
             raise InvalidSynthesisOutput("MOSS-TTS returned empty audio")
         return PcmAudio(pcm_s16le=pcm, sample_rate=self.sample_rate)
 
+    def diagnostics(self) -> tuple[str, ...]:
+        """Return bounded worker diagnostics retained across process restarts."""
+
+        return self._diagnostics.snapshot()
+
+    def _drop_controller(self) -> None:
+        controller, self._controller = self._controller, None
+        if controller is not None:
+            controller.close()
+
     def close(self) -> None:
-        process, self._process = self._process, None
-        if process is None:
-            return
-        if process.stdin is not None:
-            process.stdin.close()
-        if process.poll() is None:
-            process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
+        self._drop_controller()
 
     def __del__(self) -> None:
         self.close()

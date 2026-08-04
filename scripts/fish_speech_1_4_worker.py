@@ -82,8 +82,15 @@ def main() -> int:
 
     _reply({"status": "ready", "sample_rate": 24_000})
     for line in sys.stdin:
+        request_id: object = None
         try:
             request = json.loads(line)
+            if not isinstance(request, dict):
+                raise TypeError("request must be a JSON object")
+            request_id = request.get("request_id")
+            if request.get("action") == "close":
+                _reply({"status": "closing", "request_id": request_id})
+                return 0
             text = str(request["text"]).strip()
             if not text:
                 raise ValueError("text cannot be empty")
@@ -125,13 +132,20 @@ def main() -> int:
             _reply(
                 {
                     "status": "ok",
+                    "request_id": request_id,
                     "pcm_s16le": base64.b64encode(np.asarray(pcm, dtype="<i2").tobytes()).decode(
                         "ascii"
                     ),
                 }
             )
         except Exception as error:
-            _reply({"status": "error", "error": f"{type(error).__name__}: {error}"})
+            _reply(
+                {
+                    "status": "error",
+                    "request_id": request_id,
+                    "error": f"{type(error).__name__}: {error}"[:2_000],
+                }
+            )
     return 0
 
 
