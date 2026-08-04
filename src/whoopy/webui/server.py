@@ -25,7 +25,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import unquote, urlparse
 from uuid import UUID, uuid4
 
@@ -674,7 +674,7 @@ class LocalWebApplication:
             return
         try:
             if os.name == "posix" and isinstance(getattr(process, "pid", None), int):
-                os.killpg(process.pid, signal.SIGTERM)
+                cast(Any, os).killpg(process.pid, signal.SIGTERM)
             else:
                 process.terminate()
             process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
@@ -685,7 +685,10 @@ class LocalWebApplication:
             pass
         try:
             if os.name == "posix" and isinstance(getattr(process, "pid", None), int):
-                os.killpg(process.pid, signal.SIGKILL)
+                cast(Any, os).killpg(
+                    process.pid,
+                    getattr(signal, "SIGKILL", signal.SIGTERM),
+                )
             else:
                 process.kill()
             process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from types import TracebackType
-from typing import BinaryIO
+from typing import Any, BinaryIO, cast
 
 
 class RunLockUnavailable(RuntimeError):
@@ -51,15 +51,18 @@ class RunLock:
                 import msvcrt
 
                 lock_file.seek(0)
-                msvcrt.locking(  # type: ignore[attr-defined]
+                cast(Any, msvcrt).locking(
                     lock_file.fileno(),
-                    msvcrt.LK_UNLCK,  # type: ignore[attr-defined]
+                    cast(Any, msvcrt).LK_UNLCK,
                     1,
                 )
             else:
                 import fcntl
 
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                cast(Any, fcntl).flock(
+                    lock_file.fileno(),
+                    cast(Any, fcntl).LOCK_UN,
+                )
         finally:
             self._file = None
             lock_file.close()
@@ -68,7 +71,10 @@ class RunLock:
     def _acquire_posix(lock_file: BinaryIO) -> None:
         import fcntl
 
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        cast(Any, fcntl).flock(
+            lock_file.fileno(),
+            cast(Any, fcntl).LOCK_EX | cast(Any, fcntl).LOCK_NB,
+        )
 
     @staticmethod
     def _acquire_windows(lock_file: BinaryIO) -> None:
@@ -79,9 +85,9 @@ class RunLock:
             lock_file.write(b"\0")
             lock_file.flush()
         lock_file.seek(0)
-        msvcrt.locking(  # type: ignore[attr-defined]
+        cast(Any, msvcrt).locking(
             lock_file.fileno(),
-            msvcrt.LK_NBLCK,  # type: ignore[attr-defined]
+            cast(Any, msvcrt).LK_NBLCK,
             1,
         )
 

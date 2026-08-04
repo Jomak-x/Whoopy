@@ -13,7 +13,7 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import TextIO
+from typing import Any, TextIO, cast
 
 
 class WorkerProcessError(RuntimeError):
@@ -268,7 +268,7 @@ class JsonLineProcessController:
             return
         try:
             if os.name == "posix":
-                os.killpg(process.pid, sig)
+                cast(Any, os).killpg(process.pid, sig)
             elif process.poll() is not None:
                 return
             elif sig == signal.SIGTERM:
@@ -295,7 +295,7 @@ class JsonLineProcessController:
         if os.name != "posix":
             return process.poll() is None
         try:
-            os.killpg(process.pid, 0)
+            cast(Any, os).killpg(process.pid, 0)
         except ProcessLookupError:
             return False
         except PermissionError:
@@ -327,7 +327,7 @@ class JsonLineProcessController:
             self._signal_group(signal.SIGTERM)
         if not self._wait_group(self.shutdown_timeout_seconds):
             self._diagnostics.append("shutdown", "termination timed out; killing group")
-            self._signal_group(signal.SIGKILL)
+            self._signal_group(getattr(signal, "SIGKILL", signal.SIGTERM))
             self._wait_group(self.shutdown_timeout_seconds)
         self._wait(self.shutdown_timeout_seconds)
         self._stop_readers.set()

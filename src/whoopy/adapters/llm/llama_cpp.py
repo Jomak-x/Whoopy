@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 from whoopy.artifacts import ArtifactLock, ArtifactSpec, ArtifactStore, TargetPlatform
 from whoopy.ports import (
@@ -82,7 +83,7 @@ def _stop_process_tree(process: subprocess.Popen[str]) -> None:
 
     if os.name == "posix":
         try:
-            os.killpg(process.pid, signal.SIGTERM)
+            cast(Any, os).killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
             return
     elif process.poll() is None:
@@ -102,7 +103,10 @@ def _stop_process_tree(process: subprocess.Popen[str]) -> None:
     except subprocess.TimeoutExpired:
         if os.name == "posix":
             with suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
+                cast(Any, os).killpg(
+                    process.pid,
+                    getattr(signal, "SIGKILL", signal.SIGTERM),
+                )
         else:
             process.kill()
         with suppress(subprocess.TimeoutExpired):
