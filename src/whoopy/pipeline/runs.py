@@ -1108,13 +1108,18 @@ class RunStore:
         timestamp = failed_at or _utc_now()
         record = self.load(run_id)
         execution = self._owned_active_execution(record, attempt_id)
+        # ``RunRecord.error`` keeps the complete diagnostic for inspection,
+        # while the compact execution summary has a deliberate 2,000-character
+        # schema limit. Model tracebacks can be much larger; they must never
+        # prevent the failure itself from being committed durably.
+        execution_message = error[:2_000]
         failed = record.transition(
             RunStatus.FAILED,
             updated_at=timestamp,
             recovery=record.recovery,
             execution=execution.finish(
                 current_segment_id=execution.current_segment_id,
-                message=error,
+                message=execution_message,
             ),
             error=error,
         )

@@ -190,6 +190,39 @@ def test_models_doctor_resolves_a_plan_without_loading_models(
     assert output["loaded_models"] is False
 
 
+def test_model_pack_commands_use_the_managed_pack_boundary(
+    capsys: CaptureFixture[str], monkeypatch: MonkeyPatch
+) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class FakePacks:
+        def list(self) -> dict[str, object]:
+            calls.append(("list", None))
+            return {"packs": []}
+
+        def remove(self, pack_id: str, *, confirmed: bool) -> dict[str, object]:
+            calls.append(("remove", (pack_id, confirmed)))
+            return {"receipt_id": "trash-1", "pack_id": pack_id}
+
+    monkeypatch.setattr("whoopy.cli._model_pack_service", lambda _args: FakePacks())
+
+    assert main(["models", "pack", "list", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"packs": []}
+    assert calls == [("list", None)]
+
+    assert main(["models", "pack", "remove", "moss-local-5b", "--confirm", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "receipt_id": "trash-1",
+        "pack_id": "moss-local-5b",
+    }
+    assert calls[-1] == ("remove", ("moss-local-5b", True))
+
+
+def test_model_pack_remove_requires_explicit_confirmation() -> None:
+    with pytest.raises(SystemExit, match="2"):
+        main(["models", "pack", "remove", "moss-local-5b"])
+
+
 def test_models_install_can_prepare_a_profile_without_network(
     tmp_path: Path,
     capsys: CaptureFixture[str],

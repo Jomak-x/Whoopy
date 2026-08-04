@@ -1,0 +1,355 @@
+# Whoopy local TTS model packs. Every revision, byte size, and content digest
+# is pinned. Updating a pack is a reviewed manifest change, never an inference-
+# time lookup of a mutable "latest" model.
+schema_version: 1
+
+packs:
+  - pack_id: kokoro
+    display_name: Kokoro multilingual v1.0
+    revision: v1_0
+    installed_tree_sha256: 9bc58f2791c964568c1f9105a7272e4b73e7db113b141d204c8846e6796ed0af
+    # The immutable artifact record hashes the extraction root. The adapter's
+    # selected directory is the child containing model.onnx.
+    installed_tree_directory: managed/installed/kokoro_multilang_v1_0
+    source_repository: https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models
+    license_id: Apache-2.0
+    license_url: https://www.apache.org/licenses/LICENSE-2.0
+    commercial_use_allowed: true
+    license_notice: Apache-2.0 permits commercial and non-commercial local use.
+    managed_directory: managed/model-packs/kokoro/files
+    existing_directories:
+      - managed/installed/kokoro_multilang_v1_0/kokoro-multi-lang-v1_0
+    supported_platforms: [darwin-arm64, darwin-x86_64, linux-arm64, linux-x86_64, windows-x86_64]
+    files:
+      - path: model.onnx
+        size_bytes: 325630829
+        digest: {algorithm: sha256, value: c436dc6a842b62aba06af67e40bafcfb9c60ac3af895358f1974ad9a7f7c026b}
+        role: model
+      - path: voices.bin
+        size_bytes: 27678720
+        digest: {algorithm: sha256, value: 8a77c0d397026208d22211f37670b5b3b11e03f190756b25a1d24041fced82a9}
+        role: model
+      - path: tokens.txt
+        size_bytes: 687
+        digest: {algorithm: sha256, value: 6ebb6bb288f20f3ae8d004d3c2ca27697da27c037d75e81a60e2a6a663f95425}
+        role: tokenizer
+    runtime:
+      runtime_id: sherpa-onnx
+      revision: 1.13.4
+      candidate_directories:
+        - managed/python/sherpa_onnx_1_13_4_darwin_arm64
+        - managed/python/sherpa_onnx_1_13_4_darwin_x86_64
+        - managed/python/sherpa_onnx_1_13_4_linux_arm64
+        - managed/python/sherpa_onnx_1_13_4_linux_x86_64
+        - managed/python/sherpa_onnx_1_13_4_windows_x86_64
+      required_markers: [.whoopy-wheels.json, sherpa_onnx/__init__.py]
+    hardware:
+      min_total_ram_gb: 4
+      min_available_ram_gb: 1.5
+      min_free_disk_gb: 1
+      accelerator_any_of: [cpu, metal, cuda]
+
+  - pack_id: fish-speech-1.4
+    display_name: Fish Speech 1.4
+    revision: 069c573759936b35191d3380deb89183c0656f59
+    source_repository: https://huggingface.co/fishaudio/fish-speech-1.4
+    license_id: CC-BY-NC-SA-4.0
+    license_url: https://creativecommons.org/licenses/by-nc-sa/4.0/
+    commercial_use_allowed: false
+    license_notice: Non-commercial only. Attribution and ShareAlike are also required.
+    managed_directory: managed/model-packs/fish-speech-1.4/files
+    existing_directories:
+      - experimental/fish-speech-1.4-runtime/checkpoints/fish-speech-1.4
+    # Whoopy's pinned Fish 1.4 runtime is currently validated only on Apple
+    # Silicon/Metal. Other operating systems see an honest incompatible state
+    # instead of a CUDA claim this isolated runtime has not yet proved.
+    supported_platforms: [darwin-arm64]
+    files:
+      - path: model.pth
+        size_bytes: 988991358
+        digest: {algorithm: sha256, value: 5792b78b48d1f92d0b2cef8f07aad6b7ac19db2aff23a2054a5cce1d019ab4fb}
+        role: model
+      - path: firefly-gan-vq-fsq-8x1024-21hz-generator.pth
+        size_bytes: 188518579
+        digest: {algorithm: sha256, value: 01b81dbf753224a156c3fe139b88bf0b9a0f54b11bee864f95e66511c3ccd754}
+        role: model
+      - path: tokenizer.json
+        size_bytes: 1602412
+        digest: {algorithm: sha256, value: 4650279e91bd53e62f1b7966c4efd2688103d61beb5c88616460082779185ba7}
+        role: tokenizer
+      - path: config.json
+        size_bytes: 493
+        digest: {algorithm: sha256, value: 910a9cad0b252bb41cc3adedd8ca33fda4a6ddbef08ceab8403774acc30a2bb5}
+        role: config
+      - path: tokenizer_config.json
+        size_bytes: 1854
+        digest: {algorithm: sha256, value: 91fbb1d6b1957cb6813740feead0841285b98bc19855dc56f2c1097e1e94249b}
+        role: tokenizer
+      - path: special_tokens_map.json
+        size_bytes: 449
+        digest: {algorithm: sha256, value: 28d11711e3950cc401097cfc73fa0f7e59e8c752527a0620e181f4dfeb2e76b1}
+        role: tokenizer
+    runtime:
+      runtime_id: fish-speech
+      revision: 1359896b0648c688dee901794969d976a06c86be
+      candidate_directories: [experimental/fish-speech-1.4-runtime]
+      required_markers: [.venv/pyvenv.cfg, fish_speech/models/vqgan/__init__.py]
+    hardware:
+      min_total_ram_gb: 12
+      min_available_ram_gb: 6
+      min_free_disk_gb: 3
+      accelerator_any_of: [metal]
+
+  - pack_id: moss-audio-tokenizer-v2
+    display_name: MOSS Audio Tokenizer v2
+    revision: f6e20e543b33d2c252a7ef71bdf8aa71e5ff9169
+    source_repository: https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-v2
+    license_id: Apache-2.0
+    license_url: https://www.apache.org/licenses/LICENSE-2.0
+    commercial_use_allowed: true
+    license_notice: Apache-2.0 permits commercial and non-commercial local use.
+    managed_directory: managed/model-packs/moss-audio-tokenizer-v2/files
+    existing_directories:
+      - experimental/moss-tts-runtime/checkpoints/MOSS-Audio-Tokenizer-v2
+    supported_platforms: [darwin-arm64, linux-x86_64]
+    files:
+      - path: model.safetensors.index.json
+        size_bytes: 191718
+        digest: {algorithm: sha256, value: 912f52f053e04ff7e9abc8f05aa75dfbb40b31c86a0f4ad5c5a36e4aa28a624f}
+        role: shard_index
+      - path: model-00001-of-00003.safetensors
+        size_bytes: 3978639168
+        digest: {algorithm: sha256, value: 2d9f9182f17b143a23937feb87c63c08221bd28e685e4bc2fa55dcdce17fcde7}
+        role: model
+      - path: model-00002-of-00003.safetensors
+        size_bytes: 3992738352
+        digest: {algorithm: sha256, value: d4e48106d0254fe3b00ea0707e88fc6aee076993825e108dd9cef847f9db236e}
+        role: model
+      - path: model-00003-of-00003.safetensors
+        size_bytes: 523681336
+        digest: {algorithm: sha256, value: d0449fe1b0ef1f6045946867148d8166b9a91a58d0feca4a18b641494d0b22da}
+        role: model
+      - path: config.json
+        size_bytes: 10166
+        digest: {algorithm: sha256, value: aeb9a0e9d88c74bf9fbaa81ee54443d463e09b5f335b3306bb798e282a10e564}
+        role: config
+      - path: configuration_moss_audio_tokenizer.py
+        size_bytes: 19772
+        digest: {algorithm: sha256, value: f87a7a975868ce3f0077f374f46ebd2aab610fd7a26cd7569d16827a14e29529}
+        role: config
+      - path: modeling_moss_audio_tokenizer.py
+        size_bytes: 105970
+        digest: {algorithm: sha256, value: 7f807e6ee77a60d512e5aa4a8f58a1d5af4e3722f4ab350d70dd538429391cb9}
+        role: config
+    shard_indexes:
+      - path: model.safetensors.index.json
+        shard_paths:
+          - model-00001-of-00003.safetensors
+          - model-00002-of-00003.safetensors
+          - model-00003-of-00003.safetensors
+    runtime:
+      runtime_id: moss-tts
+      revision: 58b20a0d5fcc6766658d50967a90a9d890009a46
+      candidate_directories: [experimental/moss-tts-runtime]
+      required_markers: [.venv/pyvenv.cfg, moss_tts_local_v1.5/__init__.py]
+    hardware:
+      min_total_ram_gb: 16
+      min_available_ram_gb: 8
+      min_free_disk_gb: 4
+      accelerator_any_of: [metal, cuda]
+
+  - pack_id: moss-local-5b
+    display_name: MOSS-TTS Local Transformer v1.5 (5B)
+    revision: be7766a6735b98bd793f7c79fb720b4d0f5d13b8
+    source_repository: https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5
+    license_id: Apache-2.0
+    license_url: https://www.apache.org/licenses/LICENSE-2.0
+    commercial_use_allowed: true
+    license_notice: Apache-2.0 permits commercial and non-commercial local use.
+    managed_directory: managed/model-packs/moss-local-5b/files
+    existing_directories:
+      - experimental/moss-tts-runtime/checkpoints/MOSS-TTS-Local-Transformer-v1.5
+    supported_platforms: [darwin-arm64, linux-x86_64]
+    files:
+      - path: model.safetensors
+        size_bytes: 9100859544
+        digest: {algorithm: sha256, value: 608f1ff64bc6caa9be836060fc7c78a15c4658c4a07b8d73c78d6f70d1b39c23}
+        role: model
+      - path: tokenizer.json
+        size_bytes: 11423220
+        digest: {algorithm: sha256, value: 06902d1fb775216338802205886a24bc715ccc606bd872a892e3d3c83ca1b9e2}
+        role: tokenizer
+      - path: config.json
+        size_bytes: 10045
+        digest: {algorithm: sha256, value: 826f81f163b1b557ad13f83c4f35008f4fee5a6cb6311b4316ff3dbb25149411}
+        role: config
+      - path: configuration_moss_tts.py
+        size_bytes: 7160
+        digest: {algorithm: sha256, value: ab6debcb92032cb9dc91ae80aed77dbadd2e59848208baef2b062bd6def3f3be}
+        role: config
+      - path: gpt2_decoder.py
+        size_bytes: 30896
+        digest: {algorithm: sha256, value: f2e877104669f1e6c7cd34680f0da1a8a159e032123ee56b660b63929b6c8989}
+        role: config
+      - path: modeling_moss_tts.py
+        size_bytes: 26379
+        digest: {algorithm: sha256, value: b0a66211943ae580b087f3e71495fea2f455701a4f6c29b6d3562218f7668c5f}
+        role: config
+      - path: processing_moss_tts.py
+        size_bytes: 37496
+        digest: {algorithm: sha256, value: 3fc5616b1ec3408162b7d859a7696725a40525313b20f9b31a06ee55c93bd7ad}
+        role: config
+      - path: processor_config.json
+        size_bytes: 210
+        digest: {algorithm: sha256, value: db574bfebad009e05193196a63a4eeecd353eeca177ccfff28b9379d595d88b7}
+        role: config
+      - path: qwen3_decoder.py
+        size_bytes: 25473
+        digest: {algorithm: sha256, value: 100163bd7ecf31a59bafacc0b032ace9339edc992a3eb4cc80662502e04e46f0}
+        role: config
+      - path: added_tokens.json
+        size_bytes: 790
+        digest: {algorithm: sha256, value: 39bb49db6acfb8e7510b1640f575bdc183f511d85c94ce3ee967f2a6195c4a8a}
+        role: tokenizer
+      - path: chat_template.jinja
+        size_bytes: 4168
+        digest: {algorithm: sha256, value: a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8}
+        role: tokenizer
+      - path: merges.txt
+        size_bytes: 1671853
+        digest: {algorithm: sha256, value: 8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5}
+        role: tokenizer
+      - path: special_tokens_map.json
+        size_bytes: 394
+        digest: {algorithm: sha256, value: 02a153514db64e5378c53ef164c960409882649de6f4aac8f81f66218e7f8797}
+        role: tokenizer
+      - path: tokenizer_config.json
+        size_bytes: 5727
+        digest: {algorithm: sha256, value: ec2869dd4c9c7155b3460c291a6fb2b955e5068013ba7efbcaafd1c61e02abce}
+        role: tokenizer
+      - path: vocab.json
+        size_bytes: 2776833
+        digest: {algorithm: sha256, value: ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910}
+        role: tokenizer
+    runtime:
+      runtime_id: moss-tts
+      revision: 58b20a0d5fcc6766658d50967a90a9d890009a46
+      candidate_directories: [experimental/moss-tts-runtime]
+      required_markers: [.venv/pyvenv.cfg, moss_tts_local_v1.5/__init__.py]
+    hardware:
+      min_total_ram_gb: 24
+      min_available_ram_gb: 14
+      min_free_disk_gb: 5
+      accelerator_any_of: [metal, cuda]
+    dependencies: [moss-audio-tokenizer-v2]
+
+  - pack_id: moss-8b
+    display_name: MOSS-TTS v1.5 (8B)
+    revision: cdd3b911b1585e3f2dbc7775ef10f9926f58850a
+    source_repository: https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5
+    license_id: Apache-2.0
+    license_url: https://www.apache.org/licenses/LICENSE-2.0
+    commercial_use_allowed: true
+    license_notice: Apache-2.0 permits commercial and non-commercial local use.
+    managed_directory: managed/model-packs/moss-8b/files
+    existing_directories:
+      - experimental/moss-tts-runtime/checkpoints/MOSS-TTS-v1.5
+    supported_platforms: [darwin-arm64, linux-x86_64]
+    files:
+      - path: model.safetensors.index.json
+        size_bytes: 40416
+        digest: {algorithm: sha256, value: 021ef3f74a92ee33fc076dde096d4fa9b7b45c34c9bdbfe730bf79368ac86bb2}
+        role: shard_index
+      - path: model-00001-of-00004.safetensors
+        size_bytes: 4932667368
+        digest: {algorithm: sha256, value: 749b82d07cebea77dd15af365e2efeb1dc0dd54537f7010795fdf42f520743a9}
+        role: model
+      - path: model-00002-of-00004.safetensors
+        size_bytes: 4915961640
+        digest: {algorithm: sha256, value: 4d891c8adb8bf9c135e8a44cd9f003f1dbf8b09278ced48d5af1fe7d989efb39}
+        role: model
+      - path: model-00003-of-00004.safetensors
+        size_bytes: 4983069760
+        digest: {algorithm: sha256, value: 111013e05174e67748443eafdd4d64c051292d0e5fce2cac23a16988b661eea1}
+        role: model
+      - path: model-00004-of-00004.safetensors
+        size_bytes: 2148040304
+        digest: {algorithm: sha256, value: 951ee88cf85996ee5c39441ace6e50f52894adad5da42ad2314b9a9db7f940b8}
+        role: model
+      - path: config.json
+        size_bytes: 2275
+        digest: {algorithm: sha256, value: 214fc997d98f51ab57925a5939afc6280e76044198b664221622e70d098ed06e}
+        role: config
+      - path: configuration_moss_tts.py
+        size_bytes: 5584
+        digest: {algorithm: sha256, value: 257842f2fa90124307408f36d55b74e135ee32b7afacbe30280964f7feb329d1}
+        role: config
+      - path: inference_utils.py
+        size_bytes: 5092
+        digest: {algorithm: sha256, value: 12cdf3260114e44c8cba816782f743779ab621e0ba4047e59a3f3579cfcb0e26}
+        role: config
+      - path: modeling_moss_tts.py
+        size_bytes: 25330
+        digest: {algorithm: sha256, value: 360ceee27c67831d820ff5324f8687f4408db1a91aef53683934544879aa90ca}
+        role: config
+      - path: processing_moss_tts.py
+        size_bytes: 35531
+        digest: {algorithm: sha256, value: e591ff156e8fadcae34db5613a2221fab7ec5d814bfc0ec001e8ec4ef2782425}
+        role: config
+      - path: processor_config.json
+        size_bytes: 145
+        digest: {algorithm: sha256, value: 6821d4805f10fb8b5cc743c021215097e03f1a25f7c220dfc4fb0d62b5dc97e0}
+        role: config
+      - path: added_tokens.json
+        size_bytes: 704
+        digest: {algorithm: sha256, value: 9dfb40d3a3f8654c8af17771d767a494e973b9a33d5c3aeffa1b21f77db8e6d3}
+        role: tokenizer
+      - path: chat_template.jinja
+        size_bytes: 352
+        digest: {algorithm: sha256, value: 894e3ace884e212ae34e1f46063686e7ebcc8b2fa0153af4579dfa5685f63184}
+        role: tokenizer
+      - path: merges.txt
+        size_bytes: 1671853
+        digest: {algorithm: sha256, value: 8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5}
+        role: tokenizer
+      - path: special_tokens_map.json
+        size_bytes: 631
+        digest: {algorithm: sha256, value: 55cbd0665670e196ce105db3f0d787e5eb35bce235fcb2bd50acbdd60c1e39c6}
+        role: tokenizer
+      - path: tokenizer.json
+        size_bytes: 11422691
+        digest: {algorithm: sha256, value: cb3c8fa82993d515469c2800cc455bff4aaa3c4fed9da1f2b0c0668c304f335a}
+        role: tokenizer
+      - path: tokenizer_config.json
+        size_bytes: 5501
+        digest: {algorithm: sha256, value: 87b1f37a4a73e4c4b61637a1446763e8bdea274347f0418cd5c68ead488c8ea4}
+        role: tokenizer
+      - path: tts_robust_normalizer_single_script.py
+        size_bytes: 14544
+        digest: {algorithm: sha256, value: b7c1fab4fd7bdc8c779df99f6af310fd8cd0746b759db684bf147e0c182b3183}
+        role: config
+      - path: vocab.json
+        size_bytes: 2776833
+        digest: {algorithm: sha256, value: ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910}
+        role: tokenizer
+    shard_indexes:
+      - path: model.safetensors.index.json
+        shard_paths:
+          - model-00001-of-00004.safetensors
+          - model-00002-of-00004.safetensors
+          - model-00003-of-00004.safetensors
+          - model-00004-of-00004.safetensors
+    runtime:
+      runtime_id: moss-tts
+      revision: 58b20a0d5fcc6766658d50967a90a9d890009a46
+      candidate_directories: [experimental/moss-tts-runtime]
+      required_markers: [.venv/pyvenv.cfg, moss_tts_delay/modeling_moss_tts.py]
+    hardware:
+      min_total_ram_gb: 40
+      # The real 8B smoke passed on this 48 GB Apple-Silicon machine with a
+      # measured 20+ GB live availability margin. Requiring 28 GB rejected the
+      # same proven-safe laptop because macOS actively uses reclaimable memory.
+      min_available_ram_gb: 20
+      min_free_disk_gb: 8
+      accelerator_any_of: [cpu, metal, cuda]
+    dependencies: [moss-audio-tokenizer-v2]

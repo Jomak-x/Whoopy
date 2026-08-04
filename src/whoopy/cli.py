@@ -12,6 +12,7 @@ import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from importlib import import_module
 from pathlib import Path
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4
@@ -51,6 +52,12 @@ from whoopy.meditation import (
 )
 from whoopy.meditation.prompts import PromptLoadError
 from whoopy.meditation.workspace import WorkspaceError
+from whoopy.model_packs.operations import ModelPackOperationError
+from whoopy.model_packs.resolution import (
+    OptionalTTSBackend,
+    models_root_from_artifact_store,
+    resolve_tts_model_pack,
+)
 from whoopy.pipeline import (
     GenerationRunSettings,
     LocalWorker,
@@ -73,14 +80,6 @@ from whoopy.timeline import ScriptCompileError, Timeline, build_script_timeline
 from whoopy.voices import KOKORO_ENGLISH_VOICES, kokoro_speaker_id
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-FISH_14_RUNTIME = PROJECT_ROOT / "models" / "experimental" / "fish-speech-1.4-runtime"
-MOSS_RUNTIME = PROJECT_ROOT / "models" / "experimental" / "moss-tts-runtime"
-MOSS_MODELS: dict[MossVariant, Path] = {
-    "moss-local-v1.5": MOSS_RUNTIME / "checkpoints" / "MOSS-TTS-Local-Transformer-v1.5",
-    "moss-v1.5": MOSS_RUNTIME / "checkpoints" / "MOSS-TTS-v1.5",
-}
-MOSS_CODEC = MOSS_RUNTIME / "checkpoints" / "MOSS-Audio-Tokenizer-v2"
-MOSS_REFERENCE = FISH_14_RUNTIME / "whoopy-reference.wav"
 GENERATION_HEARTBEAT_SECONDS = 2.0
 GENERATION_LEASE_SECONDS = 15.0
 
@@ -412,6 +411,29 @@ def _add_model_location_arguments(parser: argparse.ArgumentParser) -> None:
     _add_runtime_model_arguments(parser)
 
 
+def _add_model_pack_location_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add explicit locations for optional packs without hiding local state.
+
+    The pack registry is intentionally a checked-in declaration, while the
+    downloaded pack bytes belong to the current laptop. These flags make that
+    boundary visible to a beginner and keep tests independent from real model
+    directories.
+    """
+
+    parser.add_argument(
+        "--pack-registry",
+        type=Path,
+        default=Path("config/model_packs.yaml"),
+        help="Versioned declaration of the optional voice packs.",
+    )
+    parser.add_argument(
+        "--models-dir",
+        type=Path,
+        default=Path("models"),
+        help="Root directory containing managed local model packs.",
+    )
+
+
 def _add_runtime_model_arguments(parser: argparse.ArgumentParser) -> None:
     """Add model paths to commands that already define --config-dir."""
 
@@ -468,41 +490,98 @@ def _artifact_lock_path(args: argparse.Namespace) -> Path:
     return artifact_lock or args.config_dir / "artifacts.yaml"
 
 
+def _model_pack_service(args: argparse.Namespace) -> Any:
+    """Create the PR 14 pack facade at the command boundary.
+
+    The CLI intentionally knows no pack-specific download URLs, file layouts,
+    or model-runtime imports. ``ManagedModelPacks`` is the small integration
+    seam between this user surface and the registry/operation layers. Keeping
+    the import here also preserves fast ``whoopy --help`` and legacy profile
+    commands on laptops without any optional TTS dependency installed.
+    """
+
+    manager_type = import_module("whoopy.model_packs").ManagedModelPacks
+    return manager_type.from_paths(
+        registry_path=args.pack_registry,
+        models_root=args.models_dir,
+    )
+
+
+def _model_pack_json(value: Any) -> Any:
+    """Turn an operation result into safe JSON without prescribing its model type."""
+
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return model_dump(mode="json")
+    if isinstance(value, dict):
+        return value
+    raise TypeError("Model-pack operations must return a JSON-compatible report.")
+
+
+def _print_model_pack_result(value: Any, *, json_output: bool) -> None:
+    """Keep automation stable while retaining a readable terminal fallback."""
+
+    payload = _model_pack_json(value)
+    if json_output:
+        print(json.dumps(payload, indent=2))
+        return
+    print(yaml.safe_dump(payload, sort_keys=False), end="")
+
+
 def _real_script_worker(
     store: RunStore,
     record: RunRecord,
     *,
     artifact_lock_path: Path,
     models_dir: Path,
+    config_dir: Path | None = None,
     bypass_cache_segment_ids: frozenset[str] | None = None,
 ) -> LocalWorker:
     """Reconstruct a schema-v4 worker only from durable run configuration."""
 
     resolved = store.load_resolved_config(record.run_id)
+    pack_config_dir = config_dir or artifact_lock_path.parent
     raw_synthesizer: SpeechSynthesizer
     if resolved.tts.backend == "fish-1.4":
+        pack = resolve_tts_model_pack(
+            "fish-1.4",
+            registry_path=pack_config_dir / "model_packs.yaml",
+            references_path=pack_config_dir / "voice_references.yaml",
+            models_root=models_root_from_artifact_store(models_dir),
+        )
         raw_synthesizer = FishSpeech14Adapter(
             FishSpeechSettings(
-                runtime_directory=FISH_14_RUNTIME,
+                runtime_directory=pack.runtime_directory,
                 worker_script=PROJECT_ROOT / "scripts" / "fish_speech_1_4_worker.py",
-                reference_audio=FISH_14_RUNTIME / "whoopy-reference.wav",
-                reference_text=FISH_14_RUNTIME / "whoopy-reference.txt",
+                checkpoint_directory=pack.checkpoint_directory,
+                reference_audio=pack.reference.audio_path,
+                reference_text=pack.reference.transcript_path,
                 seed=resolved.tts.seed,
+                models_root=models_root_from_artifact_store(models_dir),
             )
         )
-    elif resolved.tts.backend in MOSS_MODELS:
+    elif resolved.tts.backend in {"moss-local-v1.5", "moss-v1.5"}:
+        backend = cast(OptionalTTSBackend, resolved.tts.backend)
+        pack = resolve_tts_model_pack(
+            backend,
+            registry_path=pack_config_dir / "model_packs.yaml",
+            references_path=pack_config_dir / "voice_references.yaml",
+            models_root=models_root_from_artifact_store(models_dir),
+        )
+        assert pack.codec_directory is not None
         raw_synthesizer = MossTTSAdapter(
             MossTTSSettings(
-                runtime_directory=MOSS_RUNTIME,
+                runtime_directory=pack.runtime_directory,
                 worker_script=PROJECT_ROOT / "scripts" / "moss_tts_worker.py",
-                model_directory=MOSS_MODELS[resolved.tts.backend],
-                codec_directory=MOSS_CODEC,
-                variant=resolved.tts.backend,
-                reference_audio=MOSS_REFERENCE,
+                model_directory=pack.checkpoint_directory,
+                codec_directory=pack.codec_directory,
+                variant=cast(MossVariant, resolved.tts.backend),
+                reference_audio=pack.reference.audio_path,
                 language=resolved.tts.language,
                 instruction=resolved.tts.instruction,
                 use_reference=resolved.tts.use_reference,
                 seed=resolved.tts.seed,
+                models_root=models_root_from_artifact_store(models_dir),
             )
         )
     else:
@@ -553,6 +632,7 @@ def _worker_for_record(
     *,
     artifact_lock_path: Path,
     models_dir: Path,
+    config_dir: Path | None = None,
     bypass_cache_segment_ids: frozenset[str] | None = None,
 ) -> LocalWorker:
     if record.source_kind in ("script_file", "generated_prompt"):
@@ -560,6 +640,7 @@ def _worker_for_record(
             store,
             record,
             artifact_lock_path=artifact_lock_path,
+            config_dir=config_dir,
             models_dir=models_dir,
             bypass_cache_segment_ids=bypass_cache_segment_ids,
         )
@@ -778,6 +859,95 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Print only the machine-readable install report.",
     )
     _add_model_location_arguments(models_install_parser)
+
+    # ``models pack`` is deliberately separate from the original profile
+    # installer above. Profiles answer "what does this laptop need to run a
+    # baseline Whoopy flow?"; packs answer "which optional voice experiment
+    # should I put on this laptop?" Keeping the nouns distinct makes removal
+    # and licensing decisions much harder to make accidentally.
+    model_packs_parser = model_commands.add_parser(
+        "pack",
+        help="Inspect and manage one optional local voice-model pack.",
+    )
+    model_pack_commands = model_packs_parser.add_subparsers(dest="model_pack_command")
+    model_packs_list_parser = model_pack_commands.add_parser(
+        "list",
+        help="List declared voice packs and their honest local readiness.",
+    )
+    model_packs_list_parser.add_argument("--json", action="store_true")
+    _add_model_pack_location_arguments(model_packs_list_parser)
+
+    model_packs_install_parser = model_pack_commands.add_parser(
+        "install",
+        help="Install one declared pack with verification and resumable progress.",
+    )
+    model_packs_install_parser.add_argument(
+        "pack_id", help="Declared pack ID from `models pack list`."
+    )
+    model_packs_install_parser.add_argument(
+        "--offline-dir",
+        type=Path,
+        help="Search this directory for already downloaded pack files first.",
+    )
+    model_packs_install_parser.add_argument(
+        "--no-network",
+        action="store_true",
+        help="Refuse network downloads; useful while travelling or offline.",
+    )
+    model_packs_install_parser.add_argument("--json", action="store_true")
+    _add_model_pack_location_arguments(model_packs_install_parser)
+
+    model_packs_verify_parser = model_pack_commands.add_parser(
+        "verify",
+        help="Recheck every file needed by one installed pack without loading it.",
+    )
+    model_packs_verify_parser.add_argument(
+        "pack_id", help="Declared pack ID from `models pack list`."
+    )
+    model_packs_verify_parser.add_argument("--json", action="store_true")
+    _add_model_pack_location_arguments(model_packs_verify_parser)
+
+    model_packs_smoke_parser = model_pack_commands.add_parser(
+        "smoke-test",
+        help="Run a short, local synthesis readiness check for one installed pack.",
+    )
+    model_packs_smoke_parser.add_argument(
+        "pack_id", help="Declared pack ID from `models pack list`."
+    )
+    model_packs_smoke_parser.add_argument("--json", action="store_true")
+    _add_model_pack_location_arguments(model_packs_smoke_parser)
+
+    model_packs_unload_parser = model_pack_commands.add_parser(
+        "unload",
+        help="Show the heavyweight slot owner and how its process can be released.",
+    )
+    model_packs_unload_parser.add_argument("--json", action="store_true")
+    _add_model_pack_location_arguments(model_packs_unload_parser)
+
+    model_packs_remove_parser = model_pack_commands.add_parser(
+        "remove",
+        help="Move one managed pack to Whoopy's recoverable trash.",
+    )
+    model_packs_remove_parser.add_argument(
+        "pack_id", help="Declared pack ID from `models pack list`."
+    )
+    model_packs_remove_parser.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Required: acknowledge that the pack becomes unavailable until restored.",
+    )
+    model_packs_remove_parser.add_argument("--json", action="store_true")
+    _add_model_pack_location_arguments(model_packs_remove_parser)
+
+    model_packs_restore_parser = model_pack_commands.add_parser(
+        "restore",
+        help="Restore a pack from Whoopy's recoverable trash by removal receipt.",
+    )
+    model_packs_restore_parser.add_argument(
+        "receipt_id", help="Receipt ID returned by `models pack remove`."
+    )
+    model_packs_restore_parser.add_argument("--json", action="store_true")
+    _add_model_pack_location_arguments(model_packs_restore_parser)
 
     draft_parser = subcommands.add_parser(
         "draft",
@@ -1145,6 +1315,42 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"  - {message}")
         return 0 if result.supported else 2
 
+    if args.command == "models" and args.models_command == "pack":
+        try:
+            operation = args.model_pack_command
+            # Refuse destructive intent before opening a registry or touching
+            # a model directory. This keeps the guard useful even if optional
+            # pack support has not yet been configured on a new laptop.
+            if operation is None:
+                raise ArtifactError("Choose a `whoopy models pack` subcommand.")
+            if operation == "remove" and not args.confirm:
+                raise ArtifactError("Refusing to remove a pack without --confirm.")
+            service = _model_pack_service(args)
+            if operation == "list":
+                report = service.list()
+            elif operation == "install":
+                report = service.install(
+                    args.pack_id,
+                    offline_directory=args.offline_dir,
+                    allow_network=not args.no_network,
+                )
+            elif operation == "verify":
+                report = service.verify(args.pack_id)
+            elif operation == "smoke-test":
+                report = service.smoke_test(args.pack_id)
+            elif operation == "unload":
+                report = service.unload()
+            elif operation == "remove":
+                report = service.remove(args.pack_id, confirmed=True)
+            elif operation == "restore":
+                report = service.restore(args.receipt_id)
+            else:
+                raise ArtifactError("Choose a `whoopy models pack` subcommand.")
+        except (ArtifactError, OSError, ValueError) as error:
+            parser.error(str(error))
+        _print_model_pack_result(report, json_output=args.json)
+        return 0
+
     if args.command == "models" and args.models_command == "list":
         try:
             lock_path = args.artifact_lock or args.config_dir / "artifacts.yaml"
@@ -1484,16 +1690,29 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise GenerationError("--speed must be between 0.5 and 1.2")
             raw_synthesizer: SpeechSynthesizer
             if args.tts_model == "fish-1.4":
-                fish_error = FishSpeech14Adapter.availability_error(FISH_14_RUNTIME)
+                pack = resolve_tts_model_pack(
+                    "fish-1.4",
+                    registry_path=args.config_dir / "model_packs.yaml",
+                    references_path=args.config_dir / "voice_references.yaml",
+                    models_root=models_root_from_artifact_store(args.models_dir),
+                )
+                fish_error = FishSpeech14Adapter.availability_error(
+                    pack.runtime_directory,
+                    pack.checkpoint_directory,
+                    pack.reference.audio_path,
+                    pack.reference.transcript_path,
+                )
                 if fish_error is not None:
                     raise GenerationError(f"Fish Speech 1.4 is not ready: {fish_error}.")
                 raw_synthesizer = FishSpeech14Adapter(
                     FishSpeechSettings(
-                        runtime_directory=FISH_14_RUNTIME,
+                        runtime_directory=pack.runtime_directory,
                         worker_script=PROJECT_ROOT / "scripts" / "fish_speech_1_4_worker.py",
-                        reference_audio=FISH_14_RUNTIME / "whoopy-reference.wav",
-                        reference_text=FISH_14_RUNTIME / "whoopy-reference.txt",
+                        checkpoint_directory=pack.checkpoint_directory,
+                        reference_audio=pack.reference.audio_path,
+                        reference_text=pack.reference.transcript_path,
                         seed=args.seed,
+                        models_root=models_root_from_artifact_store(args.models_dir),
                     )
                 )
                 durable_tts = TTSRunSettings(
@@ -1506,28 +1725,36 @@ def main(argv: Sequence[str] | None = None) -> int:
                     language="en",
                     seed=args.seed,
                 )
-            elif args.tts_model in MOSS_MODELS:
-                moss_model = MOSS_MODELS[args.tts_model]
+            elif args.tts_model in {"moss-local-v1.5", "moss-v1.5"}:
+                backend = cast(OptionalTTSBackend, args.tts_model)
+                pack = resolve_tts_model_pack(
+                    backend,
+                    registry_path=args.config_dir / "model_packs.yaml",
+                    references_path=args.config_dir / "voice_references.yaml",
+                    models_root=models_root_from_artifact_store(args.models_dir),
+                )
+                assert pack.codec_directory is not None
                 moss_error = MossTTSAdapter.availability_error(
-                    MOSS_RUNTIME,
-                    moss_model,
-                    MOSS_CODEC,
-                    MOSS_REFERENCE,
+                    pack.runtime_directory,
+                    pack.checkpoint_directory,
+                    pack.codec_directory,
+                    pack.reference.audio_path,
                 )
                 if moss_error is not None:
                     raise GenerationError(f"{args.tts_model} is not ready: {moss_error}.")
                 raw_synthesizer = MossTTSAdapter(
                     MossTTSSettings(
-                        runtime_directory=MOSS_RUNTIME,
+                        runtime_directory=pack.runtime_directory,
                         worker_script=PROJECT_ROOT / "scripts" / "moss_tts_worker.py",
-                        model_directory=moss_model,
-                        codec_directory=MOSS_CODEC,
+                        model_directory=pack.checkpoint_directory,
+                        codec_directory=pack.codec_directory,
                         variant=cast(MossVariant, args.tts_model),
-                        reference_audio=MOSS_REFERENCE,
+                        reference_audio=pack.reference.audio_path,
                         language=args.moss_language,
                         instruction=args.moss_instruction,
                         use_reference=not args.moss_direct_voice,
                         seed=args.seed,
+                        models_root=models_root_from_artifact_store(args.models_dir),
                     )
                 )
                 durable_tts = TTSRunSettings(
@@ -1787,6 +2014,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         queued,
                         artifact_lock_path=_artifact_lock_path(args),
                         models_dir=args.models_dir,
+                        config_dir=args.config_dir,
                     )
                     if handoff_heartbeat is not None:
                         handoff_heartbeat.raise_if_failed()
@@ -1914,11 +2142,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 prepared.record,
                 artifact_lock_path=_artifact_lock_path(args),
                 models_dir=args.models_dir,
+                config_dir=args.config_dir,
                 bypass_cache_segment_ids=prepared.bypass_cache_segment_ids,
             )
             with _interruptible_sigterm():
                 record = worker.resume(args.run_id)
-        except (AdapterError, ArtifactError, ConfigError, RunStoreError, WorkerError) as error:
+        except (
+            AdapterError,
+            ArtifactError,
+            ConfigError,
+            ModelPackOperationError,
+            RunStoreError,
+            WorkerError,
+        ) as error:
             parser.error(str(error))
         _print_run(record, store, as_json=args.json)
         return 0
@@ -1938,10 +2174,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 existing,
                 artifact_lock_path=_artifact_lock_path(args),
                 models_dir=args.models_dir,
+                config_dir=args.config_dir,
             )
             with _interruptible_sigterm():
                 record = worker.resume(args.run_id)
-        except (AdapterError, ArtifactError, ConfigError, RunStoreError, WorkerError) as error:
+        except (
+            AdapterError,
+            ArtifactError,
+            ConfigError,
+            ModelPackOperationError,
+            RunStoreError,
+            WorkerError,
+        ) as error:
             parser.error(str(error))
         _print_run(record, store, as_json=args.json)
         return 0
@@ -1971,10 +2215,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 existing,
                 artifact_lock_path=_artifact_lock_path(args),
                 models_dir=args.models_dir,
+                config_dir=args.config_dir,
             )
             with _interruptible_sigterm():
                 record = worker.process(args.run_id)
-        except (AdapterError, ArtifactError, ConfigError, RunStoreError, WorkerError) as error:
+        except (
+            AdapterError,
+            ArtifactError,
+            ConfigError,
+            ModelPackOperationError,
+            RunStoreError,
+            WorkerError,
+        ) as error:
             parser.error(str(error))
         _print_run(record, store, as_json=args.json)
         return 0

@@ -14,7 +14,6 @@ from uuid import UUID
 import pytest
 from pytest import MonkeyPatch
 
-from whoopy.adapters.tts import MossTTSAdapter
 from whoopy.pipeline import RunExecution, RunStage, RunStatus, RunStore
 from whoopy.timeline import build_script_timeline
 from whoopy.webui.server import LocalWebApplication, _handler_factory
@@ -80,6 +79,107 @@ def test_static_interface_is_packaged() -> None:
     assert "Whoopy Local Studio" in html
     assert static.joinpath("styles.css").is_file()
     assert static.joinpath("app.js").is_file()
+
+
+def test_model_pack_routes_are_allow_listed_and_keep_removal_explicit(tmp_path: Path) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class FakePacks:
+        def list(self) -> dict[str, object]:
+            calls.append(("list", None))
+            return {"packs": [{"pack_id": "moss-local-5b", "state": "missing"}]}
+
+        def verify(self, pack_id: str) -> dict[str, object]:
+            calls.append(("verify", pack_id))
+            return {"pack_id": pack_id, "state": "ready"}
+
+        def remove(self, pack_id: str, *, confirmed: bool) -> dict[str, object]:
+            calls.append(("remove", (pack_id, confirmed)))
+            return {"pack_id": pack_id, "receipt_id": "trash-1"}
+
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=Path("runs"),
+        model_pack_service_factory=lambda _registry, _models: FakePacks(),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_factory(application))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("GET", "/api/model-packs")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {
+            "packs": [{"pack_id": "moss-local-5b", "state": "missing"}]
+        }
+        connection.close()
+
+        origin = f"http://127.0.0.1:{server.server_port}"
+        status, payload = _post_json(
+            server,
+            "/api/model-packs/moss-local-5b/verify",
+            {},
+            origin=origin,
+        )
+        assert status == 200
+        assert payload["state"] == "ready"
+
+        status, payload = _post_json(
+            server,
+            "/api/model-packs/moss-local-5b/remove",
+            {},
+            origin=origin,
+        )
+        assert status == 400
+        assert "confirm" in payload["error"]
+
+        status, payload = _post_json(
+            server,
+            "/api/model-packs/moss-local-5b/remove",
+            {"confirm": True},
+            origin=origin,
+        )
+        assert status == 200
+        assert payload["receipt_id"] == "trash-1"
+        assert calls == [
+            ("list", None),
+            ("verify", "moss-local-5b"),
+            ("remove", ("moss-local-5b", True)),
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_model_pack_api_maps_the_baseline_artifact_store_to_models_root(tmp_path: Path) -> None:
+    captured: dict[str, Path] = {}
+
+    class FakePacks:
+        def list(self) -> dict[str, object]:
+            return {"packs": []}
+
+    def factory(registry: Path, models_root: Path) -> FakePacks:
+        captured["registry"] = registry
+        captured["models_root"] = models_root
+        return FakePacks()
+
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models/managed"),
+        runs_directory=Path("runs"),
+        model_pack_service_factory=factory,
+    )
+
+    assert application.list_model_packs() == {"packs": []}
+    assert captured == {
+        "registry": tmp_path / "config" / "model_packs.yaml",
+        "models_root": tmp_path / "models",
+    }
 
 
 def test_recent_runs_ignore_non_uuid_directories_and_expose_safe_artifacts(
@@ -198,9 +298,8 @@ def test_moss_controls_reach_the_real_cli_contract(
             self.returncode = -15
 
     monkeypatch.setattr(
-        MossTTSAdapter,
-        "availability_error",
-        staticmethod(lambda *_paths: None),
+        "whoopy.webui.server.resolve_tts_model_pack",
+        lambda *_args, **_kwargs: None,
     )
     application = LocalWebApplication(
         project_root=tmp_path,

@@ -239,6 +239,17 @@ class SherpaOnnxKokoroAdapter:
             pcm.byteswap()
         return PcmAudio(pcm_s16le=pcm.tobytes(), sample_rate=self.sample_rate)
 
+    def prepare(self) -> None:
+        """Load and validate the in-process Kokoro engine before timing a render."""
+
+        self._load_engine()
+
+    @property
+    def runtime_device(self) -> str:
+        """Report the provider used by the in-process Kokoro engine."""
+
+        return self.settings.provider
+
     def close(self) -> None:
         """Release the in-process Kokoro engine so its memory can be reclaimed."""
 
