@@ -133,6 +133,35 @@ def fixture(root: Path) -> dict[str, Any]:
     return manifest
 
 
+def selected_native(root: Path, manifest: dict[str, Any]) -> tuple[Path, Path]:
+    record = manifest["records"][0]
+    run = Path(record["attempt"]) / "production-runs" / record["run_id"]
+    native = run / "native-speech" / "selected-attempt"
+    native.mkdir(parents=True)
+    audio = native / "native.wav"
+    wav(audio)
+    sidecar = native / "metadata.json"
+    write_json(
+        sidecar,
+        {
+            "segment_id": "speech-0001",
+            "attempt_id": "selected-native-stub",
+            "eos_observed": True,
+            "wav_path": str(audio),
+        },
+    )
+    verification = receipt(audio)
+    record["native_verification"] = [
+        {
+            "segment_id": "speech-0001",
+            "metadata": str(sidecar),
+            "verification": verification,
+        }
+    ]
+    write_json(root / "manifest.json", manifest)
+    return audio, sidecar
+
+
 class Links(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -228,6 +257,110 @@ class RenderChecks(unittest.TestCase):
             text = report.build(root).read_text()
             self.assertIn("Final WAV hash differs", text)
             self.assertIn('sample-000" class="fail"', text)
+
+    def test_selected_native_with_matching_asr_hash_stays_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            selected_native(root, fixture(root))
+            text = report.build(root).read_text()
+            self.assertIn('sample-000" class="pass"', text)
+            self.assertIn("Native attempt speech-0001: Pass", text)
+
+    def test_changed_native_audio_fails_native_and_overall_card(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            audio, _ = selected_native(root, fixture(root))
+            with audio.open("ab") as stream:
+                stream.write(b"changed after native ASR")
+            text = report.build(root).read_text()
+            self.assertIn('sample-000" class="fail"', text)
+            self.assertIn("Native attempt speech-0001: Fail:", text)
+            self.assertIn("Native WAV hash differs from retained ASR receipt", text)
+            diff = next(root.glob("review-details-*/sample-000-native-000.html")).read_text()
+            self.assertIn("Screening: <strong>Fail</strong>", diff)
+            self.assertIn("Native WAV hash differs", diff)
+
+    def test_missing_native_audio_fails_native_and_overall_card(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            audio, _ = selected_native(root, fixture(root))
+            audio.unlink()
+            text = report.build(root).read_text()
+            self.assertIn('sample-000" class="fail"', text)
+            self.assertIn("Native attempt speech-0001: Fail:", text)
+            self.assertIn("Native WAV is missing, unavailable, or outside this campaign", text)
+            self.assertNotIn(report.url(root.resolve(), audio.resolve()), text)
+
+    def test_escaping_native_audio_fails_without_linking_outside(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp)
+            root = parent / "campaign"
+            root.mkdir()
+            audio, sidecar = selected_native(root, fixture(root))
+            outside = parent / "outside.wav"
+            wav(outside)
+            metadata = json.loads(sidecar.read_text())
+            metadata["wav_path"] = str(outside)
+            write_json(sidecar, metadata)
+            text = report.build(root).read_text()
+            self.assertIn('sample-000" class="fail"', text)
+            self.assertIn("Native attempt speech-0001: Fail:", text)
+            self.assertNotIn('src="../outside.wav"', text)
+            self.assertNotIn('src="' + str(outside), text)
+            self.assertNotIn(report.url(root.resolve(), audio.resolve()), text)
+
+    def test_missing_native_metadata_fails_selected_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, sidecar = selected_native(root, fixture(root))
+            sidecar.unlink()
+            text = report.build(root).read_text()
+            self.assertIn('sample-000" class="fail"', text)
+            self.assertIn("Selected native metadata is missing or outside this campaign", text)
+
+    def test_native_asr_without_audio_hash_cannot_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = fixture(root)
+            selected_native(root, manifest)
+            del manifest["records"][0]["native_verification"][0]["verification"]["audio_sha256"]
+            write_json(root / "manifest.json", manifest)
+            text = report.build(root).read_text()
+            self.assertIn('sample-000" class="fail"', text)
+            self.assertIn("Native WAV ASR receipt has no audio SHA256", text)
+
+    def test_missing_native_asr_receipt_cannot_keep_overall_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = fixture(root)
+            selected_native(root, manifest)
+            manifest["records"][0]["native_verification"][0]["verification"] = {}
+            write_json(root / "manifest.json", manifest)
+            text = report.build(root).read_text()
+            self.assertIn('sample-000" class="fail"', text)
+            self.assertIn("Selected native ASR receipt is missing", text)
+
+    def test_missing_final_audio_cannot_keep_historical_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = fixture(root)
+            run = Path(manifest["records"][0]["attempt"]) / "production-runs/run-0"
+            (run / "narration.wav").unlink()
+            text = report.build(root).read_text()
+            self.assertIn('sample-000" class="fail"', text)
+            self.assertIn("Final WAV is missing, unavailable, or outside this campaign", text)
+            diff = next(root.glob("review-details-*/sample-000-final.html")).read_text()
+            self.assertIn("Screening: <strong>Fail</strong>", diff)
+
+    def test_final_asr_without_audio_hash_cannot_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = fixture(root)
+            del manifest["records"][0]["final_verification"]["audio_sha256"]
+            write_json(root / "manifest.json", manifest)
+            text = report.build(root).read_text()
+            self.assertIn('sample-000" class="fail"', text)
+            self.assertIn("Final WAV ASR receipt has no audio SHA256", text)
 
     def test_existing_report_is_never_overwritten(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

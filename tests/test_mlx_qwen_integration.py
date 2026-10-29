@@ -524,3 +524,60 @@ def test_explicit_numeric_speed_is_rejected_before_experimental_loading(
         )
     assert error.value.code == 2
     assert "does not support numeric --speed" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("change", [None, "text", "delivery", "pcm", "native"])
+def test_runner_binds_repeated_speech_to_shared_native_attempt(
+    tmp_path: Path, stub_runtime: None, change: str | None
+) -> None:
+    from scripts.overnight_e2e import selected_native_evidence
+
+    raw = MlxQwenAdapter(
+        MlxQwenSettings(
+            installation=installation(tmp_path),
+            worker_script=Path("scripts/mlx_qwen3_tts_worker.py"),
+            models_root=tmp_path / "models",
+            raw_output_directory=tmp_path / "native-speech",
+        )
+    )
+    processed = MlxProcessedSpeech(raw)
+    cache = MlxEvidenceCache(tmp_path / "cache", tmp_path / "native-speech")
+    first = SpeechSegment(id="speech-1", text="Return to the ordinary sound.")
+    repeated = first.model_copy(update={"id": "speech-2"})
+    try:
+        audio = processed.synthesize(first)
+        key = cache_key_for(first, processed)
+        cache.store(
+            key,
+            audio,
+            synthesis_inputs=synthesis_input_bytes(first, processed),
+            synthesizer_identity=processed.cache_identity,
+        )
+        assert cache_key_for(repeated, processed) == key
+        hit = cache.load(key, expected_synthesizer=processed)
+        assert hit is not None
+        delivered = {
+            "segment_id": repeated.id,
+            "cache_key": key,
+            "pcm_sha256": hit.metadata.pcm_sha256,
+        }
+        wav, sidecar, native_id = selected_native_evidence(
+            tmp_path, delivered, repeated.model_dump(mode="json")
+        )
+        assert native_id == first.id
+        assert json.loads(sidecar.read_text())["segment_id"] == first.id
+        assert len(FakeController.requests) == 1
+        if change is None:
+            return
+        if change == "text":
+            repeated = repeated.model_copy(update={"text": "Different words."})
+        elif change == "delivery":
+            repeated = repeated.model_copy(update={"delivery": "soothing"})
+        elif change == "pcm":
+            delivered["pcm_sha256"] = "0" * 64
+        else:
+            wav.write_bytes(b"changed native waveform")
+        with pytest.raises(ValueError, match=r"synthesis inputs|evidence does not verify"):
+            selected_native_evidence(tmp_path, delivered, repeated.model_dump(mode="json"))
+    finally:
+        processed.close()

@@ -297,6 +297,50 @@ def read_expected(run: Path, comparison: list[str] | None = None) -> list[str]:
     return texts
 
 
+def selected_native_evidence(
+    run: Path, delivered: dict[str, Any], speech: dict[str, Any]
+) -> tuple[Path, Path, str]:
+    """Bind each delivery to verified synthesis inputs, allowing cached repetitions."""
+    from whoopy.adapters.tts.mlx_qwen3_tts import valid_cached_native_evidence
+    from whoopy.audio.processing import SpeechProcessingSettings, processed_speech_metadata
+    from whoopy.audio.synthesis import cache_key_for_identity
+    from whoopy.ports import AdapterMetadata
+    from whoopy.timeline import SpeechSegment
+
+    native_root = run / "native-speech"
+    key = delivered["cache_key"]
+    # Validate before using a manifest value in a filesystem path.
+    if not isinstance(key, str) or len(key) != 64 or any(c not in "0123456789abcdef" for c in key):
+        raise ValueError("Delivered native cache key is invalid")
+    reference = json.loads((native_root / "cache-references" / f"{key}.json").read_text())
+    typed = SpeechSegment.model_validate(speech)
+    original = SpeechSegment.model_validate(reference["segment"])
+    adapter = AdapterMetadata.model_validate(reference["adapter"])
+    processing = SpeechProcessingSettings(**reference["processing"])
+    processed = processed_speech_metadata(
+        adapter, inner_cache_identity=adapter.cache_identity, settings=processing
+    )
+    actual_key = cache_key_for_identity(
+        typed, synthesizer_identity=processed.cache_identity, sample_rate=24000
+    )
+    if delivered["segment_id"] != typed.id or actual_key != key:
+        raise ValueError("Native reference does not match final typed synthesis inputs")
+    if not valid_cached_native_evidence(native_root, key, delivered["pcm_sha256"]):
+        raise ValueError("Native-to-processed evidence does not verify against delivered PCM")
+    evidence = reference["native"]
+    wav, sidecar = Path(evidence["wav_path"]), Path(evidence["sidecar_path"])
+    metadata = json.loads(sidecar.read_text())
+    # Native IDs describe the inference attempt; delivery IDs describe timeline uses.
+    if (
+        reference["segment_id"] != original.id
+        or reference["text"] != original.text
+        or metadata["segment_id"] != original.id
+        or metadata["text"] != original.text
+    ):
+        raise ValueError("Native attempt does not match its recorded synthesis input")
+    return wav, sidecar, original.id
+
+
 def main() -> int:
     global PLAN
     parser = argparse.ArgumentParser(description=__doc__)
@@ -586,9 +630,7 @@ def main() -> int:
                 native_reports = []
                 if not kokoro:
                     timeline = json.loads((run / "timeline.json").read_text())
-                    spoken = {
-                        s["id"]: s["text"] for s in timeline["segments"] if s["type"] == "SPEECH"
-                    }
+                    spoken = {s["id"]: s for s in timeline["segments"] if s["type"] == "SPEECH"}
                     audio_manifest = json.loads((run / "audio-manifest.json").read_text())
                     delivered = [
                         s for s in audio_manifest["segments"] if s["segment_type"] == "SPEECH"
@@ -599,40 +641,10 @@ def main() -> int:
                         receipt_path = (
                             run / "native-speech/cache-references" / f"{segment['cache_key']}.json"
                         )
-                        reference = json.loads(receipt_path.read_text())
-                        evidence = reference["native"]
-                        text = spoken[segment["segment_id"]]
-                        if (
-                            reference["segment_id"] != segment["segment_id"]
-                            or reference["text"] != text
-                        ):
-                            raise ValueError("Native reference does not match final typed timeline")
-                        if reference["processed_pcm_sha256"] != segment["pcm_sha256"]:
-                            raise ValueError(
-                                "Native-to-processed receipt differs from delivered PCM"
-                            )
-                        wav, sidecar = Path(evidence["wav_path"]), Path(evidence["sidecar_path"])
-                        for p, expected_hash in (
-                            (wav, evidence["sha256"]),
-                            (sidecar, evidence["sidecar_sha256"]),
-                        ):
-                            p.resolve(strict=True).relative_to((run / "native-speech").resolve())
-                            if digest(p) != expected_hash:
-                                raise ValueError("Native evidence hash changed")
-                        metadata = json.loads(sidecar.read_text())
-                        if (
-                            metadata["text"] != text
-                            or metadata["segment_id"] != segment["segment_id"]
-                        ):
-                            raise ValueError("Native sidecar does not match delivered text")
-                        if (
-                            not evidence["eos_observed"]
-                            or evidence["sample_rate"] != 24000
-                            or evidence["subtype"] != "FLOAT"
-                        ):
-                            raise ValueError(
-                                "Native output lacks 24 kHz FLOAT or natural codec EOS"
-                            )
+                        text = spoken[segment["segment_id"]]["text"]
+                        wav, sidecar, native_segment_id = selected_native_evidence(
+                            run, segment, spoken[segment["segment_id"]]
+                        )
                         expected_native = attempt / f"expected-native-{index:03d}.txt"
                         expected_native.write_text(text + "\n")
                         report = verify(
@@ -641,6 +653,7 @@ def main() -> int:
                         native_reports.append(
                             {
                                 "segment_id": segment["segment_id"],
+                                "native_segment_id": native_segment_id,
                                 "selected_reference": str(receipt_path),
                                 "metadata": str(sidecar),
                                 "verification": report,

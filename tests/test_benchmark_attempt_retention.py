@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -261,11 +262,24 @@ def test_writing_capture_keeps_partial_output_and_propagates_process_failure(
         assert (folder / "stderr.txt").read_bytes() == b"timeout"
 
 
+@pytest.mark.parametrize("custom_lock", [False, True])
 def test_writing_cli_passes_explicit_model_storage_and_keeps_both_failed_methods(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, custom_lock: bool
 ) -> None:
     output = tmp_path / "fresh"
     models = tmp_path / "existing-models"
+    lock = (
+        tmp_path / "experimental-artifacts.yaml" if custom_lock else Path("config/artifacts.yaml")
+    )
+    if custom_lock:
+        lock.write_bytes(b"fixture custom artifact lock\n")
+    loaded_locks: list[Path] = []
+    sentinel_lock = object()
+
+    def load_lock(path: Path) -> object:
+        loaded_locks.append(path)
+        return sentinel_lock
+
     calls: list[dict[str, Any]] = []
 
     def refuse_model(**kwargs: Any) -> Any:
@@ -273,7 +287,7 @@ def test_writing_cli_passes_explicit_model_storage_and_keeps_both_failed_methods
         raise RuntimeError("fixture adapter failure before inference")
 
     monkeypatch.setattr(LlamaCppScriptGenerator, "from_artifact_store", refuse_model)
-    monkeypatch.setattr(benchmark_writing_methods, "load_artifact_lock", lambda _: None)
+    monkeypatch.setattr(benchmark_writing_methods, "load_artifact_lock", load_lock)
     monkeypatch.setattr(benchmark_writing_methods, "_lock_exclusively", lambda _: None)
     monkeypatch.setattr(psutil, "swap_memory", lambda: SimpleNamespace(used=0))
     monkeypatch.setattr(
@@ -300,18 +314,23 @@ def test_writing_cli_passes_explicit_model_storage_and_keeps_both_failed_methods
             "42",
             "--profile",
             "high",
-        ],
+        ]
+        + (["--artifact-lock", str(lock)] if custom_lock else []),
     )
 
     assert benchmark_writing_methods.main() == 1
     assert len(calls) == 2
+    assert loaded_locks == [lock, lock]
     for call in calls:
+        assert call["artifact_lock"] is sentinel_lock
         assert call["store"].root == models
         assert call["profile_name"] == "high"
         settings = call["settings"]
         assert (settings.context_tokens, settings.temperature, settings.top_p) == (32768, 0.7, 0.9)
     report = json.loads((output / "report.json").read_text())
     assert report["models_dir"] == str(models.resolve())
+    assert report["artifact_lock"] == str(lock.resolve())
+    assert report["artifact_lock_sha256"] == hashlib.sha256(lock.read_bytes()).hexdigest()
     assert [result["writing_method"] for result in report["results"]] == [
         "plan_first",
         "recipe_whole_session",

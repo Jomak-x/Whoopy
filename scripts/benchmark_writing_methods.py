@@ -166,6 +166,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--models-dir", type=Path, default=Path("models/managed"))
+    parser.add_argument("--artifact-lock", type=Path, default=Path("config/artifacts.yaml"))
     parser.add_argument("--case", choices=tuple(CASES), action="append")
     parser.add_argument("--method", choices=("plan_first", "recipe_whole_session"), action="append")
     parser.add_argument("--seed", type=int, default=42)
@@ -183,6 +184,8 @@ def main() -> int:
         "profile": args.profile,
         "seed": args.seed,
         "models_dir": str(args.models_dir.resolve()),
+        "artifact_lock": str(args.artifact_lock.resolve()),
+        "artifact_lock_sha256": hashlib.sha256(args.artifact_lock.read_bytes()).hexdigest(),
         "results": [],
     }
     failed = False
@@ -220,7 +223,7 @@ def main() -> int:
                 guard.thread.start()
                 try:
                     adapter = LlamaCppScriptGenerator.from_artifact_store(
-                        artifact_lock=load_artifact_lock(Path("config/artifacts.yaml")),
+                        artifact_lock=load_artifact_lock(args.artifact_lock),
                         store=ArtifactStore(args.models_dir),
                         profile_name=args.profile,
                         target=TargetPlatform.current(),

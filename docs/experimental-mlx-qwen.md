@@ -35,7 +35,7 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONPATH=src .venv/bin/python -m whoop
   'A calm grounding meditation after a busy day.' \
   --writing-method recipe_whole_session --minutes 3 --profile high \
   --tts-model mlx-qwen3-custom-voice-1.7b-8bit --qwen-speaker Ryan \
-  --qwen-language English --delivery calm --pace unhurried --seed 20261029 \
+  --qwen-language English --delivery calm --pace slow --seed 42 \
   --models-dir /Users/jakob/codestuff/Whoopy/models/managed \
   --runs-dir /Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-29/e2e/runs \
   --audience lab --json

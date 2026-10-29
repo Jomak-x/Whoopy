@@ -60,6 +60,36 @@ def file_digest(path: Path) -> str:
     return result.hexdigest()
 
 
+def playback_evidence(
+    root: Path, value: str | Path | None, report: dict[str, Any], *, label: str
+) -> tuple[Path | None, str | None]:
+    """Only label screening current when its receipt binds the playable bytes."""
+    try:
+        path = safe_path(root, value)
+    except (ValueError, OSError, TypeError):
+        return None, f"{label} is missing, unavailable, or outside this campaign."
+    if not report:
+        return path, None
+    expected = report.get("audio_sha256")
+    if not isinstance(expected, str) or not expected:
+        return (
+            path,
+            f"{label} ASR receipt has no audio SHA256; screening evidence is unbound.",
+        )
+    try:
+        if file_digest(path) != expected:
+            return (
+                path,
+                f"{label} hash differs from retained ASR receipt; screening evidence is stale.",
+            )
+    except OSError:
+        return (
+            None,
+            f"{label} could not be read; screening evidence cannot be verified.",
+        )
+    return path, None
+
+
 def details(label: str, value: Any) -> str:
     return f"<details><summary>{esc(label)}</summary><pre>{esc(json.dumps(value, indent=2, ensure_ascii=False))}</pre></details>"
 
@@ -107,7 +137,14 @@ def document(title: str, body: str) -> str:
     return f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{esc(title)}</title><style>{STYLE}</style></head><body><main>{body}</main></body></html>'
 
 
-def diff_page(root: Path, destination: Path, label: str, report: dict[str, Any]) -> str:
+def diff_page(
+    root: Path,
+    destination: Path,
+    label: str,
+    report: dict[str, Any],
+    *,
+    playback_error: str | None = None,
+) -> str:
     comparison = report.get("content") or {}
     rows = []
     for item in comparison.get("alignment", []):
@@ -118,7 +155,10 @@ def diff_page(root: Path, destination: Path, label: str, report: dict[str, Any])
         )
     summary = {k: v for k, v in comparison.items() if k != "alignment"}
     body = f"<h1>{esc(label)}</h1><p>Exact normalized word alignment retained by independent ASR. Indexes are zero-based. Case and punctuation are normalized; this is not a human transcript or a listening decision.</p>"
-    body += f"<p>Screening: <strong>{esc(status_for(None, [report]))}</strong></p>"
+    screening = "Fail" if playback_error else status_for(None, [report])
+    body += f"<p>Screening: <strong>{esc(screening)}</strong></p>"
+    if playback_error:
+        body += f"<p>{esc(playback_error)}</p>"
     body += details("Comparison counts and error spans", summary)
     if rows:
         body += (
@@ -207,16 +247,42 @@ def build(root: Path, *, output: Path | None = None) -> Path:
         candidate = record.get("candidate", "Unknown candidate")
         card_id = f"sample-{index:03d}"
         reasons = list(final.get("failure_reasons", [])) + list(final.get("review_reasons", []))
-        if run and (run / "narration.wav").is_file() and final.get("audio_sha256"):
-            audio = safe_path(root, run / "narration.wav")
-            if file_digest(audio) != final["audio_sha256"]:
+        final_audio: Path | None = None
+        final_error: str | None = None
+        if final or (run and (run / "narration.wav").exists()):
+            final_audio, final_error = playback_evidence(
+                root, run / "narration.wav" if run else None, final, label="Final WAV"
+            )
+            if final_error:
                 screening = "Fail"
-                reasons.append(
-                    "Final WAV hash differs from retained ASR receipt; screening evidence is stale."
+                reasons.append(final_error)
+        native_by_path: dict[str, dict[str, Any]] = {}
+        native_playback: dict[str, tuple[Path | None, str | None]] = {}
+        for selected in native:
+            try:
+                sidecar = safe_path(root, selected.get("metadata"))
+                key = str(sidecar)
+                native_by_path[key] = selected
+                receipt = load(root, sidecar)
+                native_report = selected.get("verification") or {}
+                playback = playback_evidence(
+                    root,
+                    receipt.get("wav_path"),
+                    native_report,
+                    label="Native WAV",
                 )
+                if not native_report and playback[1] is None:
+                    playback = (playback[0], "Selected native ASR receipt is missing.")
+                native_playback[key] = playback
+                native_error = playback[1]
+            except (ValueError, OSError, TypeError):
+                native_error = "Selected native metadata is missing or outside this campaign."
+            if native_error:
+                screening = "Fail"
+                reasons.append(native_error)
         card = f'<article id="{card_id}" class="{screening.lower().replace(" ", "-")}"><h3>{esc(candidate)}</h3><p>{esc(mode_label)}</p><p class="badge">Automated speech screening: {esc(screening)}</p><p>Human quality: Unrated. No human listening score has been supplied.</p><p>Audio duration: {esc(duration_label)}. Requested target: {esc(record.get("target_seconds", "Unavailable"))} seconds.<br>Model: {esc(model)}<br>Voice / preset: {esc(voice)}<br>Run ID: <code>{esc(record.get("run_id"))}</code></p>'
-        if run and (run / "narration.wav").is_file():
-            card += f'<audio controls preload="none" src="{url(root, safe_path(root, run / "narration.wav"))}"></audio><p>Actual final narration; no listening-copy normalization has been added.</p>'
+        if final_audio:
+            card += f'<audio controls preload="none" src="{url(root, final_audio)}"></audio><p>Actual final narration; no listening-copy normalization has been added.</p>'
         else:
             card += "<p>Final narration is unavailable. Retained partial/native artifacts are linked below.</p>"
         source_script = (
@@ -261,6 +327,7 @@ def build(root: Path, *, output: Path | None = None) -> Path:
                     artifacts / f"sample-{index:03d}-final.html",
                     f"{candidate}: final narration",
                     final,
+                    playback_error=final_error,
                 )
                 + "</p>"
             )
@@ -283,9 +350,6 @@ def build(root: Path, *, output: Path | None = None) -> Path:
                 f'<li><a href="#{card_id}">{esc(case)} / {esc(candidate)}: {esc(screening)}</a> — {esc(record.get("error") or durable.get("error") or "; ".join(reasons) or "No completed screening evidence")}</li>'
             )
         if run:
-            native_by_path = {
-                str(Path(n["metadata"]).resolve()): n for n in native if n.get("metadata")
-            }
             native_files = sorted((run / "native-speech").glob("*/metadata.json"))
             if native_files:
                 card += (
@@ -300,17 +364,23 @@ def build(root: Path, *, output: Path | None = None) -> Path:
                     if selected
                     else "Not selected for delivered audio"
                 )
+                cached_playback = native_playback.get(str(sidecar.resolve()))
+                if cached_playback is None:
+                    cached_playback = playback_evidence(
+                        root, receipt.get("wav_path"), {}, label="Native WAV"
+                    )
+                path, playback_error = cached_playback
+                if playback_error:
+                    state = "Fail: " + playback_error
                 if receipt.get("eos_observed") is False:
                     state = "Fail: native codec EOS absent"
                     failures.append(
                         f'<li><a href="#{card_id}">{esc(case)} / {esc(candidate)}</a>: retained native attempt {esc(receipt.get("attempt_id", sidecar.parent.name))} failed natural codec EOS. {link(root, sidecar, "Native failure receipt")}</li>'
                     )
                 card += f"<h4>Native attempt {esc(receipt.get('segment_id', native_index))}: {esc(state)}</h4>"
-                wav = receipt.get("wav_path")
-                try:
-                    path = safe_path(root, wav)
+                if path:
                     card += f'<audio controls preload="none" src="{url(root, path)}"></audio>'
-                except (ValueError, OSError, TypeError):
+                else:
                     card += "<p>Native audio path is unavailable or outside this campaign.</p>"
                 card += "<p>" + link(root, sidecar, "Native settings / EOS / provenance")
                 if selected:
@@ -329,6 +399,7 @@ def build(root: Path, *, output: Path | None = None) -> Path:
                         artifacts / f"sample-{index:03d}-native-{native_index:03d}.html",
                         f"{candidate}: native {receipt.get('segment_id', native_index)}",
                         native_report,
+                        playback_error=playback_error,
                     )
                 card += "</p>"
             if native_files:

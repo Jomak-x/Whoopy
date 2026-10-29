@@ -58,3 +58,7 @@ artifacts/
 evaluations/audits/
 evaluations/benchmarks/**/overnight-e2e-*/
 evaluations/benchmarks/**/overnight-e2e-*.launch.log
+
+# Machine-local listening hub snapshots and explicit catalogs
+evaluations/benchmarks/morning*.html
+evaluations/benchmarks/morning*.json
