@@ -1,5 +1,7 @@
 # Phase 3.5 PR 3: Real Speech From A Script
 
+> **Historical implementation record.** The current Studio supports authored scripts, revisions, and exports. See [the user guide](user-guide.md).
+
 This PR is Whoopy's first genuinely useful audio path. A person writes or
 pastes a meditation, marks deliberate pauses, and Whoopy produces locally
 spoken narration with Kokoro. No language model and no network connection are

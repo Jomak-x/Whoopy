@@ -1,0 +1,34 @@
+{
+  "case": "focus-no-breath-3m",
+  "writing_method": "plan_first",
+  "prompt": "I have an important meeting soon and feel distracted. I am seated. Give me a steadying practice with sound as the anchor. I do not want to focus on breathing. Finish ready to continue my day, without promising how I will feel.",
+  "target_seconds": 180,
+  "seed": 42,
+  "status": "generated_pending_content_review",
+  "gpu_lock_wait_seconds": 50.98011150001548,
+  "elapsed_seconds": 98.58449041703716,
+  "estimated_duration_seconds": 179.99968292682925,
+  "sections": 3,
+  "words": 181,
+  "attempts": 4,
+  "recipe_id": "breath_awareness@1",
+  "model": {
+    "adapter_id": "whoopy.llama_cpp",
+    "versioned_model_id": "Ministral 3 14B Q4_K_M@74fac473c43357d7fb2671713608183cc72496d0#Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+    "runtime_id": "llama.cpp",
+    "runtime_version": "b10142",
+    "license_id": "Apache-2.0",
+    "device": "cpu,metal",
+    "settings": [
+      "context_tokens=32768",
+      "temperature=0.7",
+      "top_p=0.9",
+      "threads=0",
+      "gpu_layers=auto",
+      "reasoning=off",
+      "timeout_seconds=300"
+    ]
+  },
+  "script_sha256": "da429d406e6c3d092708b680a2269d5cd2de4f1857e68c0e18e78289ace6b863",
+  "script": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/writing-v3-high/focus-no-breath-3m/plan_first/artifacts/script.md"
+}

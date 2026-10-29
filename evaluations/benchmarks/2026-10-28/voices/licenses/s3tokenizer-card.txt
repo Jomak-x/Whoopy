@@ -1,0 +1,14 @@
+---
+library_name: mlx-audio-plus
+base_model:
+- FunAudioLLM/CosyVoice2-0.5B
+tags:
+- mlx
+- speech-tokenizer
+---
+
+# mlx-community/S3TokenizerV2
+
+S3TokenizerV2 (Supervised Semantic Speech Tokenizer) converted to MLX format from [FunAudioLLM/CosyVoice2-0.5B](https://huggingface.co/FunAudioLLM/CosyVoice2-0.5B).
+
+This tokenizer is automatically downloaded when using Chatterbox or CosyVoice2 with [mlx-audio-plus](https://github.com/DePasqualeOrg/mlx-audio-plus).

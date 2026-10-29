@@ -6,6 +6,15 @@
 # prompt formatting, sampling quirks, voice controls, and runtime errors inside
 # that adapter rather than branching on model names in the pipeline.
 llm:
+  llama_cpp_ministral_3_14b:
+    adapter: whoopy.adapters.llm.llama_cpp:LlamaCppScriptGenerator
+    versioned_model_id: mistralai/Ministral-3-14B-Instruct-2512-GGUF@74fac473c43357d7fb2671713608183cc72496d0
+    license_id: Apache-2.0
+    runtime: llama_cpp
+    runtime_version: b10142
+    platforms: [macos-arm64, macos-x86_64, windows-x86_64, linux-x86_64, linux-arm64]
+    profile_candidates: [high]
+    status: adapter_implemented_local_evaluation_required
   llama_cpp_qwen3_1_7b:
     adapter: whoopy.adapters.llm.llama_cpp:LlamaCppScriptGenerator
     versioned_model_id: Qwen/Qwen3-1.7B-GGUF@90862c4b9d2787eaed51d12237eafdfe7c5f6077
@@ -40,6 +49,61 @@ llm:
     status: planned
 
 tts:
+  qwen3_tts_custom_voice_0_6b:
+    adapter: whoopy.adapters.tts.qwen3_tts:Qwen3TTSAdapter
+    variant: custom-voice-0.6b
+    versioned_model_id: Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice
+    license_id: Apache-2.0
+    runtime: qwen_tts_isolated_python
+    voice_modes: [preset]
+    controls: [speaker, language, delivery_instruction]
+    platforms: [macos-arm64, windows-x86_64, linux-x86_64]
+    publication_policy: allowed_after_asset_check
+    status: adapter_contract_implemented_runtime_pack_required
+  qwen3_tts_custom_voice_1_7b:
+    adapter: whoopy.adapters.tts.qwen3_tts:Qwen3TTSAdapter
+    variant: custom-voice-1.7b
+    versioned_model_id: Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice
+    license_id: Apache-2.0
+    runtime: qwen_tts_isolated_python
+    voice_modes: [preset]
+    controls: [speaker, language, delivery_instruction]
+    platforms: [macos-arm64, windows-x86_64, linux-x86_64]
+    publication_policy: allowed_after_asset_check
+    status: adapter_contract_implemented_runtime_pack_required
+  qwen3_tts_voice_design_1_7b:
+    adapter: whoopy.adapters.tts.qwen3_tts:Qwen3TTSAdapter
+    variant: voice-design-1.7b
+    versioned_model_id: Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign
+    license_id: Apache-2.0
+    runtime: qwen_tts_isolated_python
+    voice_modes: [designed]
+    controls: [reviewed_voice_design, language, delivery_instruction]
+    platforms: [macos-arm64, windows-x86_64, linux-x86_64]
+    publication_policy: allowed_after_asset_check
+    status: adapter_contract_implemented_runtime_pack_required
+  qwen3_tts_base_clone_0_6b:
+    adapter: whoopy.adapters.tts.qwen3_tts:Qwen3TTSAdapter
+    variant: base-clone-0.6b
+    versioned_model_id: Qwen/Qwen3-TTS-12Hz-0.6B-Base
+    license_id: Apache-2.0
+    runtime: qwen_tts_isolated_python
+    voice_modes: [reference]
+    controls: [consented_reference, transcript, language]
+    platforms: [macos-arm64, windows-x86_64, linux-x86_64]
+    publication_policy: explicit_voice_consent_required
+    status: adapter_contract_implemented_runtime_pack_required
+  qwen3_tts_base_clone_1_7b:
+    adapter: whoopy.adapters.tts.qwen3_tts:Qwen3TTSAdapter
+    variant: base-clone-1.7b
+    versioned_model_id: Qwen/Qwen3-TTS-12Hz-1.7B-Base
+    license_id: Apache-2.0
+    runtime: qwen_tts_isolated_python
+    voice_modes: [reference]
+    controls: [consented_reference, transcript, language]
+    platforms: [macos-arm64, windows-x86_64, linux-x86_64]
+    publication_policy: explicit_voice_consent_required
+    status: adapter_contract_implemented_runtime_pack_required
   sherpa_onnx_kokoro:
     adapter: whoopy.adapters.tts.sherpa_onnx:SherpaOnnxKokoroAdapter
     versioned_model_id: sherpa-onnx/kokoro-multi-lang-v1_0

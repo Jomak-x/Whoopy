@@ -1,0 +1,21 @@
+Traceback (most recent call last):
+  File "/Users/jakob/codestuff/Whoopy/scripts/benchmark_voice_candidates.py", line 544, in <module>
+    main()
+  File "/Users/jakob/codestuff/Whoopy/scripts/benchmark_voice_candidates.py", line 540, in main
+    run(args.names[0], args.seed)
+  File "/Users/jakob/codestuff/Whoopy/scripts/benchmark_voice_candidates.py", line 431, in run
+    result = model.generate(
+             ^^^^^^^^^^^^^^^
+  File "/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/dots_tts_mlx/model.py", line 750, in generate
+    wav = self.vae.decode(latents.transpose(0, 2, 1))  # [1, 1, T*1920]
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/dots_tts_mlx/audiovae.py", line 298, in decode
+    x = self.slstm(x)
+        ^^^^^^^^^^^^^
+  File "/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/dots_tts_mlx/audiovae.py", line 146, in __call__
+    gates = gates_in[:, ts, :] + mm(hx, w_hh.T)
+                                 ^^^^^^^^^^^^^^
+  File "/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/dots_tts_mlx/audiovae.py", line 135, in <lambda>
+    mm = hp_matmul if self.hp else (lambda a, w_t: a @ w_t)
+
+KeyboardInterrupt

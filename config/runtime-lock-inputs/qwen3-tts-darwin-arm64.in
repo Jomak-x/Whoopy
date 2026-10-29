@@ -1,0 +1,23 @@
+# Qwen3-TTS 0.1.1 production-inference closure for CPython 3.12.12 on
+# macOS 12+ ARM64, built from official revision
+# 022e286b98fbec7e1e916cb940cdf532cd9f488e.
+#
+# The pinned upstream package fixes Transformers and Accelerate but leaves its
+# remaining dependencies floating. These reviewed top-level versions resolve
+# to the complete hashed wheel lock. Gradio is included because it is declared
+# by qwen-tts metadata even though Whoopy runs the JSON-lines worker rather than
+# Qwen's development Web UI. Model and speech-tokenizer checkpoints remain
+# separate verified model-pack artifacts and are never included here.
+
+accelerate==1.12.0
+einops==0.8.1
+gradio==5.50.0
+librosa==0.11.0
+onnxruntime==1.19.2
+setuptools==82.0.0
+soundfile==0.13.1
+sox==1.4.1
+torch==2.9.1
+torchaudio==2.9.1
+transformers==4.57.3
+wheel==0.46.2

@@ -22,7 +22,10 @@ config/local.yaml
 runs/
 cache/
 models/
-evaluations/local/
+evaluations/local/*
+!evaluations/local/README.md
+!evaluations/local/lab-*.json
+!evaluations/local/standard-telemetry-current.json
 *.db
 *.db-shm
 *.db-wal
@@ -35,3 +38,21 @@ node_modules/
 .DS_Store
 .idea/
 .vscode/
+
+# Recoverable local cleanup and generated listening artifacts
+.whoopy-recovery/
+evaluations/**/*.wav
+evaluations/**/*.flac
+evaluations/**/*.m4a
+evaluations/**/*.mp3
+evaluations/**/*.opus
+evaluations/**/*.pcm
+evaluations/**/.cache/
+evaluations/**/*.safetensors
+evaluations/**/*.dtprofile/
+
+# Local UI audit screenshots and raw benchmark material
+artifacts/
+
+# Prior audit working files are local history, not product source
+evaluations/audits/

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import threading
 import time
 from datetime import UTC, datetime, timedelta
+from html.parser import HTMLParser
 from http.server import ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
@@ -16,7 +18,12 @@ from pytest import MonkeyPatch
 
 from whoopy.pipeline import RunExecution, RunStage, RunStatus, RunStore
 from whoopy.timeline import build_script_timeline
-from whoopy.webui.server import LocalWebApplication, _handler_factory
+from whoopy.webui.server import GenerationTask, LocalWebApplication, _handler_factory
+
+
+class _ReadyKokoroPacks:
+    def list(self) -> dict[str, object]:
+        return {"packs": [{"pack_id": "kokoro", "state": "ready"}]}
 
 
 def _application(tmp_path: Path) -> LocalWebApplication:
@@ -25,6 +32,7 @@ def _application(tmp_path: Path) -> LocalWebApplication:
         config_directory=Path("config"),
         models_directory=Path("models"),
         runs_directory=Path("runs"),
+        model_pack_service_factory=lambda _registry, _models: _ReadyKokoroPacks(),
     )
 
 
@@ -53,6 +61,144 @@ def _interrupt_record(store: RunStore, prompt: str = "Recover this run.") -> str
     return str(record.run_id)
 
 
+def test_running_summary_reports_live_elapsed_time_and_process_memory(tmp_path: Path) -> None:
+    store = RunStore(tmp_path / "runs")
+    record = store.create("Measure this run.")
+    assert record.recovery is not None
+    now = datetime.now(UTC)
+    store.save(
+        record.transition(
+            RunStatus.RUNNING,
+            updated_at=now,
+            recovery=record.recovery.model_copy(update={"process_attempts": 1}),
+            execution=RunExecution(
+                stage=RunStage.SYNTHESIZING,
+                attempt_id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+                owner_id="test-web",
+                pid=os.getpid(),
+                started_at=now - timedelta(seconds=2),
+                heartbeat_at=now,
+                lease_expires_at=now + timedelta(seconds=15),
+            ),
+        )
+    )
+
+    summary = _application(tmp_path).run(str(record.run_id))
+
+    assert summary is not None
+    assert summary["live_metrics"]["elapsed_seconds"] >= 2
+    assert summary["live_metrics"]["resident_memory_bytes"] > 0
+
+
+def test_task_stays_running_until_completed_worker_releases_lock(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    class Process:
+        def __init__(self, return_code: int | None) -> None:
+            self.return_code = return_code
+
+        def poll(self) -> int | None:
+            return self.return_code
+
+    application = _application(tmp_path)
+    monkeypatch.setattr(
+        application,
+        "run",
+        lambda _run_id: {
+            "run_id": "11111111-1111-4111-8111-111111111111",
+            "status": "completed",
+            "execution": {"stage": "completed", "message": "Done."},
+        },
+    )
+    task = GenerationTask(
+        task_id="11111111-1111-4111-8111-111111111111",
+        run_id="11111111-1111-4111-8111-111111111111",
+        launching=False,
+        process=Process(None),
+    )
+
+    active = application._task_public(task)
+    task.process = Process(0)
+    released = application._task_public(task)
+
+    assert active["status"] == "running"
+    assert active["execution"]["stage"] == "finalizing"
+    assert released["status"] == "completed"
+
+
+def test_interrupted_task_stays_running_until_worker_releases_lock(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    class Process:
+        def __init__(self, return_code: int | None) -> None:
+            self.return_code = return_code
+
+        def poll(self) -> int | None:
+            return self.return_code
+
+    application = _application(tmp_path)
+    monkeypatch.setattr(
+        application,
+        "run",
+        lambda _run_id: {
+            "run_id": "11111111-1111-4111-8111-111111111111",
+            "status": "interrupted",
+            "execution": {"stage": "synthesizing", "message": "Stopped."},
+        },
+    )
+    task = GenerationTask(
+        task_id="11111111-1111-4111-8111-111111111111",
+        run_id="11111111-1111-4111-8111-111111111111",
+        launching=False,
+        process=Process(None),
+    )
+
+    active = application._task_public(task)
+    task.process = Process(143)
+    released = application._task_public(task)
+
+    assert active["status"] == "running"
+    assert active["execution"]["stage"] == "finalizing"
+    assert released["status"] == "interrupted"
+
+
+def test_library_projection_does_not_hide_runs_after_the_first_page(tmp_path: Path) -> None:
+    store = RunStore(tmp_path / "runs")
+    for index in range(30):
+        store.create(f"Meditation {index + 1}.")
+
+    runs = _application(tmp_path).list_runs()
+
+    assert len(runs) == 30
+    assert {run["title"] for run in runs} == {f"Meditation {index + 1}." for index in range(30)}
+
+
+def test_legacy_lab_title_is_projected_as_lab_audience(tmp_path: Path) -> None:
+    store = RunStore(tmp_path / "runs")
+    record = store.create("Lab legacy-comparison / case: controlled prompt")
+    path = store.run_directory(record.run_id) / "run.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw.pop("audience")
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    summary = next(
+        run for run in _application(tmp_path).list_runs() if run["run_id"] == str(record.run_id)
+    )
+
+    assert summary["audience"] == "lab"
+
+
+def test_current_studio_title_beginning_with_lab_remains_in_studio(tmp_path: Path) -> None:
+    store = RunStore(tmp_path / "runs")
+    record = store.create("Lab notes for my personal meditation", audience="studio")
+
+    summary = next(
+        run for run in _application(tmp_path).list_runs() if run["run_id"] == str(record.run_id)
+    )
+
+    assert summary["audience"] == "studio"
+
+
 def _post_json(
     server: ThreadingHTTPServer,
     path: str,
@@ -75,10 +221,22 @@ def _post_json(
 def test_static_interface_is_packaged() -> None:
     static = files("whoopy.webui").joinpath("static")
 
-    html = static.joinpath("index.html").read_text(encoding="utf-8")
-    assert "Whoopy Local Studio" in html
-    assert static.joinpath("styles.css").is_file()
-    assert static.joinpath("app.js").is_file()
+    class Assets(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.paths: list[str] = []
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            values = dict(attrs)
+            path = values.get("src" if tag == "script" else "href")
+            if tag in {"script", "link"} and path and path.startswith("/"):
+                self.paths.append(path.lstrip("/"))
+
+    document = Assets()
+    document.feed(static.joinpath("index.html").read_text(encoding="utf-8"))
+    assert document.paths
+    for path in document.paths:
+        assert static.joinpath(path).is_file(), f"Missing packaged document asset: {path}"
 
 
 def test_model_pack_routes_are_allow_listed_and_keep_removal_explicit(tmp_path: Path) -> None:
@@ -210,6 +368,10 @@ def test_recent_runs_ignore_non_uuid_directories_and_expose_safe_artifacts(
         ({"mode": "script", "text": "calm", "voice": "unknown"}, "reviewed voices"),
         ({"mode": "script", "text": "calm", "speed": 3}, "between 0.5 and 1.2"),
         (
+            {"mode": "prompt", "text": "calm", "pacing_profile_id": "invented"},
+            "not in reviewed registry",
+        ),
+        (
             {"mode": "script", "text": "calm", "moss_language": "Klingon"},
             "31 supported languages",
         ),
@@ -224,11 +386,41 @@ def test_generation_request_validation(
         _application(tmp_path).start_generation(payload)
 
 
+def test_kokoro_generation_requires_current_ready_smoke_evidence(tmp_path: Path) -> None:
+    class MissingKokoroPacks:
+        def list(self) -> dict[str, object]:
+            return {
+                "packs": [
+                    {
+                        "pack_id": "kokoro",
+                        "state": "missing",
+                        "checks": [
+                            {
+                                "passed": False,
+                                "message": "Playable synthesis has not passed for this revision",
+                            }
+                        ],
+                    }
+                ]
+            }
+
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=Path("runs"),
+        model_pack_service_factory=lambda _registry, _models: MissingKokoroPacks(),
+    )
+
+    with pytest.raises(ValueError, match="kokoro is not ready"):
+        application.start_generation({"mode": "script", "text": "Welcome.", "tts_model": "kokoro"})
+    assert application.list_runs() == []
+
+
 def test_prompt_task_preallocates_a_durable_run_and_uses_the_real_cli_contract(
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
 ) -> None:
-    application = _application(tmp_path)
     captured: dict[str, Any] = {}
 
     class FakeProcess:
@@ -253,6 +445,7 @@ def test_prompt_task_preallocates_a_durable_run_and_uses_the_real_cli_contract(
         models_directory=Path("models"),
         runs_directory=Path("runs"),
         command_launcher=FakeProcess,
+        model_pack_service_factory=lambda _registry, _models: _ReadyKokoroPacks(),
     )
 
     created = application.start_generation(
@@ -273,6 +466,11 @@ def test_prompt_task_preallocates_a_durable_run_and_uses_the_real_cli_contract(
     assert command[command.index("--run-id") + 1] == run_id
     assert "--profile" in command
     assert command[command.index("--profile") + 1] == "standard"
+    assert command[command.index("--delivery") + 1] == "calm"
+    assert command[command.index("--pace") + 1] == "slow"
+    assert command[command.index("--pacing-profile") + 1] == "meditative-v2"
+    assert command[command.index("--speed") + 1] == "0.6"
+    assert command[command.index("--audience") + 1] == "studio"
 
 
 def test_moss_controls_reach_the_real_cli_contract(
@@ -301,22 +499,38 @@ def test_moss_controls_reach_the_real_cli_contract(
         "whoopy.webui.server.resolve_tts_model_pack",
         lambda *_args, **_kwargs: None,
     )
+
+    class ReadyMossPacks:
+        def list(self) -> dict[str, object]:
+            return {"packs": [{"pack_id": "moss-local-5b", "state": "ready"}]}
+
     application = LocalWebApplication(
         project_root=tmp_path,
         config_directory=Path("config"),
         models_directory=Path("models"),
         runs_directory=Path("runs"),
         command_launcher=FakeProcess,
+        model_pack_service_factory=lambda _registry, _models: ReadyMossPacks(),
+    )
+    monkeypatch.setattr(
+        application.voice_reference_manager,
+        "load",
+        lambda reference_id: object() if reference_id == "my-narrator" else None,
     )
 
     created = application.start_generation(
         {
             "mode": "script",
             "text": "Notice the quiet around you.",
+            "surface": "lab",
+            "requested_duration_seconds": 180,
             "tts_model": "moss-local-v1.5",
             "moss_language": "German",
             "moss_instruction": "Speak softly and thoughtfully.",
-            "moss_use_reference": False,
+            "moss_use_reference": True,
+            "voice_reference": "my-narrator",
+            "intensity": "moderate",
+            "pace": "very_slow",
         }
     )
     assert created["status"] == "queued"
@@ -325,7 +539,86 @@ def test_moss_controls_reach_the_real_cli_contract(
     assert command[command.index("--tts-model") + 1] == "moss-local-v1.5"
     assert command[command.index("--moss-language") + 1] == "German"
     assert command[command.index("--moss-instruction") + 1] == ("Speak softly and thoughtfully.")
-    assert "--moss-direct-voice" in command
+    assert command[command.index("--delivery") + 1] == "calm"
+    assert command[command.index("--intensity") + 1] == "moderate"
+    assert command[command.index("--pace") + 1] == "very_slow"
+    assert "--moss-direct-voice" not in command
+    assert command[command.index("--voice-reference") + 1] == "my-narrator"
+    assert command[command.index("--requested-duration-seconds") + 1] == "180"
+
+
+def test_qwen_speaker_does_not_enter_kokoro_voice_option(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeProcess:
+        returncode = 0
+
+        def __init__(self, command: list[str], **_kwargs: Any) -> None:
+            captured["command"] = command
+
+        def communicate(self) -> tuple[str, str]:
+            return "{}", ""
+
+        def poll(self) -> int:
+            return self.returncode
+
+        def terminate(self) -> None:
+            self.returncode = -15
+
+    class ReadyQwenPacks:
+        def list(self) -> dict[str, object]:
+            return {
+                "packs": [
+                    {
+                        "pack_id": "qwen3-tts-custom-voice-0.6b",
+                        "state": "ready",
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(
+        "whoopy.webui.server.resolve_qwen3_tts_installation",
+        lambda *_args, **_kwargs: None,
+    )
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=Path("runs"),
+        command_launcher=FakeProcess,
+        model_pack_service_factory=lambda _registry, _models: ReadyQwenPacks(),
+    )
+    # This unit test exercises CLI argument separation below the product
+    # eligibility gate. Qwen 0.6B remains blocked from real Lab selection until
+    # its natural-EOS quality review passes (covered by Qwen web integration
+    # tests), while the dormant launch path must still keep speaker and Kokoro
+    # voice arguments separate.
+    monkeypatch.setattr(application, "_require_speech_model_ready", lambda *_args, **_kwargs: None)
+
+    created = application.start_generation(
+        {
+            "surface": "lab",
+            "mode": "script",
+            "text": "Notice the quiet around you.",
+            "tts_model": "qwen3-custom-voice-0.6b",
+            "voice": "Serena",
+            "qwen_speaker": "Serena",
+            "qwen_language": "English",
+            "delivery": "neutral",
+            "intensity": "subtle",
+            "pace": "natural",
+        }
+    )
+
+    assert created["status"] == "queued"
+    _wait_for_capture(captured)
+    command = captured["command"]
+    assert "--voice" not in command
+    assert command[command.index("--qwen-speaker") + 1] == "Serena"
+    assert command[command.index("--pace") + 1] == "natural"
 
 
 def test_run_status_survives_a_web_application_restart(tmp_path: Path) -> None:
@@ -416,6 +709,7 @@ def test_immediate_cancel_is_not_lost_before_process_publication(tmp_path: Path)
         models_directory=Path("models"),
         runs_directory=Path("runs"),
         command_launcher=BlockingProcess,
+        model_pack_service_factory=lambda _registry, _models: _ReadyKokoroPacks(),
     )
     created = application.start_generation({"mode": "prompt", "text": "Pause.", "minutes": 1})
     assert launcher_entered.wait(timeout=2)
@@ -435,6 +729,105 @@ def test_immediate_cancel_is_not_lost_before_process_publication(tmp_path: Path)
     assert record.status is RunStatus.INTERRUPTED
     assert record.execution is not None
     assert record.execution.interruption_kind == "user_cancelled"
+    summary = application.run(created["run_id"])
+    assert summary is not None
+    assert summary["resumable"] is True
+    assert (store.run_directory(created["run_id"]) / "web-launch-request.json").is_file()
+
+
+def test_cancel_intent_wins_a_racing_adapter_failure_and_remains_resumable(
+    tmp_path: Path,
+) -> None:
+    store = RunStore(tmp_path / "runs")
+    record = store.create("A script whose adapter is still loading.")
+    now = datetime.now(UTC)
+    assert record.recovery is not None
+    running = record.transition(
+        RunStatus.RUNNING,
+        updated_at=now,
+        recovery=record.recovery.model_copy(update={"process_attempts": 1}),
+        execution=RunExecution(
+            stage=RunStage.SYNTHESIZING,
+            attempt_id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+            owner_id=f"test:{os.getpid()}",
+            pid=os.getpid(),
+            started_at=now,
+            heartbeat_at=now,
+            lease_expires_at=now + timedelta(seconds=15),
+        ),
+    )
+    store.save(running)
+    assert running.execution is not None and running.execution.attempt_id is not None
+    store.fail_active_run(
+        record.run_id,
+        attempt_id=running.execution.attempt_id,
+        error="FatalSynthesisError: runtime import raced cancellation",
+    )
+
+    application = _application(tmp_path)
+    application._write_web_launch_request(str(record.run_id), {"mode": "script"})
+    application._persist_cancel_intent(str(record.run_id))
+
+    interrupted = store.load(record.run_id)
+    assert interrupted.status is RunStatus.INTERRUPTED
+    assert interrupted.error is None
+    assert interrupted.execution is not None
+    assert interrupted.execution.interruption_kind == "user_cancelled"
+    assert "runtime import raced cancellation" in (interrupted.execution.message or "")
+    summary = application.run(str(record.run_id))
+    assert summary is not None and summary["resumable"] is True
+
+
+def test_cancel_intent_finishes_a_child_that_exits_without_saving_signal_state(
+    tmp_path: Path,
+) -> None:
+    store = RunStore(tmp_path / "runs")
+    record = store.create("A script stopped during native startup.")
+    now = datetime.now(UTC)
+    assert record.recovery is not None
+    running = record.transition(
+        RunStatus.RUNNING,
+        updated_at=now,
+        recovery=record.recovery.model_copy(update={"process_attempts": 1}),
+        execution=RunExecution(
+            stage=RunStage.SYNTHESIZING,
+            attempt_id=UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+            owner_id=f"test:{os.getpid()}",
+            pid=os.getpid(),
+            started_at=now,
+            heartbeat_at=now,
+            lease_expires_at=now + timedelta(seconds=15),
+        ),
+    )
+    store.save(running)
+
+    _application(tmp_path)._persist_cancel_intent(str(record.run_id))
+
+    interrupted = store.load(record.run_id)
+    assert running.execution is not None
+    assert interrupted.status is RunStatus.INTERRUPTED
+    assert interrupted.execution is not None
+    assert interrupted.execution.attempt_id == running.execution.attempt_id
+    assert interrupted.execution.interruption_kind == "user_cancelled"
+    assert interrupted.execution.is_active is False
+
+
+def test_restart_reconciles_legacy_queued_placeholder_as_deletable_failure(
+    tmp_path: Path,
+) -> None:
+    store = RunStore(tmp_path / "runs")
+    record = store.create("An orphaned request from an older app revision.")
+    application = _application(tmp_path)
+
+    application.reconcile_runs()
+
+    reconciled = store.load(record.run_id)
+    assert reconciled.status is RunStatus.FAILED
+    assert reconciled.error is not None
+    assert "No durable launch settings exist" in reconciled.error
+    summary = application.run(str(record.run_id))
+    assert summary is not None
+    assert summary["resumable"] is False
 
 
 def test_launch_failure_is_persisted_in_the_preallocated_run(tmp_path: Path) -> None:
@@ -447,6 +840,7 @@ def test_launch_failure_is_persisted_in_the_preallocated_run(tmp_path: Path) -> 
         models_directory=Path("models"),
         runs_directory=Path("runs"),
         command_launcher=fail_launch,
+        model_pack_service_factory=lambda _registry, _models: _ReadyKokoroPacks(),
     )
     created = application.start_generation({"mode": "prompt", "text": "Pause.", "minutes": 1})
     store = RunStore(tmp_path / "runs")
@@ -506,6 +900,7 @@ def test_nonzero_generation_process_cannot_leave_a_queued_run(tmp_path: Path) ->
         models_directory=Path("models"),
         runs_directory=Path("runs"),
         command_launcher=FailedProcess,
+        model_pack_service_factory=lambda _registry, _models: _ReadyKokoroPacks(),
     )
     created = application.start_generation({"mode": "prompt", "text": "Pause.", "minutes": 1})
     store = RunStore(tmp_path / "runs")
@@ -740,6 +1135,26 @@ def test_web_cli_passes_local_paths_without_starting_a_real_server(
     assert captured["port"] == 9001
     assert captured["project_root"] == tmp_path
     assert captured["runs_directory"] == Path("runs")
+
+
+def test_app_cli_is_the_browser_opening_permanent_entrypoint(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    from whoopy.cli import main
+
+    captured: dict[str, Any] = {}
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "whoopy.webui.server.serve",
+        lambda **kwargs: captured.update(kwargs),
+    )
+
+    assert main(["app", "--port", "9002"]) == 0
+
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 9002
+    assert captured["open_browser"] is True
 
 
 def test_audio_endpoint_supports_browser_byte_ranges(tmp_path: Path) -> None:

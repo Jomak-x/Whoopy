@@ -1,0 +1,56 @@
+pkuseg not available - Chinese segmentation will be skipped
+Loaded multilingual tokenizer (NFKD,fullcase preprocessing)
+Loading S3Tokenizer from mlx-community/S3TokenizerV2...
+Loaded S3Tokenizer weights
+Warning: conds.safetensors not found - ref_audio will be required
+{
+  "candidate": "chatterbox-v3-synthetic-male",
+  "seed": 20261028,
+  "script": "evaluations/benchmarks/2026-10-28/voice-script.txt",
+  "script_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "runner_sha256": "7d00045cc0e988f71b304a0d70ab45a5fe05c88f599d23e7f31f0a78f7ac63b6",
+  "settings": {
+    "lang_code": "en",
+    "exaggeration": 0.1,
+    "cfg_weight": 0.5,
+    "temperature": 0.8,
+    "max_new_tokens": 1500,
+    "verbose": false,
+    "ref_audio": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/voxcpm2-reference/raw.wav"
+  },
+  "postprocessing": [],
+  "segmentation": "identical nonempty paragraphs; native segments concatenated without inserted silence",
+  "runtime_python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "human_listening": "pending",
+  "segment_deadline_seconds": 480,
+  "available_memory_before_bytes": 21366439936,
+  "codec": {
+    "repo": "mlx-community/S3TokenizerV2",
+    "revision": "e0c9886f0e1c35ae85b1f27277416fb19fc72bec",
+    "resolution": "benchmark-local pinned dependency resolver"
+  },
+  "allocator_limit_bytes": 14923988992,
+  "device": "mlx-metal",
+  "model_repo": "mlx-community/chatterbox-multilingual-v3",
+  "model_revision": "03565773edd72e949572557597af8063bb49a18a",
+  "mlx_audio_revision": "8c244a1faff44cfa69e3151c195f52a4c1c90be5",
+  "synthetic_reference": {
+    "source": "voxcpm2-reference native generated benchmark reference",
+    "transcript": "Settle into a position that feels comfortable.",
+    "sha256": "37383b3c2f8136926c756ab93688b65a5a18bbb827e2a51cafd1aaafa47400bc",
+    "real_person": false
+  },
+  "load_seconds": 18.384368958009873,
+  "status": "complete",
+  "raw_path": "evaluations/benchmarks/2026-10-28/voices/chatterbox-v3-synthetic-male/raw.wav",
+  "raw_sha256": "f924d5883c46ecc8631313799a53974e0d8b64f124f58e24430be32e99afabaf",
+  "sample_rate": 24000,
+  "duration_seconds": 41.68,
+  "synthesis_seconds": 62.458584624982905,
+  "speech_output_rtf": 1.4985265025187837,
+  "process_peak_rss_bytes": 3502833664,
+  "allocator_peak_bytes": 5301144148,
+  "mps_current_allocated_bytes": null,
+  "mps_driver_allocated_bytes": null,
+  "memory_note": "macOS ru_maxrss bytes; MLX allocator peak separately; MPS API has no peak counter here"
+}

@@ -1,16 +1,35 @@
-# Product-level pacing presets. Values are data rather than model-specific
-# instructions so every TTS adapter receives the same intent.
-slow_sleep:
-  speech_speed: 0.55
-  silence_scale: 1.35
-  breath_pattern_seconds: [4, 6, 8]
-
-focus:
-  speech_speed: 0.65
-  silence_scale: 1.0
-  breath_pattern_seconds: [4, 4, 4]
-
-daytime:
-  speech_speed: 0.7
-  silence_scale: 0.9
-  breath_pattern_seconds: [4, 2, 6]
+# Reviewed product-level pacing policy. Breath timing belongs to the reviewed
+# breath-protocol registry and is deliberately absent here.
+schema_version: 1
+registry_id: whoopy-local-pacing
+profiles:
+  - profile_id: meditative-v2
+    version: 2
+    label: Meditative
+    speech_speed: 0.6
+    silence_strategy: preserve
+    allowed_timeline_mutations: []
+  - profile_id: progressive-quiet-v2
+    version: 2
+    label: Progressive quiet
+    speech_speed: 0.55
+    silence_strategy: progressive_quiet
+    allowed_timeline_mutations: [SILENCE.duration_ms]
+  - profile_id: slow_sleep
+    version: 1
+    label: Slow sleep
+    speech_speed: 0.55
+    silence_strategy: preserve
+    allowed_timeline_mutations: []
+  - profile_id: focus
+    version: 1
+    label: Focus
+    speech_speed: 0.65
+    silence_strategy: preserve
+    allowed_timeline_mutations: []
+  - profile_id: daytime
+    version: 1
+    label: Daytime
+    speech_speed: 0.7
+    silence_strategy: preserve
+    allowed_timeline_mutations: []

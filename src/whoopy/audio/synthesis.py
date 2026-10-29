@@ -53,6 +53,15 @@ def synthesis_input_bytes(
         "segment_type": segment.type,
         "synthesizer_identity": synthesizer.cache_identity,
         "text": _normalized_text(segment.text),
+        "delivery": segment.delivery,
+        "intensity": segment.intensity,
+        "language": segment.language,
+        "voice_mode": segment.voice_mode,
+        "pace": segment.pace,
+        "target_duration_ms": segment.target_duration_ms,
+        "pronunciation_overrides": [
+            override.model_dump(mode="json") for override in segment.pronunciation_overrides
+        ],
     }
     return json.dumps(values, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
         "utf-8"

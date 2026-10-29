@@ -1,5 +1,7 @@
 # PR 13: Durable Recovery
 
+> **Historical implementation record.** These durable mechanisms now support Local V1. Use [troubleshooting](troubleshooting.md) for current operations.
+
 This guide explains the recovery work in the current Whoopy PR in plain
 language. All 180 local tests and static checks pass, but it is **not merged or
 accepted** until remote macOS, Linux, and Windows CI pass.

@@ -4,11 +4,59 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from whoopy.artifacts import TargetPlatform
 from whoopy.audio.processing import SpeechProcessingSettings
+from whoopy.hardware import HardwareSnapshot
 from whoopy.ports import AdapterMetadata
+from whoopy.timeline import DeliveryIntensity, DeliveryStyle, PaceIntent, VoiceMode
+
+MeditationKind = Literal[
+    "grounding",
+    "focused_attention",
+    "breath_awareness",
+    "body_scan",
+    "noting",
+    "reflection",
+    "loving_kindness",
+    "self_compassion",
+    "visualization",
+    "open_awareness",
+    "sleep",
+]
+WritingMethod = Literal[
+    "plan_first",
+    "blueprint_first_sparse",
+    "three_candidate_structural_selection",
+    "recipe_whole_session",
+]
+
+
+class PacingRunSettings(BaseModel):
+    """Content identity of the reviewed pacing policy used for this run."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    profile_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{1,95}$")
+    version: int = Field(ge=1)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+QwenTTSBackend = Literal[
+    "qwen3-custom-voice-0.6b",
+    "qwen3-custom-voice-1.7b",
+    "qwen3-voice-design-1.7b",
+    "qwen3-base-clone-0.6b",
+    "qwen3-base-clone-1.7b",
+]
+_QWEN_BACKENDS = {
+    "qwen3-custom-voice-0.6b": "preset",
+    "qwen3-custom-voice-1.7b": "preset",
+    "qwen3-voice-design-1.7b": "designed",
+    "qwen3-base-clone-0.6b": "reference",
+    "qwen3-base-clone-1.7b": "reference",
+}
 
 
 class TTSRunSettings(BaseModel):
@@ -21,6 +69,11 @@ class TTSRunSettings(BaseModel):
         "fish-1.4",
         "moss-local-v1.5",
         "moss-v1.5",
+        "qwen3-custom-voice-0.6b",
+        "qwen3-custom-voice-1.7b",
+        "qwen3-voice-design-1.7b",
+        "qwen3-base-clone-0.6b",
+        "qwen3-base-clone-1.7b",
     ] = "kokoro"
     voice_name: str = Field(min_length=1)
     speaker_id: int = Field(ge=0)
@@ -30,7 +83,61 @@ class TTSRunSettings(BaseModel):
     language: str = Field(min_length=1)
     seed: int = 42
     instruction: str = ""
+    delivery_override: DeliveryStyle | None = None
+    intensity_override: DeliveryIntensity | None = None
+    pace_override: PaceIntent | None = None
     use_reference: bool = True
+    voice_mode: VoiceMode = "preset"
+    qwen_model_revision: str | None = None
+    qwen_runtime_revision: str | None = None
+    qwen_voice_design_preset: Literal[
+        "warm_meditation", "grounded_meditation", "sleep_meditation"
+    ] = "warm_meditation"
+    reference_id: str | None = None
+    reference_revision: int | None = Field(default=None, ge=1)
+    reference_revision_id: str | None = None
+    reference_audio_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    reference_transcript_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    reference_consent_scope: Literal["local_voice_cloning_experiment_only"] | None = None
+
+    @model_validator(mode="after")
+    def validate_qwen_contract(self) -> TTSRunSettings:
+        required_mode = _QWEN_BACKENDS.get(self.backend)
+        reference_values = (
+            self.reference_id,
+            self.reference_revision,
+            self.reference_revision_id,
+            self.reference_audio_sha256,
+            self.reference_transcript_sha256,
+            self.reference_consent_scope,
+        )
+        if required_mode is None:
+            if self.qwen_model_revision is not None or self.qwen_runtime_revision is not None:
+                raise ValueError("Qwen revisions are valid only for Qwen3-TTS backends")
+            has_reference = any(value is not None for value in reference_values)
+            if has_reference and self.backend not in {
+                "fish-1.4",
+                "moss-local-v1.5",
+                "moss-v1.5",
+            }:
+                raise ValueError(
+                    "durable voice references are valid only for reference-capable backends"
+                )
+            if has_reference and any(value is None for value in reference_values):
+                raise ValueError("a durable voice reference revision must be complete")
+            if has_reference and not self.use_reference:
+                raise ValueError("direct voice mode cannot contain a durable voice reference")
+            return self
+        if self.voice_mode != required_mode:
+            raise ValueError(f"{self.backend} requires voice_mode={required_mode}")
+        if not self.qwen_model_revision or not self.qwen_runtime_revision:
+            raise ValueError("Qwen3-TTS requires exact model and runtime revisions")
+        is_clone = required_mode == "reference"
+        if is_clone and any(value is None for value in reference_values):
+            raise ValueError("Qwen Base cloning requires a complete consented reference revision")
+        if not is_clone and any(value is not None for value in reference_values):
+            raise ValueError("only Qwen Base cloning accepts a durable voice reference")
+        return self
 
 
 class GenerationRunSettings(BaseModel):
@@ -46,6 +153,9 @@ class GenerationRunSettings(BaseModel):
     section_prompt_version: int = Field(ge=1)
     max_parallel_sections: int = Field(ge=1, le=2)
     estimated_duration_seconds: float = Field(gt=0)
+    meditation_kind: MeditationKind | None = None
+    writing_method: WritingMethod = "plan_first"
+    pacing: PacingRunSettings | None = None
 
 
 class ScriptRunConfig(BaseModel):
@@ -55,17 +165,20 @@ class ScriptRunConfig(BaseModel):
 
     schema_version: Literal[1] = 1
     mode: Literal["script_file", "generated_prompt"] = "script_file"
-    profile: Literal["basic", "lite", "standard"]
+    profile: Literal["basic", "lite", "standard", "high"]
     target: TargetPlatform
     tts: TTSRunSettings
     processing: SpeechProcessingSettings
     generation: GenerationRunSettings | None = None
+    requested_duration_seconds: int | None = Field(default=None, ge=60, le=1_800)
 
     @model_validator(mode="after")
     def validate_mode(self) -> ScriptRunConfig:
         if self.mode == "script_file" and self.generation is not None:
             raise ValueError("script-file config cannot contain generation settings")
         if self.mode == "generated_prompt":
+            if self.requested_duration_seconds is not None:
+                raise ValueError("generated-prompt duration must come from generation settings")
             if self.generation is None:
                 raise ValueError("generated-prompt config requires generation settings")
             if self.profile == "basic":
@@ -73,14 +186,87 @@ class ScriptRunConfig(BaseModel):
         return self
 
 
+class TelemetryMeasurement(BaseModel):
+    """A measured value, or a durable explanation of why it was unavailable."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    value: float | int | None = Field(default=None, ge=0)
+    unit: Literal[
+        "seconds",
+        "bytes",
+        "calls",
+        "audio_seconds_per_second",
+        "tokens_per_second",
+    ]
+    unavailable_reason: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def require_value_or_reason(self) -> TelemetryMeasurement:
+        if (self.value is None) == (self.unavailable_reason is None):
+            raise ValueError("telemetry requires exactly one of value or unavailable_reason")
+        return self
+
+
+class HardwareTelemetry(BaseModel):
+    """One truthful hardware snapshot, including an explicit inspection failure."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    snapshot: HardwareSnapshot | None = None
+    unavailable_reason: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def require_snapshot_or_reason(self) -> HardwareTelemetry:
+        if (self.snapshot is None) == (self.unavailable_reason is None):
+            raise ValueError("hardware telemetry requires a snapshot or unavailable_reason")
+        return self
+
+
+class AdapterRunTelemetry(BaseModel):
+    """Runtime evidence for one adapter during this specific production run."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    load_elapsed: TelemetryMeasurement
+    inference_elapsed: TelemetryMeasurement
+    inference_speed: TelemetryMeasurement
+    peak_process_tree_memory: TelemetryMeasurement
+    live_process_tree_memory_after: TelemetryMeasurement
+    inference_calls: TelemetryMeasurement
+    runtime_device: str | None = Field(default=None, min_length=1, max_length=200)
+    runtime_device_unavailable_reason: str | None = Field(
+        default=None, min_length=1, max_length=500
+    )
+
+    @model_validator(mode="after")
+    def require_runtime_device_or_reason(self) -> AdapterRunTelemetry:
+        if (self.runtime_device is None) == (self.runtime_device_unavailable_reason is None):
+            raise ValueError("runtime device requires a value or unavailable reason")
+        return self
+
+
+class RunTelemetry(BaseModel):
+    """Per-run production telemetry kept beside exact adapter provenance."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    captured_at: AwareDatetime
+    hardware_before: HardwareTelemetry
+    hardware_after: HardwareTelemetry
+    tts: AdapterRunTelemetry
+    llm: AdapterRunTelemetry | None = None
+
+
 class RunModelMetadata(BaseModel):
-    """Exact adapter provenance saved before model-backed work begins."""
+    """Exact adapter provenance plus optional evidence from a completed run."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal[1] = 1
     tts: AdapterMetadata
     llm: AdapterMetadata | None = None
+    telemetry: RunTelemetry | None = None
 
 
 class PendingGenerationConfig(BaseModel):
@@ -94,7 +280,7 @@ class PendingGenerationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal[1] = 1
-    profile: Literal["lite", "standard"]
+    profile: Literal["lite", "standard", "high"]
     target: TargetPlatform
     tts: TTSRunSettings
     processing: SpeechProcessingSettings
@@ -105,6 +291,9 @@ class PendingGenerationConfig(BaseModel):
     section_prompt_id: str = Field(min_length=1)
     section_prompt_version: int = Field(ge=1)
     max_parallel_sections: int = Field(ge=1, le=2)
+    meditation_kind: MeditationKind | None = None
+    writing_method: WritingMethod = "plan_first"
+    pacing: PacingRunSettings | None = None
     model_metadata: RunModelMetadata
 
     @model_validator(mode="after")

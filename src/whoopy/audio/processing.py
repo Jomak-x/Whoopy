@@ -54,6 +54,7 @@ class ProcessedSpeechSynthesizer:
         settings: SpeechProcessingSettings | None = None,
     ) -> None:
         self.inner = inner
+        self.capabilities = getattr(inner, "capabilities", None)
         self.settings = settings or SpeechProcessingSettings()
         self.sample_rate = inner.sample_rate
         self.metadata = AdapterMetadata(
@@ -121,6 +122,22 @@ class ProcessedSpeechSynthesizer:
         """Release the wrapped model or subprocess exactly once per worker."""
 
         self.inner.close()
+
+    def prepare(self) -> bool:
+        """Eagerly load adapters that expose a truthful readiness boundary."""
+
+        prepare = getattr(self.inner, "prepare", None)
+        if callable(prepare):
+            prepare()
+            return True
+        return False
+
+    @property
+    def runtime_device(self) -> str | None:
+        """Expose the device actually reported by the wrapped runtime, if known."""
+
+        value = getattr(self.inner, "runtime_device", None)
+        return str(value) if value is not None else None
 
     def diagnostics(self) -> tuple[str, ...]:
         """Expose bounded inner-worker diagnostics without widening the TTS port."""

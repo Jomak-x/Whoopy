@@ -1,0 +1,144 @@
+{
+  "schema_version": 3,
+  "run_id": "ad1a5c6d-8068-4735-adf5-cdf709ee68d4",
+  "created_at": "2026-10-29T00:31:29.412347Z",
+  "source": "script_file",
+  "segments": [
+    {
+      "id": "speech-0001",
+      "type": "SPEECH",
+      "text": "Sit comfortably, supported by your chair or cushion. You may adjust at any time.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0001",
+      "type": "SILENCE",
+      "duration_ms": 13952
+    },
+    {
+      "id": "speech-0002",
+      "type": "SPEECH",
+      "text": "Notice sounds around you—the hum of the room, distant voices or quiet stillness. Feel the solid support beneath you.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0002",
+      "type": "SILENCE",
+      "duration_ms": 11025
+    },
+    {
+      "id": "speech-0003",
+      "type": "SPEECH",
+      "text": "Choose one familiar sound to return to, like the air conditioner or a clock’s soft tick. When your attention wanders, gently guide it back.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0003",
+      "type": "SILENCE",
+      "duration_ms": 7999
+    },
+    {
+      "id": "speech-0004",
+      "type": "SPEECH",
+      "text": "Return your attention to that sound now. Let it ground you in this moment, steady and present. Notice how it connects you to the space around you.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0004",
+      "type": "SILENCE",
+      "duration_ms": 16000
+    },
+    {
+      "id": "speech-0005",
+      "type": "SPEECH",
+      "text": "When other thoughts arise, simply return to the sound again. There is no need to control anything—just notice and come back.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0005",
+      "type": "SILENCE",
+      "duration_ms": 16000
+    },
+    {
+      "id": "speech-0006",
+      "type": "SPEECH",
+      "text": "Continue with the sound as your anchor. Trust yourself to return without instruction.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0006",
+      "type": "SILENCE",
+      "duration_ms": 14440
+    },
+    {
+      "id": "speech-0007",
+      "type": "SPEECH",
+      "text": "The chair beneath you remains steady. The sound continues around you.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0007",
+      "type": "SILENCE",
+      "duration_ms": 15414
+    },
+    {
+      "id": "speech-0008",
+      "type": "SPEECH",
+      "text": "Listen once more to the sounds here. When you’re ready, gently shift your hands or stretch your fingers. Open your eyes and return to your day.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0008",
+      "type": "SILENCE",
+      "duration_ms": 7609
+    }
+  ]
+}

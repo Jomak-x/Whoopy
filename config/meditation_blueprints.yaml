@@ -1,0 +1,90 @@
+schema_version: 1
+blueprints:
+  - id: grounding
+    version: 1
+    kind: grounding
+    purpose: Re-establish present-moment contact through support, sound, and simple sensation.
+    allowed_techniques: [arrival, body_scan, focused_attention, resting_awareness, return]
+    primary_technique: body_scan
+    breath_mode: natural_awareness
+    ending_behavior: daytime_reorientation
+  - id: focused_attention
+    version: 1
+    kind: focused_attention
+    purpose: Practice returning to one neutral physical anchor without judgment.
+    allowed_techniques: [arrival, focused_attention, noting, return]
+    primary_technique: focused_attention
+    breath_mode: natural_awareness
+    ending_behavior: daytime_reorientation
+  - id: breath_awareness
+    version: 1
+    kind: breath_awareness
+    purpose: Observe natural breathing without changing depth, rhythm, or comfort.
+    allowed_techniques: [arrival, focused_attention, noting, resting_awareness, return]
+    primary_technique: focused_attention
+    breath_mode: natural_awareness
+    ending_behavior: daytime_reorientation
+  - id: body_scan
+    version: 1
+    kind: body_scan
+    purpose: Notice body sensations in a clear sequence without demanding relaxation.
+    allowed_techniques: [arrival, body_scan, resting_awareness, return]
+    primary_technique: body_scan
+    breath_mode: natural_awareness
+    ending_behavior: daytime_reorientation
+  - id: noting
+    version: 1
+    kind: noting
+    purpose: Apply simple labels to experience and return to a neutral anchor.
+    allowed_techniques: [arrival, focused_attention, noting, resting_awareness, return]
+    primary_technique: noting
+    breath_mode: natural_awareness
+    ending_behavior: daytime_reorientation
+  - id: reflection
+    version: 1
+    kind: reflection
+    purpose: Leave genuine quiet around one clear, invitational question.
+    allowed_techniques: [arrival, reflection, focused_attention, return]
+    primary_technique: reflection
+    breath_mode: natural_awareness
+    ending_behavior: daytime_reorientation
+  - id: loving_kindness
+    version: 1
+    kind: loving_kindness
+    purpose: Offer secular goodwill phrases without requiring a particular feeling.
+    allowed_techniques: [arrival, loving_kindness, focused_attention, return]
+    primary_technique: loving_kindness
+    breath_mode: natural_awareness
+    ending_behavior: daytime_reorientation
+  - id: self_compassion
+    version: 1
+    kind: self_compassion
+    purpose: Meet ordinary difficulty with concrete acknowledgment and optional kindness.
+    allowed_techniques: [arrival, body_scan, loving_kindness, focused_attention, return]
+    primary_technique: loving_kindness
+    breath_mode: natural_awareness
+    ending_behavior: daytime_reorientation
+  - id: visualization
+    version: 1
+    kind: visualization
+    purpose: Develop one coherent image tied to the requested outcome.
+    allowed_techniques: [arrival, visualization, focused_attention, return]
+    primary_technique: visualization
+    breath_mode: natural_awareness
+    ending_behavior: daytime_reorientation
+  - id: open_awareness
+    version: 1
+    kind: open_awareness
+    purpose: Widen attention to sound, sensation, and thought without selecting among them.
+    allowed_techniques: [arrival, focused_attention, resting_awareness, noting, return]
+    primary_technique: resting_awareness
+    breath_mode: natural_awareness
+    ending_behavior: daytime_reorientation
+  - id: sleep
+    version: 1
+    kind: sleep
+    purpose: Taper guidance toward quiet rest without promises or waking reorientation.
+    allowed_techniques: [arrival, body_scan, visualization, resting_awareness, sleep_transition]
+    primary_technique: body_scan
+    breath_mode: natural_awareness
+    ending_behavior: sleep_taper

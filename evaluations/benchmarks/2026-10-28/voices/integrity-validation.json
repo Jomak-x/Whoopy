@@ -1,0 +1,122 @@
+{
+  "script_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "rows": [
+    {
+      "candidate": "chatterbox-v3-synthetic-male",
+      "render_status": "complete",
+      "raw_hash_matches": true,
+      "native_segments_exact_concatenation": true,
+      "all_finite": true,
+      "sample_rate": 24000,
+      "channels": 1,
+      "frames": 1000320,
+      "input_is_common_script": true
+    },
+    {
+      "candidate": "dots-soar-synthetic-male",
+      "render_status": "incomplete_memory_pressure",
+      "audio_integrity": "no complete raw audition claimed"
+    },
+    {
+      "candidate": "kokoro-af-heart-080",
+      "render_status": "complete",
+      "raw_hash_matches": true,
+      "native_segments_exact_concatenation": true,
+      "all_finite": true,
+      "sample_rate": 24000,
+      "channels": 1,
+      "frames": 1206000,
+      "input_is_common_script": true
+    },
+    {
+      "candidate": "kokoro-am-michael",
+      "render_status": "complete",
+      "raw_hash_matches": true,
+      "native_segments_exact_concatenation": true,
+      "all_finite": true,
+      "sample_rate": 24000,
+      "channels": 1,
+      "frames": 1068600,
+      "input_is_common_script": true
+    },
+    {
+      "candidate": "kokoro-bm-george-080",
+      "render_status": "complete",
+      "raw_hash_matches": true,
+      "native_segments_exact_concatenation": true,
+      "all_finite": true,
+      "sample_rate": 24000,
+      "channels": 1,
+      "frames": 1299000,
+      "input_is_common_script": true
+    },
+    {
+      "candidate": "mlx-qwen-custom-ryan",
+      "render_status": "complete",
+      "raw_hash_matches": true,
+      "native_segments_exact_concatenation": true,
+      "all_finite": true,
+      "sample_rate": 24000,
+      "channels": 1,
+      "frames": 1443840,
+      "input_is_common_script": true
+    },
+    {
+      "candidate": "mlx-qwen-designed-male",
+      "render_status": "complete",
+      "raw_hash_matches": true,
+      "native_segments_exact_concatenation": true,
+      "all_finite": true,
+      "sample_rate": 24000,
+      "channels": 1,
+      "frames": 1094400,
+      "input_is_common_script": true
+    },
+    {
+      "candidate": "moss-local-synthetic-male",
+      "render_status": "complete",
+      "raw_hash_matches": true,
+      "native_segments_exact_concatenation": true,
+      "all_finite": true,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frames": 2469120,
+      "input_is_common_script": true
+    },
+    {
+      "candidate": "qwen-custom-ryan",
+      "render_status": "complete",
+      "raw_hash_matches": true,
+      "native_segments_exact_concatenation": true,
+      "all_finite": true,
+      "sample_rate": 24000,
+      "channels": 1,
+      "frames": 1297920,
+      "input_is_common_script": true
+    },
+    {
+      "candidate": "voxcpm2-designed-male",
+      "render_status": "complete",
+      "raw_hash_matches": true,
+      "native_segments_exact_concatenation": true,
+      "all_finite": true,
+      "sample_rate": 48000,
+      "channels": 1,
+      "frames": 2042912,
+      "input_is_common_script": true
+    },
+    {
+      "candidate": "voxcpm2-reference",
+      "render_status": "complete",
+      "raw_hash_matches": true,
+      "native_segments_exact_concatenation": true,
+      "all_finite": true,
+      "sample_rate": 48000,
+      "channels": 1,
+      "frames": 161288,
+      "input_is_common_script": false
+    }
+  ],
+  "gpu_inference_used": false,
+  "human_quality_assessed": false
+}

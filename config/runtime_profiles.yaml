@@ -37,7 +37,7 @@ standard:
 high:
   rank: 3
   min_total_ram_gb: 24
-  min_available_ram_gb: 14
+  min_available_ram_gb: 16
   min_free_disk_gb: 20
   approximate_download_gb: 14
   llm_runtime: llama_cpp

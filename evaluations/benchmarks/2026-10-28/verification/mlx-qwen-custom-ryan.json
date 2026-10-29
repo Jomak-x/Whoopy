@@ -1,0 +1,2039 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-29T00:25:12.477072+00:00",
+  "status": "pass",
+  "failure_reasons": [],
+  "review_reasons": [],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/mlx-qwen-custom-ryan/raw.wav",
+  "audio_sha256": "7caa68b5531b5dd560d993ecbfe39f0db7df57bef843a0f43a874afa3755d729",
+  "expected_transcript": "Settle into a position that feels comfortable. You can adjust whenever you need to. Notice where the chair or floor supports your weight, and let that support do a little more of the work.\n\nThere is no need to make your breathing slower or deeper. For now, listen for one sound nearby. Notice how it begins, changes, or fades. You do not have to identify it.\n\nIf your attention moves into a thought, that is part of the practice. When you notice, gently return to the sounds around you. Nothing needs to be pushed away.\n\nBefore you finish, feel the contact beneath you again. Let your eyes take in the room, and choose one small thing to do next, at your own pace.\n",
+  "expected_text_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "mode": "speech",
+  "pcm": {
+    "frame_count": 1443840,
+    "sample_rate": 24000,
+    "duration_seconds": 60.16,
+    "nonfinite_samples": 0,
+    "peak": 0.7311778664588928,
+    "rms": 0.07857240510566925,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.036569148936170214,
+    "leading_silence_seconds": 0.08,
+    "trailing_silence_seconds": 0.0,
+    "zero_crossing_fraction": 0.08906256168450914,
+    "difference_to_signal_energy": 0.09552939946846313,
+    "speech_established_by_pcm": false,
+    "channel_count": 1
+  },
+  "asr": {
+    "engine": "mlx-whisper",
+    "model_path": "/Users/jakob/.cache/huggingface/hub/models--mlx-community--whisper-small-mlx/snapshots/45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_revision": "45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_weights_sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
+    "model_config_sha256": "e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e",
+    "audio_sha256": "7caa68b5531b5dd560d993ecbfe39f0db7df57bef843a0f43a874afa3755d729",
+    "text": " Settle into a position that feels comfortable. You can adjust whenever you need to. Notice where the chair or floor supports your weight and let that support do a little more of the work. There is no need to make your breathing slower or deeper. For now, listen for one sound nearby. Notice how it begins, changes, or fades. You do not have to identify it. If your attention moves into a thought, that is part of the practice. When you notice, gently return to the sounds around you, nothing needs to be pushed away. Before you finish, feel the contact beneath you again. Let your eyes take in the room and choose one small thing to do next at your own pace.",
+    "language": "en",
+    "segments": [
+      {
+        "id": 0,
+        "seek": 0,
+        "start": 0.0,
+        "end": 3.0,
+        "text": " Settle into a position that feels comfortable.",
+        "tokens": [
+          50364,
+          318,
+          28444,
+          666,
+          257,
+          2535,
+          300,
+          3417,
+          4619,
+          13,
+          50546
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.1701460799125776,
+        "compression_ratio": 1.4973544973544974,
+        "no_speech_prob": 0.041410308331251144,
+        "words": [
+          {
+            "word": " Settle",
+            "start": 0.0,
+            "end": 0.54,
+            "probability": 0.7763671875
+          },
+          {
+            "word": " into",
+            "start": 0.54,
+            "end": 0.92,
+            "probability": 0.98876953125
+          },
+          {
+            "word": " a",
+            "start": 0.92,
+            "end": 1.14,
+            "probability": 0.99560546875
+          },
+          {
+            "word": " position",
+            "start": 1.14,
+            "end": 1.58,
+            "probability": 0.99755859375
+          },
+          {
+            "word": " that",
+            "start": 1.58,
+            "end": 1.86,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " feels",
+            "start": 1.86,
+            "end": 2.32,
+            "probability": 0.99560546875
+          },
+          {
+            "word": " comfortable.",
+            "start": 2.32,
+            "end": 3.0,
+            "probability": 0.99609375
+          }
+        ]
+      },
+      {
+        "id": 1,
+        "seek": 0,
+        "start": 3.54,
+        "end": 5.56,
+        "text": " You can adjust whenever you need to.",
+        "tokens": [
+          50546,
+          509,
+          393,
+          4369,
+          5699,
+          291,
+          643,
+          281,
+          13,
+          50668
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.1701460799125776,
+        "compression_ratio": 1.4973544973544974,
+        "no_speech_prob": 0.041410308331251144,
+        "words": [
+          {
+            "word": " You",
+            "start": 3.54,
+            "end": 3.82,
+            "probability": 0.99560546875
+          },
+          {
+            "word": " can",
+            "start": 3.82,
+            "end": 3.98,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " adjust",
+            "start": 3.98,
+            "end": 4.34,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " whenever",
+            "start": 4.34,
+            "end": 4.7,
+            "probability": 0.98291015625
+          },
+          {
+            "word": " you",
+            "start": 4.7,
+            "end": 5.02,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " need",
+            "start": 5.02,
+            "end": 5.28,
+            "probability": 0.99951171875
+          },
+          {
+            "word": " to.",
+            "start": 5.28,
+            "end": 5.56,
+            "probability": 0.99853515625
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "seek": 0,
+        "start": 6.06,
+        "end": 9.14,
+        "text": " Notice where the chair or floor supports your weight",
+        "tokens": [
+          50668,
+          13428,
+          689,
+          264,
+          6090,
+          420,
+          4123,
+          9346,
+          428,
+          3364,
+          50842
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.1701460799125776,
+        "compression_ratio": 1.4973544973544974,
+        "no_speech_prob": 0.041410308331251144,
+        "words": [
+          {
+            "word": " Notice",
+            "start": 6.06,
+            "end": 6.46,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " where",
+            "start": 6.46,
+            "end": 6.82,
+            "probability": 0.99462890625
+          },
+          {
+            "word": " the",
+            "start": 6.82,
+            "end": 7.02,
+            "probability": 0.99658203125
+          },
+          {
+            "word": " chair",
+            "start": 7.02,
+            "end": 7.42,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " or",
+            "start": 7.42,
+            "end": 7.68,
+            "probability": 0.98486328125
+          },
+          {
+            "word": " floor",
+            "start": 7.68,
+            "end": 8.02,
+            "probability": 0.998046875
+          },
+          {
+            "word": " supports",
+            "start": 8.02,
+            "end": 8.52,
+            "probability": 0.99560546875
+          },
+          {
+            "word": " your",
+            "start": 8.52,
+            "end": 8.78,
+            "probability": 0.99560546875
+          },
+          {
+            "word": " weight",
+            "start": 8.78,
+            "end": 9.14,
+            "probability": 0.99853515625
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "seek": 0,
+        "start": 9.14,
+        "end": 12.12,
+        "text": " and let that support do a little more of the work.",
+        "tokens": [
+          50842,
+          293,
+          718,
+          300,
+          1406,
+          360,
+          257,
+          707,
+          544,
+          295,
+          264,
+          589,
+          13,
+          50978
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.1701460799125776,
+        "compression_ratio": 1.4973544973544974,
+        "no_speech_prob": 0.041410308331251144,
+        "words": [
+          {
+            "word": " and",
+            "start": 9.14,
+            "end": 9.74,
+            "probability": 0.404052734375
+          },
+          {
+            "word": " let",
+            "start": 9.74,
+            "end": 9.96,
+            "probability": 0.99658203125
+          },
+          {
+            "word": " that",
+            "start": 9.96,
+            "end": 10.16,
+            "probability": 0.99462890625
+          },
+          {
+            "word": " support",
+            "start": 10.16,
+            "end": 10.66,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " do",
+            "start": 10.66,
+            "end": 11.0,
+            "probability": 0.99169921875
+          },
+          {
+            "word": " a",
+            "start": 11.0,
+            "end": 11.16,
+            "probability": 0.99560546875
+          },
+          {
+            "word": " little",
+            "start": 11.16,
+            "end": 11.3,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " more",
+            "start": 11.3,
+            "end": 11.6,
+            "probability": 0.99462890625
+          },
+          {
+            "word": " of",
+            "start": 11.6,
+            "end": 11.76,
+            "probability": 0.99755859375
+          },
+          {
+            "word": " the",
+            "start": 11.76,
+            "end": 11.84,
+            "probability": 0.99658203125
+          },
+          {
+            "word": " work.",
+            "start": 11.84,
+            "end": 12.12,
+            "probability": 0.9970703125
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "seek": 0,
+        "start": 12.28,
+        "end": 18.46,
+        "text": " There is no need to make your breathing slower or deeper.",
+        "tokens": [
+          50978,
+          821,
+          307,
+          572,
+          643,
+          281,
+          652,
+          428,
+          9570,
+          14009,
+          420,
+          7731,
+          13,
+          51328
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.1701460799125776,
+        "compression_ratio": 1.4973544973544974,
+        "no_speech_prob": 0.041410308331251144,
+        "words": [
+          {
+            "word": " There",
+            "start": 12.28,
+            "end": 12.58,
+            "probability": 0.8623046875
+          },
+          {
+            "word": " is",
+            "start": 12.58,
+            "end": 12.98,
+            "probability": 0.9921875
+          },
+          {
+            "word": " no",
+            "start": 12.98,
+            "end": 13.38,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " need",
+            "start": 13.38,
+            "end": 14.08,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " to",
+            "start": 14.08,
+            "end": 14.94,
+            "probability": 0.9794921875
+          },
+          {
+            "word": " make",
+            "start": 14.94,
+            "end": 15.22,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " your",
+            "start": 15.22,
+            "end": 15.48,
+            "probability": 0.99560546875
+          },
+          {
+            "word": " breathing",
+            "start": 15.48,
+            "end": 16.04,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " slower",
+            "start": 16.04,
+            "end": 16.88,
+            "probability": 0.994140625
+          },
+          {
+            "word": " or",
+            "start": 16.88,
+            "end": 17.88,
+            "probability": 0.9873046875
+          },
+          {
+            "word": " deeper.",
+            "start": 17.88,
+            "end": 18.46,
+            "probability": 0.99853515625
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "seek": 0,
+        "start": 19.38,
+        "end": 23.82,
+        "text": " For now, listen for one sound nearby.",
+        "tokens": [
+          51328,
+          1171,
+          586,
+          11,
+          2140,
+          337,
+          472,
+          1626,
+          11184,
+          13,
+          51616
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.1701460799125776,
+        "compression_ratio": 1.4973544973544974,
+        "no_speech_prob": 0.041410308331251144,
+        "words": [
+          {
+            "word": " For",
+            "start": 19.38,
+            "end": 19.8,
+            "probability": 0.99658203125
+          },
+          {
+            "word": " now,",
+            "start": 19.8,
+            "end": 20.24,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " listen",
+            "start": 21.14,
+            "end": 21.82,
+            "probability": 0.98828125
+          },
+          {
+            "word": " for",
+            "start": 21.82,
+            "end": 22.18,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " one",
+            "start": 22.18,
+            "end": 22.58,
+            "probability": 0.99609375
+          },
+          {
+            "word": " sound",
+            "start": 22.58,
+            "end": 23.24,
+            "probability": 0.998046875
+          },
+          {
+            "word": " nearby.",
+            "start": 23.24,
+            "end": 23.82,
+            "probability": 0.9873046875
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "seek": 2382,
+        "start": 23.82,
+        "end": 33.1,
+        "text": " Notice how it begins, changes, or fades. You do not have to identify it.",
+        "tokens": [
+          50364,
+          13428,
+          577,
+          309,
+          7338,
+          11,
+          2962,
+          11,
+          420,
+          32679,
+          13,
+          509,
+          360,
+          406,
+          362,
+          281,
+          5876,
+          309,
+          13,
+          50826
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.17413476308186848,
+        "compression_ratio": 1.45,
+        "no_speech_prob": 0.510085940361023,
+        "words": [
+          {
+            "word": " Notice",
+            "start": 23.82,
+            "end": 25.4,
+            "probability": 0.40869140625
+          },
+          {
+            "word": " how",
+            "start": 25.4,
+            "end": 25.86,
+            "probability": 0.97021484375
+          },
+          {
+            "word": " it",
+            "start": 25.86,
+            "end": 26.08,
+            "probability": 0.9873046875
+          },
+          {
+            "word": " begins,",
+            "start": 26.08,
+            "end": 26.72,
+            "probability": 0.98828125
+          },
+          {
+            "word": " changes,",
+            "start": 27.44,
+            "end": 27.88,
+            "probability": 0.9921875
+          },
+          {
+            "word": " or",
+            "start": 28.52,
+            "end": 28.84,
+            "probability": 0.9755859375
+          },
+          {
+            "word": " fades.",
+            "start": 28.84,
+            "end": 29.32,
+            "probability": 0.998046875
+          },
+          {
+            "word": " You",
+            "start": 30.22,
+            "end": 30.34,
+            "probability": 0.9541015625
+          },
+          {
+            "word": " do",
+            "start": 30.34,
+            "end": 30.66,
+            "probability": 0.95458984375
+          },
+          {
+            "word": " not",
+            "start": 30.66,
+            "end": 31.08,
+            "probability": 0.9521484375
+          },
+          {
+            "word": " have",
+            "start": 31.08,
+            "end": 31.74,
+            "probability": 0.98486328125
+          },
+          {
+            "word": " to",
+            "start": 31.74,
+            "end": 32.04,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " identify",
+            "start": 32.04,
+            "end": 32.7,
+            "probability": 0.98779296875
+          },
+          {
+            "word": " it.",
+            "start": 32.7,
+            "end": 33.1,
+            "probability": 0.98779296875
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "seek": 2382,
+        "start": 33.22,
+        "end": 38.06,
+        "text": " If your attention moves into a thought, that is part of the practice.",
+        "tokens": [
+          50826,
+          759,
+          428,
+          3202,
+          6067,
+          666,
+          257,
+          1194,
+          11,
+          300,
+          307,
+          644,
+          295,
+          264,
+          3124,
+          13,
+          51080
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.17413476308186848,
+        "compression_ratio": 1.45,
+        "no_speech_prob": 0.510085940361023,
+        "words": [
+          {
+            "word": " If",
+            "start": 33.22,
+            "end": 33.36,
+            "probability": 0.9228515625
+          },
+          {
+            "word": " your",
+            "start": 33.36,
+            "end": 33.5,
+            "probability": 0.986328125
+          },
+          {
+            "word": " attention",
+            "start": 33.5,
+            "end": 33.96,
+            "probability": 0.99462890625
+          },
+          {
+            "word": " moves",
+            "start": 33.96,
+            "end": 34.6,
+            "probability": 0.99462890625
+          },
+          {
+            "word": " into",
+            "start": 34.6,
+            "end": 34.98,
+            "probability": 0.98779296875
+          },
+          {
+            "word": " a",
+            "start": 34.98,
+            "end": 35.18,
+            "probability": 0.98828125
+          },
+          {
+            "word": " thought,",
+            "start": 35.18,
+            "end": 35.56,
+            "probability": 0.99658203125
+          },
+          {
+            "word": " that",
+            "start": 36.06,
+            "end": 36.72,
+            "probability": 0.984375
+          },
+          {
+            "word": " is",
+            "start": 36.72,
+            "end": 36.9,
+            "probability": 0.98974609375
+          },
+          {
+            "word": " part",
+            "start": 36.9,
+            "end": 37.28,
+            "probability": 0.98583984375
+          },
+          {
+            "word": " of",
+            "start": 37.28,
+            "end": 37.46,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " the",
+            "start": 37.46,
+            "end": 37.58,
+            "probability": 0.994140625
+          },
+          {
+            "word": " practice.",
+            "start": 37.58,
+            "end": 38.06,
+            "probability": 0.994140625
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "seek": 2382,
+        "start": 38.94,
+        "end": 46.8,
+        "text": " When you notice, gently return to the sounds around you, nothing needs to be pushed away.",
+        "tokens": [
+          51080,
+          1133,
+          291,
+          3449,
+          11,
+          13073,
+          2736,
+          281,
+          264,
+          3263,
+          926,
+          291,
+          11,
+          1825,
+          2203,
+          281,
+          312,
+          9152,
+          1314,
+          13,
+          51508
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.17413476308186848,
+        "compression_ratio": 1.45,
+        "no_speech_prob": 0.510085940361023,
+        "words": [
+          {
+            "word": " When",
+            "start": 38.94,
+            "end": 39.26,
+            "probability": 0.986328125
+          },
+          {
+            "word": " you",
+            "start": 39.26,
+            "end": 39.4,
+            "probability": 0.998046875
+          },
+          {
+            "word": " notice,",
+            "start": 39.4,
+            "end": 39.78,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " gently",
+            "start": 40.56,
+            "end": 41.16,
+            "probability": 0.99267578125
+          },
+          {
+            "word": " return",
+            "start": 41.16,
+            "end": 41.96,
+            "probability": 0.9599609375
+          },
+          {
+            "word": " to",
+            "start": 41.96,
+            "end": 42.28,
+            "probability": 0.9951171875
+          },
+          {
+            "word": " the",
+            "start": 42.28,
+            "end": 42.42,
+            "probability": 0.9951171875
+          },
+          {
+            "word": " sounds",
+            "start": 42.42,
+            "end": 42.86,
+            "probability": 0.98486328125
+          },
+          {
+            "word": " around",
+            "start": 42.86,
+            "end": 43.26,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " you,",
+            "start": 43.26,
+            "end": 43.66,
+            "probability": 0.99755859375
+          },
+          {
+            "word": " nothing",
+            "start": 44.5,
+            "end": 45.12,
+            "probability": 0.9775390625
+          },
+          {
+            "word": " needs",
+            "start": 45.12,
+            "end": 45.68,
+            "probability": 0.98828125
+          },
+          {
+            "word": " to",
+            "start": 45.68,
+            "end": 45.88,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " be",
+            "start": 45.88,
+            "end": 46.06,
+            "probability": 0.99755859375
+          },
+          {
+            "word": " pushed",
+            "start": 46.06,
+            "end": 46.38,
+            "probability": 0.99755859375
+          },
+          {
+            "word": " away.",
+            "start": 46.38,
+            "end": 46.8,
+            "probability": 0.998046875
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "seek": 4680,
+        "start": 46.8,
+        "end": 51.46,
+        "text": " Before you finish, feel the contact beneath you again.",
+        "tokens": [
+          50364,
+          4546,
+          291,
+          2413,
+          11,
+          841,
+          264,
+          3385,
+          17149,
+          291,
+          797,
+          13,
+          50614
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.2120305111533717,
+        "compression_ratio": 1.3055555555555556,
+        "no_speech_prob": 0.11181192100048065,
+        "words": [
+          {
+            "word": " Before",
+            "start": 46.8,
+            "end": 47.36,
+            "probability": 0.5751953125
+          },
+          {
+            "word": " you",
+            "start": 47.36,
+            "end": 47.7,
+            "probability": 0.99609375
+          },
+          {
+            "word": " finish,",
+            "start": 47.7,
+            "end": 48.28,
+            "probability": 0.99462890625
+          },
+          {
+            "word": " feel",
+            "start": 48.86,
+            "end": 49.52,
+            "probability": 0.9501953125
+          },
+          {
+            "word": " the",
+            "start": 49.52,
+            "end": 49.7,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " contact",
+            "start": 49.7,
+            "end": 50.3,
+            "probability": 0.99755859375
+          },
+          {
+            "word": " beneath",
+            "start": 50.3,
+            "end": 50.72,
+            "probability": 0.994140625
+          },
+          {
+            "word": " you",
+            "start": 50.72,
+            "end": 51.06,
+            "probability": 0.9951171875
+          },
+          {
+            "word": " again.",
+            "start": 51.06,
+            "end": 51.46,
+            "probability": 0.990234375
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "seek": 4680,
+        "start": 52.8,
+        "end": 54.78,
+        "text": " Let your eyes take in the room",
+        "tokens": [
+          50664,
+          961,
+          428,
+          2575,
+          747,
+          294,
+          264,
+          1808,
+          50798
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.2120305111533717,
+        "compression_ratio": 1.3055555555555556,
+        "no_speech_prob": 0.11181192100048065,
+        "words": [
+          {
+            "word": " Let",
+            "start": 52.54,
+            "end": 52.94,
+            "probability": 0.984375
+          },
+          {
+            "word": " your",
+            "start": 52.94,
+            "end": 53.14,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " eyes",
+            "start": 53.14,
+            "end": 53.58,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " take",
+            "start": 53.58,
+            "end": 53.96,
+            "probability": 0.99560546875
+          },
+          {
+            "word": " in",
+            "start": 53.96,
+            "end": 54.24,
+            "probability": 0.9951171875
+          },
+          {
+            "word": " the",
+            "start": 54.24,
+            "end": 54.4,
+            "probability": 0.9912109375
+          },
+          {
+            "word": " room",
+            "start": 54.4,
+            "end": 54.78,
+            "probability": 0.99853515625
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "seek": 4680,
+        "start": 55.48,
+        "end": 59.86,
+        "text": " and choose one small thing to do next at your own pace.",
+        "tokens": [
+          50798,
+          293,
+          2826,
+          472,
+          1359,
+          551,
+          281,
+          360,
+          958,
+          412,
+          428,
+          1065,
+          11638,
+          13,
+          51048
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.2120305111533717,
+        "compression_ratio": 1.3055555555555556,
+        "no_speech_prob": 0.11181192100048065,
+        "words": [
+          {
+            "word": " and",
+            "start": 55.18,
+            "end": 55.58,
+            "probability": 0.78857421875
+          },
+          {
+            "word": " choose",
+            "start": 55.58,
+            "end": 55.9,
+            "probability": 0.9892578125
+          },
+          {
+            "word": " one",
+            "start": 55.9,
+            "end": 56.32,
+            "probability": 0.9931640625
+          },
+          {
+            "word": " small",
+            "start": 56.32,
+            "end": 56.92,
+            "probability": 0.99609375
+          },
+          {
+            "word": " thing",
+            "start": 56.92,
+            "end": 57.36,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " to",
+            "start": 57.36,
+            "end": 57.58,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " do",
+            "start": 57.58,
+            "end": 57.76,
+            "probability": 0.998046875
+          },
+          {
+            "word": " next",
+            "start": 57.76,
+            "end": 58.18,
+            "probability": 0.99658203125
+          },
+          {
+            "word": " at",
+            "start": 58.18,
+            "end": 58.94,
+            "probability": 0.8701171875
+          },
+          {
+            "word": " your",
+            "start": 58.94,
+            "end": 59.14,
+            "probability": 0.99658203125
+          },
+          {
+            "word": " own",
+            "start": 59.14,
+            "end": 59.48,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " pace.",
+            "start": 59.48,
+            "end": 59.86,
+            "probability": 0.99755859375
+          }
+        ]
+      }
+    ],
+    "inference_seconds": 3.3183729170123115,
+    "versions": {
+      "mlx-whisper": "0.4.3",
+      "mlx": "0.32.4",
+      "mlx-metal": "0.32.4",
+      "numpy": "2.4.6",
+      "soundfile": "0.14.0"
+    },
+    "python": "3.11.16",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "decoding": {
+      "language": "en",
+      "temperature": 0.0,
+      "condition_on_previous_text": false,
+      "expected_text_prompted": false
+    },
+    "gpu_lock": "/tmp/whoopy-benchmark-gpu.lock",
+    "gpu_lock_wait_seconds": 5.866703577339649e-05,
+    "network": "offline; existing local snapshot only"
+  },
+  "content": {
+    "expected_word_count": 123,
+    "observed_word_count": 123,
+    "word_error_rate": 0.0,
+    "ordered_word_coverage": 1.0,
+    "matches": 123,
+    "deletions": 0,
+    "insertions": 0,
+    "substitutions": 0,
+    "longest_contiguous_error_span": 0,
+    "error_spans": [],
+    "missing_words": [],
+    "unexpected_words": [],
+    "excess_repeated_words": {},
+    "missing_tail_words": [],
+    "possible_truncation": false,
+    "alignment": [
+      {
+        "operation": "match",
+        "expected": "settle",
+        "observed": "settle",
+        "expected_index": 0,
+        "observed_index": 0
+      },
+      {
+        "operation": "match",
+        "expected": "into",
+        "observed": "into",
+        "expected_index": 1,
+        "observed_index": 1
+      },
+      {
+        "operation": "match",
+        "expected": "a",
+        "observed": "a",
+        "expected_index": 2,
+        "observed_index": 2
+      },
+      {
+        "operation": "match",
+        "expected": "position",
+        "observed": "position",
+        "expected_index": 3,
+        "observed_index": 3
+      },
+      {
+        "operation": "match",
+        "expected": "that",
+        "observed": "that",
+        "expected_index": 4,
+        "observed_index": 4
+      },
+      {
+        "operation": "match",
+        "expected": "feels",
+        "observed": "feels",
+        "expected_index": 5,
+        "observed_index": 5
+      },
+      {
+        "operation": "match",
+        "expected": "comfortable",
+        "observed": "comfortable",
+        "expected_index": 6,
+        "observed_index": 6
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 7,
+        "observed_index": 7
+      },
+      {
+        "operation": "match",
+        "expected": "can",
+        "observed": "can",
+        "expected_index": 8,
+        "observed_index": 8
+      },
+      {
+        "operation": "match",
+        "expected": "adjust",
+        "observed": "adjust",
+        "expected_index": 9,
+        "observed_index": 9
+      },
+      {
+        "operation": "match",
+        "expected": "whenever",
+        "observed": "whenever",
+        "expected_index": 10,
+        "observed_index": 10
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 11,
+        "observed_index": 11
+      },
+      {
+        "operation": "match",
+        "expected": "need",
+        "observed": "need",
+        "expected_index": 12,
+        "observed_index": 12
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 13,
+        "observed_index": 13
+      },
+      {
+        "operation": "match",
+        "expected": "notice",
+        "observed": "notice",
+        "expected_index": 14,
+        "observed_index": 14
+      },
+      {
+        "operation": "match",
+        "expected": "where",
+        "observed": "where",
+        "expected_index": 15,
+        "observed_index": 15
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 16,
+        "observed_index": 16
+      },
+      {
+        "operation": "match",
+        "expected": "chair",
+        "observed": "chair",
+        "expected_index": 17,
+        "observed_index": 17
+      },
+      {
+        "operation": "match",
+        "expected": "or",
+        "observed": "or",
+        "expected_index": 18,
+        "observed_index": 18
+      },
+      {
+        "operation": "match",
+        "expected": "floor",
+        "observed": "floor",
+        "expected_index": 19,
+        "observed_index": 19
+      },
+      {
+        "operation": "match",
+        "expected": "supports",
+        "observed": "supports",
+        "expected_index": 20,
+        "observed_index": 20
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 21,
+        "observed_index": 21
+      },
+      {
+        "operation": "match",
+        "expected": "weight",
+        "observed": "weight",
+        "expected_index": 22,
+        "observed_index": 22
+      },
+      {
+        "operation": "match",
+        "expected": "and",
+        "observed": "and",
+        "expected_index": 23,
+        "observed_index": 23
+      },
+      {
+        "operation": "match",
+        "expected": "let",
+        "observed": "let",
+        "expected_index": 24,
+        "observed_index": 24
+      },
+      {
+        "operation": "match",
+        "expected": "that",
+        "observed": "that",
+        "expected_index": 25,
+        "observed_index": 25
+      },
+      {
+        "operation": "match",
+        "expected": "support",
+        "observed": "support",
+        "expected_index": 26,
+        "observed_index": 26
+      },
+      {
+        "operation": "match",
+        "expected": "do",
+        "observed": "do",
+        "expected_index": 27,
+        "observed_index": 27
+      },
+      {
+        "operation": "match",
+        "expected": "a",
+        "observed": "a",
+        "expected_index": 28,
+        "observed_index": 28
+      },
+      {
+        "operation": "match",
+        "expected": "little",
+        "observed": "little",
+        "expected_index": 29,
+        "observed_index": 29
+      },
+      {
+        "operation": "match",
+        "expected": "more",
+        "observed": "more",
+        "expected_index": 30,
+        "observed_index": 30
+      },
+      {
+        "operation": "match",
+        "expected": "of",
+        "observed": "of",
+        "expected_index": 31,
+        "observed_index": 31
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 32,
+        "observed_index": 32
+      },
+      {
+        "operation": "match",
+        "expected": "work",
+        "observed": "work",
+        "expected_index": 33,
+        "observed_index": 33
+      },
+      {
+        "operation": "match",
+        "expected": "there",
+        "observed": "there",
+        "expected_index": 34,
+        "observed_index": 34
+      },
+      {
+        "operation": "match",
+        "expected": "is",
+        "observed": "is",
+        "expected_index": 35,
+        "observed_index": 35
+      },
+      {
+        "operation": "match",
+        "expected": "no",
+        "observed": "no",
+        "expected_index": 36,
+        "observed_index": 36
+      },
+      {
+        "operation": "match",
+        "expected": "need",
+        "observed": "need",
+        "expected_index": 37,
+        "observed_index": 37
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 38,
+        "observed_index": 38
+      },
+      {
+        "operation": "match",
+        "expected": "make",
+        "observed": "make",
+        "expected_index": 39,
+        "observed_index": 39
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 40,
+        "observed_index": 40
+      },
+      {
+        "operation": "match",
+        "expected": "breathing",
+        "observed": "breathing",
+        "expected_index": 41,
+        "observed_index": 41
+      },
+      {
+        "operation": "match",
+        "expected": "slower",
+        "observed": "slower",
+        "expected_index": 42,
+        "observed_index": 42
+      },
+      {
+        "operation": "match",
+        "expected": "or",
+        "observed": "or",
+        "expected_index": 43,
+        "observed_index": 43
+      },
+      {
+        "operation": "match",
+        "expected": "deeper",
+        "observed": "deeper",
+        "expected_index": 44,
+        "observed_index": 44
+      },
+      {
+        "operation": "match",
+        "expected": "for",
+        "observed": "for",
+        "expected_index": 45,
+        "observed_index": 45
+      },
+      {
+        "operation": "match",
+        "expected": "now",
+        "observed": "now",
+        "expected_index": 46,
+        "observed_index": 46
+      },
+      {
+        "operation": "match",
+        "expected": "listen",
+        "observed": "listen",
+        "expected_index": 47,
+        "observed_index": 47
+      },
+      {
+        "operation": "match",
+        "expected": "for",
+        "observed": "for",
+        "expected_index": 48,
+        "observed_index": 48
+      },
+      {
+        "operation": "match",
+        "expected": "one",
+        "observed": "one",
+        "expected_index": 49,
+        "observed_index": 49
+      },
+      {
+        "operation": "match",
+        "expected": "sound",
+        "observed": "sound",
+        "expected_index": 50,
+        "observed_index": 50
+      },
+      {
+        "operation": "match",
+        "expected": "nearby",
+        "observed": "nearby",
+        "expected_index": 51,
+        "observed_index": 51
+      },
+      {
+        "operation": "match",
+        "expected": "notice",
+        "observed": "notice",
+        "expected_index": 52,
+        "observed_index": 52
+      },
+      {
+        "operation": "match",
+        "expected": "how",
+        "observed": "how",
+        "expected_index": 53,
+        "observed_index": 53
+      },
+      {
+        "operation": "match",
+        "expected": "it",
+        "observed": "it",
+        "expected_index": 54,
+        "observed_index": 54
+      },
+      {
+        "operation": "match",
+        "expected": "begins",
+        "observed": "begins",
+        "expected_index": 55,
+        "observed_index": 55
+      },
+      {
+        "operation": "match",
+        "expected": "changes",
+        "observed": "changes",
+        "expected_index": 56,
+        "observed_index": 56
+      },
+      {
+        "operation": "match",
+        "expected": "or",
+        "observed": "or",
+        "expected_index": 57,
+        "observed_index": 57
+      },
+      {
+        "operation": "match",
+        "expected": "fades",
+        "observed": "fades",
+        "expected_index": 58,
+        "observed_index": 58
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 59,
+        "observed_index": 59
+      },
+      {
+        "operation": "match",
+        "expected": "do",
+        "observed": "do",
+        "expected_index": 60,
+        "observed_index": 60
+      },
+      {
+        "operation": "match",
+        "expected": "not",
+        "observed": "not",
+        "expected_index": 61,
+        "observed_index": 61
+      },
+      {
+        "operation": "match",
+        "expected": "have",
+        "observed": "have",
+        "expected_index": 62,
+        "observed_index": 62
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 63,
+        "observed_index": 63
+      },
+      {
+        "operation": "match",
+        "expected": "identify",
+        "observed": "identify",
+        "expected_index": 64,
+        "observed_index": 64
+      },
+      {
+        "operation": "match",
+        "expected": "it",
+        "observed": "it",
+        "expected_index": 65,
+        "observed_index": 65
+      },
+      {
+        "operation": "match",
+        "expected": "if",
+        "observed": "if",
+        "expected_index": 66,
+        "observed_index": 66
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 67,
+        "observed_index": 67
+      },
+      {
+        "operation": "match",
+        "expected": "attention",
+        "observed": "attention",
+        "expected_index": 68,
+        "observed_index": 68
+      },
+      {
+        "operation": "match",
+        "expected": "moves",
+        "observed": "moves",
+        "expected_index": 69,
+        "observed_index": 69
+      },
+      {
+        "operation": "match",
+        "expected": "into",
+        "observed": "into",
+        "expected_index": 70,
+        "observed_index": 70
+      },
+      {
+        "operation": "match",
+        "expected": "a",
+        "observed": "a",
+        "expected_index": 71,
+        "observed_index": 71
+      },
+      {
+        "operation": "match",
+        "expected": "thought",
+        "observed": "thought",
+        "expected_index": 72,
+        "observed_index": 72
+      },
+      {
+        "operation": "match",
+        "expected": "that",
+        "observed": "that",
+        "expected_index": 73,
+        "observed_index": 73
+      },
+      {
+        "operation": "match",
+        "expected": "is",
+        "observed": "is",
+        "expected_index": 74,
+        "observed_index": 74
+      },
+      {
+        "operation": "match",
+        "expected": "part",
+        "observed": "part",
+        "expected_index": 75,
+        "observed_index": 75
+      },
+      {
+        "operation": "match",
+        "expected": "of",
+        "observed": "of",
+        "expected_index": 76,
+        "observed_index": 76
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 77,
+        "observed_index": 77
+      },
+      {
+        "operation": "match",
+        "expected": "practice",
+        "observed": "practice",
+        "expected_index": 78,
+        "observed_index": 78
+      },
+      {
+        "operation": "match",
+        "expected": "when",
+        "observed": "when",
+        "expected_index": 79,
+        "observed_index": 79
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 80,
+        "observed_index": 80
+      },
+      {
+        "operation": "match",
+        "expected": "notice",
+        "observed": "notice",
+        "expected_index": 81,
+        "observed_index": 81
+      },
+      {
+        "operation": "match",
+        "expected": "gently",
+        "observed": "gently",
+        "expected_index": 82,
+        "observed_index": 82
+      },
+      {
+        "operation": "match",
+        "expected": "return",
+        "observed": "return",
+        "expected_index": 83,
+        "observed_index": 83
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 84,
+        "observed_index": 84
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 85,
+        "observed_index": 85
+      },
+      {
+        "operation": "match",
+        "expected": "sounds",
+        "observed": "sounds",
+        "expected_index": 86,
+        "observed_index": 86
+      },
+      {
+        "operation": "match",
+        "expected": "around",
+        "observed": "around",
+        "expected_index": 87,
+        "observed_index": 87
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 88,
+        "observed_index": 88
+      },
+      {
+        "operation": "match",
+        "expected": "nothing",
+        "observed": "nothing",
+        "expected_index": 89,
+        "observed_index": 89
+      },
+      {
+        "operation": "match",
+        "expected": "needs",
+        "observed": "needs",
+        "expected_index": 90,
+        "observed_index": 90
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 91,
+        "observed_index": 91
+      },
+      {
+        "operation": "match",
+        "expected": "be",
+        "observed": "be",
+        "expected_index": 92,
+        "observed_index": 92
+      },
+      {
+        "operation": "match",
+        "expected": "pushed",
+        "observed": "pushed",
+        "expected_index": 93,
+        "observed_index": 93
+      },
+      {
+        "operation": "match",
+        "expected": "away",
+        "observed": "away",
+        "expected_index": 94,
+        "observed_index": 94
+      },
+      {
+        "operation": "match",
+        "expected": "before",
+        "observed": "before",
+        "expected_index": 95,
+        "observed_index": 95
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 96,
+        "observed_index": 96
+      },
+      {
+        "operation": "match",
+        "expected": "finish",
+        "observed": "finish",
+        "expected_index": 97,
+        "observed_index": 97
+      },
+      {
+        "operation": "match",
+        "expected": "feel",
+        "observed": "feel",
+        "expected_index": 98,
+        "observed_index": 98
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 99,
+        "observed_index": 99
+      },
+      {
+        "operation": "match",
+        "expected": "contact",
+        "observed": "contact",
+        "expected_index": 100,
+        "observed_index": 100
+      },
+      {
+        "operation": "match",
+        "expected": "beneath",
+        "observed": "beneath",
+        "expected_index": 101,
+        "observed_index": 101
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 102,
+        "observed_index": 102
+      },
+      {
+        "operation": "match",
+        "expected": "again",
+        "observed": "again",
+        "expected_index": 103,
+        "observed_index": 103
+      },
+      {
+        "operation": "match",
+        "expected": "let",
+        "observed": "let",
+        "expected_index": 104,
+        "observed_index": 104
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 105,
+        "observed_index": 105
+      },
+      {
+        "operation": "match",
+        "expected": "eyes",
+        "observed": "eyes",
+        "expected_index": 106,
+        "observed_index": 106
+      },
+      {
+        "operation": "match",
+        "expected": "take",
+        "observed": "take",
+        "expected_index": 107,
+        "observed_index": 107
+      },
+      {
+        "operation": "match",
+        "expected": "in",
+        "observed": "in",
+        "expected_index": 108,
+        "observed_index": 108
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 109,
+        "observed_index": 109
+      },
+      {
+        "operation": "match",
+        "expected": "room",
+        "observed": "room",
+        "expected_index": 110,
+        "observed_index": 110
+      },
+      {
+        "operation": "match",
+        "expected": "and",
+        "observed": "and",
+        "expected_index": 111,
+        "observed_index": 111
+      },
+      {
+        "operation": "match",
+        "expected": "choose",
+        "observed": "choose",
+        "expected_index": 112,
+        "observed_index": 112
+      },
+      {
+        "operation": "match",
+        "expected": "one",
+        "observed": "one",
+        "expected_index": 113,
+        "observed_index": 113
+      },
+      {
+        "operation": "match",
+        "expected": "small",
+        "observed": "small",
+        "expected_index": 114,
+        "observed_index": 114
+      },
+      {
+        "operation": "match",
+        "expected": "thing",
+        "observed": "thing",
+        "expected_index": 115,
+        "observed_index": 115
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 116,
+        "observed_index": 116
+      },
+      {
+        "operation": "match",
+        "expected": "do",
+        "observed": "do",
+        "expected_index": 117,
+        "observed_index": 117
+      },
+      {
+        "operation": "match",
+        "expected": "next",
+        "observed": "next",
+        "expected_index": 118,
+        "observed_index": 118
+      },
+      {
+        "operation": "match",
+        "expected": "at",
+        "observed": "at",
+        "expected_index": 119,
+        "observed_index": 119
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 120,
+        "observed_index": 120
+      },
+      {
+        "operation": "match",
+        "expected": "own",
+        "observed": "own",
+        "expected_index": 121,
+        "observed_index": 121
+      },
+      {
+        "operation": "match",
+        "expected": "pace",
+        "observed": "pace",
+        "expected_index": 122,
+        "observed_index": 122
+      }
+    ]
+  },
+  "limits": [
+    "ASR is independent evidence, not a human transcription or a proof of perfect speech.",
+    "Noise rejection requires content agreement; duration and RMS do not prove speech.",
+    "Warmth, naturalness, voice identity, and quality require listener judgment.",
+    "Narration mode permits intentional silence; expected words still require recognition."
+  ],
+  "thresholds": {
+    "pass_max_wer": 0.15,
+    "pass_min_coverage": 0.85,
+    "fail_wer_above": 0.35,
+    "fail_coverage_below": 0.65,
+    "fail_contiguous_error_span_at_least": 8,
+    "review_contiguous_error_span_at_least": 3
+  },
+  "verifier_source_sha256": "7e5e6f801ba7e7841ef386771ab3298cf841db848e1b16de6db161c7183f6b26",
+  "harness_source_sha256": "a35b1cc25f4418de82b402e1ca5bc361ea22c6c6ee13eeee778c84db8854b8b5"
+}

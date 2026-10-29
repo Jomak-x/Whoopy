@@ -1,0 +1,42 @@
+{
+  "runner_sha256": "87d65c6ec6e00b8ba1d3996ad09591b03abe046a4bbf366ffdaf31922601de45",
+  "tests": [
+    {
+      "case": "stable",
+      "reason": null,
+      "interrupt_requests": 0,
+      "receipt_preserved": true
+    },
+    {
+      "case": "swap",
+      "reason": "system swap grew more than 4 GiB above candidate baseline",
+      "interrupt_requests": 1,
+      "receipt_preserved": true
+    },
+    {
+      "case": "low",
+      "reason": "available RAM below 2 GiB sustained 2 seconds",
+      "interrupt_requests": 1,
+      "receipt_preserved": true
+    },
+    {
+      "case": "observer_error",
+      "reason": "resource observer failed: RuntimeError: controlled observer failure",
+      "interrupt_requests": 1,
+      "receipt_preserved": true
+    },
+    {
+      "case": "real_self_interrupt_cleanup",
+      "keyboard_interrupt_caught": true,
+      "receipt_preserved": true,
+      "peak_process_rss_recorded": true
+    },
+    {
+      "case": "final_ryan_requires16GiB",
+      "status": "preflight_failed",
+      "gpu_module_imported": false
+    }
+  ],
+  "inference_used": false,
+  "signals_targeted_only_this_validation_process": true
+}

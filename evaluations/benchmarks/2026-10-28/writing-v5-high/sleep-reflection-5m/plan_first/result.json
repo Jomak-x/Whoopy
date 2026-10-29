@@ -1,0 +1,12 @@
+{
+  "case": "sleep-reflection-5m",
+  "writing_method": "plan_first",
+  "prompt": "A gentle good-night reflection after a busy day. I am lying down in bed. Help me settle, notice my body and reflect on one ordinary moment, with room for my own answer. End with a sleep taper without waking me up.",
+  "target_seconds": 300,
+  "seed": 42,
+  "status": "failed",
+  "gpu_lock_wait_seconds": 0.00023966602748259902,
+  "available_memory_before_bytes": 15633317888,
+  "swap_before_bytes": 11318919168,
+  "error": "Memory preflight refused this model."
+}

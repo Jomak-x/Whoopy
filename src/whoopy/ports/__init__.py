@@ -10,7 +10,9 @@ from whoopy.ports.models import (
     AdapterMetadata,
     ScriptGenerationRequest,
     ScriptGenerationResult,
+    ScriptGenerationTelemetry,
     ScriptGenerator,
+    SpeechCapabilities,
     SpeechSynthesizer,
 )
 
@@ -21,7 +23,9 @@ __all__ = [
     "InvalidAdapterOutput",
     "ScriptGenerationRequest",
     "ScriptGenerationResult",
+    "ScriptGenerationTelemetry",
     "ScriptGenerator",
+    "SpeechCapabilities",
     "SpeechSynthesizer",
     "TransientAdapterError",
 ]

@@ -1,0 +1,50 @@
+[transformers] You are using a model of type `moss_tts_local` to instantiate a model of type ``. This may be expected if you are loading a checkpoint that shares a subset of the architecture (e.g., loading a `sam2_video` checkpoint into `Sam2Model`), but is otherwise not supported and can yield errors. Please verify that the checkpoint is compatible with the model you are instantiating.
+{
+  "candidate": "moss-local-synthetic-male",
+  "seed": 20261028,
+  "script": "evaluations/benchmarks/2026-10-28/voice-script.txt",
+  "script_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "runner_sha256": "b79652d405374d941a6d04e84ee6c0d45a71f6856e2e6ed511e38b819be3f29a",
+  "settings": {
+    "max_tokens": 2048,
+    "ref_audio": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/voxcpm2-reference/raw.wav",
+    "audio_tokenizer_source": "/Users/jakob/codestuff/Whoopy/models/experimental/moss-tts-runtime/checkpoints/MOSS-Audio-Tokenizer-v2"
+  },
+  "postprocessing": [],
+  "segmentation": "identical nonempty paragraphs; native segments concatenated without inserted silence",
+  "runtime_python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "human_listening": "pending",
+  "segment_deadline_seconds": 480,
+  "post_lock_settle_seconds": 2,
+  "available_memory_before_bytes": 19614990336,
+  "allocator_limit_bytes": 13172539392,
+  "device": "mlx-metal",
+  "model_repo": "mlx-community/MOSS-TTS-Local-Transformer-v1.5-4bit",
+  "model_revision": "613364100996995dd095f7abd04b24372ce11a8e",
+  "mlx_audio_revision": "8c244a1faff44cfa69e3151c195f52a4c1c90be5",
+  "synthetic_reference": {
+    "source": "voxcpm2-reference native generated benchmark reference",
+    "transcript": "Settle into a position that feels comfortable.",
+    "sha256": "37383b3c2f8136926c756ab93688b65a5a18bbb827e2a51cafd1aaafa47400bc",
+    "real_person": false
+  },
+  "codec": {
+    "repo": "OpenMOSS-Team/MOSS-Audio-Tokenizer-v2",
+    "revision": "f6e20e543b33d2c252a7ef71bdf8aa71e5ff9169",
+    "local_path": "models/experimental/moss-tts-runtime/checkpoints/MOSS-Audio-Tokenizer-v2",
+    "config_sha256": "aeb9a0e9d88c74bf9fbaa81ee54443d463e09b5f335b3306bb798e282a10e564"
+  },
+  "load_seconds": 3.199996082985308,
+  "status": "complete",
+  "raw_path": "evaluations/benchmarks/2026-10-28/voices/moss-local-synthetic-male/raw.wav",
+  "raw_sha256": "f06c913b4bbc3e58d3168dbff4dcdbb1b7abd5b4fcea42c49c60c57a693b508f",
+  "sample_rate": 48000,
+  "duration_seconds": 51.44,
+  "synthesis_seconds": 41.68711279204581,
+  "speech_output_rtf": 0.8104026592543898,
+  "process_peak_rss_bytes": 9278881792,
+  "allocator_peak_bytes": 12956055332,
+  "mps_current_allocated_bytes": null,
+  "mps_driver_allocated_bytes": null,
+  "memory_note": "macOS ru_maxrss bytes; MLX allocator peak separately; MPS API has no peak counter here"
+}

@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "run_id": "cb7a7a9c-546f-406e-80fc-54638ba51edc",
+  "created_at": "2026-10-29T00:01:26.804237Z",
+  "source": "script_file",
+  "segments": [
+    {
+      "id": "speech-0001",
+      "type": "SPEECH",
+      "text": "Settle into a position that feels comfortable. You can adjust whenever you need to. Notice where the chair or floor supports your weight, and let that support do a little more of the work.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "speech-0002",
+      "type": "SPEECH",
+      "text": "There is no need to make your breathing slower or deeper. For now, listen for one sound nearby. Notice how it begins, changes, or fades. You do not have to identify it.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "speech-0003",
+      "type": "SPEECH",
+      "text": "If your attention moves into a thought, that is part of the practice. When you notice, gently return to the sounds around you. Nothing needs to be pushed away.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "speech-0004",
+      "type": "SPEECH",
+      "text": "Before you finish, feel the contact beneath you again. Let your eyes take in the room, and choose one small thing to do next, at your own pace.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    }
+  ]
+}

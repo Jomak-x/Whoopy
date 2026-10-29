@@ -19,7 +19,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from whoopy.adapters.tts import (
     FishSpeech14Adapter,
@@ -27,13 +27,17 @@ from whoopy.adapters.tts import (
     MossTTSAdapter,
     MossTTSSettings,
     MossVariant,
+    Qwen3TTSAdapter,
+    Qwen3TTSSettings,
+    Qwen3TTSVariant,
     SherpaOnnxKokoroAdapter,
     SherpaOnnxSettings,
 )
 from whoopy.adapters.tts.sherpa_onnx import _loader_from_directory
 from whoopy.audio.models import PcmAudio
 from whoopy.hardware import inspect_hardware
-from whoopy.model_packs.manager import SmokeResult
+from whoopy.locations import SOURCE_PROJECT_ROOT, runtime_worker_script
+from whoopy.model_packs.manager import SmokeProbeFailure, SmokeResult
 from whoopy.model_packs.operations import (
     AcceleratorUsage,
     ModelPackOperationError,
@@ -98,6 +102,11 @@ class OfflineModelPackSmokeRunner:
             "moss-audio-tokenizer-v2",
             "moss-local-5b",
             "moss-8b",
+            "qwen3-tts-custom-voice-0.6b",
+            "qwen3-tts-custom-voice-1.7b",
+            "qwen3-tts-voice-design-1.7b",
+            "qwen3-tts-base-clone-0.6b",
+            "qwen3-tts-base-clone-1.7b",
         }
     )
 
@@ -111,7 +120,7 @@ class OfflineModelPackSmokeRunner:
     ) -> None:
         self.registry = registry
         self.models_root = registry.models_root
-        self.project_root = project_root or Path(__file__).resolve().parents[3]
+        self.project_root = project_root or SOURCE_PROJECT_ROOT
         self.references_path = references_path or (
             self.project_root / "config" / "voice_references.yaml"
         )
@@ -134,10 +143,12 @@ class OfflineModelPackSmokeRunner:
         unload_started = 0.0
         unload_succeeded = False
         close_error: BaseException | None = None
+        runtime_probe_passed = False
         try:
             with _offline_environment():
                 adapter = self._adapter(pack, selected_directory)
                 adapter.prepare()
+                runtime_probe_passed = True
                 runtime_process_id = getattr(adapter, "runtime_process_id", None)
                 if isinstance(runtime_process_id, int):
                     recorder.track_process(runtime_process_id)
@@ -146,7 +157,7 @@ class OfflineModelPackSmokeRunner:
                     recorder.set_accelerator(self._accelerator_from_device(runtime_device))
                 recorder.mark_model_ready()
                 recorder.begin_render()
-                rendered = adapter.synthesize(SpeechSegment(id="pack-smoke", text=SMOKE_TEXT))
+                rendered = adapter.synthesize(self._smoke_segment(pack))
                 recorder.end_render()
         except BaseException as error:
             operation_error = error
@@ -163,7 +174,11 @@ class OfflineModelPackSmokeRunner:
             recorder.close()
             if close_error is not None:
                 operation_error.add_note(f"Adapter unload also failed: {close_error}")
-            raise operation_error
+            raise SmokeProbeFailure(
+                f"{type(operation_error).__name__}: {operation_error}",
+                runtime_probe_passed=runtime_probe_passed,
+                cause=operation_error,
+            ) from operation_error
         if rendered is None:
             recorder.close()
             if close_error is not None:
@@ -199,6 +214,21 @@ class OfflineModelPackSmokeRunner:
             validated_dependencies=tuple(pack.dependencies),
         )
 
+    @staticmethod
+    def _smoke_segment(pack: ModelPackSpec) -> SpeechSegment:
+        """Build the smallest typed request that each production adapter accepts."""
+
+        voice_mode: Literal["preset", "reference", "designed"] = "preset"
+        if pack.pack_id == "qwen3-tts-voice-design-1.7b":
+            voice_mode = "designed"
+        elif pack.pack_id.startswith("qwen3-tts-base-clone-"):
+            voice_mode = "reference"
+        return SpeechSegment(
+            id="pack-smoke",
+            text=SMOKE_TEXT,
+            voice_mode=voice_mode,
+        )
+
     def _adapter(self, pack: ModelPackSpec, selected_directory: Path) -> SmokeAdapter:
         injected = self._factories.get(pack.pack_id)
         if injected is not None:
@@ -209,6 +239,8 @@ class OfflineModelPackSmokeRunner:
             return self._fish(pack, selected_directory)
         if pack.pack_id in {"moss-local-5b", "moss-8b", "moss-audio-tokenizer-v2"}:
             return self._moss(pack, selected_directory)
+        if pack.pack_id.startswith("qwen3-tts-"):
+            return self._qwen(pack, selected_directory)
         raise ModelPackOperationError(f"Unsupported smoke-test pack: {pack.pack_id}")
 
     def _kokoro(self, pack: ModelPackSpec, selected_directory: Path) -> SmokeAdapter:
@@ -228,11 +260,16 @@ class OfflineModelPackSmokeRunner:
         return FishSpeech14Adapter(
             FishSpeechSettings(
                 runtime_directory=runtime,
-                worker_script=self.project_root / "scripts" / "fish_speech_1_4_worker.py",
+                worker_script=(
+                    self.project_root / "scripts" / "fish_speech_1_4_worker.py"
+                    if (self.project_root / "scripts" / "fish_speech_1_4_worker.py").is_file()
+                    else runtime_worker_script("fish_speech_1_4_worker.py")
+                ),
                 reference_audio=reference.audio_path,
                 reference_text=reference.transcript_path,
                 checkpoint_directory=selected_directory,
                 models_root=self.models_root,
+                hardware_requirement=pack.hardware,
             )
         )
 
@@ -246,6 +283,7 @@ class OfflineModelPackSmokeRunner:
             )
 
         if pack.pack_id == "moss-audio-tokenizer-v2":
+            model_pack = self.registry.get("moss-local-5b")
             model_status = self.registry.inspect("moss-local-5b")
             if model_status.state not in _RUNNABLE_STATES:
                 raise ModelPackOperationError(
@@ -256,6 +294,7 @@ class OfflineModelPackSmokeRunner:
             codec_directory = selected_directory
             variant: MossVariant = "moss-local-v1.5"
         else:
+            model_pack = pack
             model_directory = selected_directory
             codec_directory = codec_status.selected_directory
             variant = "moss-local-v1.5" if pack.pack_id == "moss-local-5b" else "moss-v1.5"
@@ -263,7 +302,11 @@ class OfflineModelPackSmokeRunner:
         return MossTTSAdapter(
             MossTTSSettings(
                 runtime_directory=runtime,
-                worker_script=self.project_root / "scripts" / "moss_tts_worker.py",
+                worker_script=(
+                    self.project_root / "scripts" / "moss_tts_worker.py"
+                    if (self.project_root / "scripts" / "moss_tts_worker.py").is_file()
+                    else runtime_worker_script("moss_tts_worker.py")
+                ),
                 model_directory=model_directory,
                 codec_directory=codec_directory,
                 variant=variant,
@@ -271,6 +314,49 @@ class OfflineModelPackSmokeRunner:
                 language="English",
                 instruction="Speak slowly, softly, and warmly.",
                 use_reference=True,
+                models_root=self.models_root,
+                hardware_requirement=model_pack.hardware,
+            )
+        )
+
+    def _qwen(self, pack: ModelPackSpec, selected_directory: Path) -> SmokeAdapter:
+        runtime = self._runtime_directory(pack)
+        variants: dict[str, Qwen3TTSVariant] = {
+            "qwen3-tts-custom-voice-0.6b": "custom-voice-0.6b",
+            "qwen3-tts-custom-voice-1.7b": "custom-voice-1.7b",
+            "qwen3-tts-voice-design-1.7b": "voice-design-1.7b",
+            "qwen3-tts-base-clone-0.6b": "base-clone-0.6b",
+            "qwen3-tts-base-clone-1.7b": "base-clone-1.7b",
+        }
+        variant = variants[pack.pack_id]
+        reference_audio: Path | None = None
+        reference_text: Path | None = None
+        consent_scope: Literal["local_voice_cloning_experiment_only"] | None = None
+        if variant.startswith("base-clone-"):
+            reference = resolve_voice_reference(
+                self.references_path,
+                models_root=self.models_root,
+            )
+            reference_audio = reference.audio_path
+            reference_text = reference.transcript_path
+            consent_scope = "local_voice_cloning_experiment_only"
+        return Qwen3TTSAdapter(
+            Qwen3TTSSettings(
+                runtime_directory=runtime,
+                worker_script=(
+                    self.project_root / "scripts" / "qwen3_tts_worker.py"
+                    if (self.project_root / "scripts" / "qwen3_tts_worker.py").is_file()
+                    else runtime_worker_script("qwen3_tts_worker.py")
+                ),
+                model_directory=selected_directory,
+                variant=variant,
+                model_revision=pack.revision,
+                runtime_revision=pack.runtime.revision,
+                speaker="Serena",
+                language="English",
+                reference_audio=reference_audio,
+                reference_text=reference_text,
+                consent_scope=consent_scope,
                 models_root=self.models_root,
             )
         )

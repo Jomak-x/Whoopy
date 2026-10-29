@@ -1,0 +1,36 @@
+{
+  "case": "grounding-3m",
+  "writing_method": "recipe_whole_session",
+  "prompt": "A seated grounding meditation after an overstimulating workday. Use contact and ordinary sounds, develop one simple practice, and return gently to the rest of the day.",
+  "target_seconds": 180,
+  "seed": 42,
+  "status": "generated_pending_content_review",
+  "gpu_lock_wait_seconds": 8.15410166978836e-05,
+  "available_memory_before_bytes": 23305879552,
+  "swap_before_bytes": 12175147008,
+  "elapsed_seconds": 71.11911241704365,
+  "estimated_duration_seconds": 180.0,
+  "sections": 6,
+  "words": 159,
+  "attempts": 1,
+  "recipe_id": "daytime-steadying@1",
+  "model": {
+    "adapter_id": "whoopy.llama_cpp",
+    "versioned_model_id": "Ministral 3 14B Q4_K_M@74fac473c43357d7fb2671713608183cc72496d0#Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+    "runtime_id": "llama.cpp",
+    "runtime_version": "b10142",
+    "license_id": "Apache-2.0",
+    "device": "cpu,metal",
+    "settings": [
+      "context_tokens=32768",
+      "temperature=0.7",
+      "top_p=0.9",
+      "threads=0",
+      "gpu_layers=auto",
+      "reasoning=off",
+      "timeout_seconds=300"
+    ]
+  },
+  "script_sha256": "0074f9ce805db6cb109e010c4e19af2beaf130b113c47b37a0410ee7bb68968b",
+  "script": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/writing-v5-high/grounding-3m/recipe_whole_session/artifacts/script.md"
+}

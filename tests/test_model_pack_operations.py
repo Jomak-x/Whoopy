@@ -63,6 +63,20 @@ slot.release()
     )
 
 
+def _slot_child_result(root: Path) -> tuple[int, str, str]:
+    child = _slot_child(root)
+    try:
+        # This bounds cold interpreter imports and durable owner-record writes,
+        # independently of the child's short 0.25-second lock-acquisition deadline.
+        stdout, stderr = child.communicate(timeout=30)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        stdout, stderr = child.communicate(timeout=5)
+        pytest.fail(f"slot child did not finish: stdout={stdout!r}, stderr={stderr!r}")
+    assert child.returncode is not None
+    return child.returncode, stdout, stderr
+
+
 def _install_lock_child(root: Path, *, hold: bool = False) -> subprocess.Popen[str]:
     source = """
 import sys
@@ -189,15 +203,13 @@ def _managed_service(
 
 def test_heavyweight_slot_rejects_real_cross_process_contention(tmp_path: Path) -> None:
     with HeavyweightModelSlot(tmp_path, "fish-speech-1.4"):
-        child = _slot_child(tmp_path)
-        stdout, stderr = child.communicate(timeout=5)
+        returncode, stdout, stderr = _slot_child_result(tmp_path)
 
-    assert child.returncode == 17, stderr
+    assert returncode == 17, stderr
     assert stdout.strip() == "blocked"
 
-    released_child = _slot_child(tmp_path)
-    stdout, stderr = released_child.communicate(timeout=5)
-    assert released_child.returncode == 0, stderr
+    returncode, stdout, stderr = _slot_child_result(tmp_path)
+    assert returncode == 0, stderr
     assert stdout.strip() == "acquired"
 
 
@@ -256,6 +268,47 @@ def test_install_resumes_durable_operation_after_writer_process_is_killed(tmp_pa
     assert (
         service.models_root / "managed" / "model-packs" / "test-pack" / "files" / "model.bin"
     ).read_bytes() == payload
+
+
+def test_install_reuses_identical_verified_bytes_from_another_pack(tmp_path: Path) -> None:
+    payload = b"shared-tokenizer-bytes"
+    service, offline = _managed_service(tmp_path, payload=payload)
+    service.install("test-pack", offline_directory=offline, allow_network=False)
+
+    registry_path = tmp_path / "model_packs.yaml"
+    document = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    second = json.loads(json.dumps(document["packs"][0]))
+    second["pack_id"] = "second-pack"
+    second["display_name"] = "Second Pack"
+    second["managed_directory"] = "managed/model-packs/second-pack/files"
+    document["packs"].append(second)
+    registry_path.write_text(yaml.safe_dump(document), encoding="utf-8")
+
+    reloaded = ManagedModelPacks.from_paths(registry_path, service.models_root)
+    reloaded.smoke_runner = None
+    report = reloaded.install("second-pack", offline_directory=None, allow_network=False)
+
+    first_file = (
+        service.models_root / "managed" / "model-packs" / "test-pack" / "files" / "model.bin"
+    )
+    second_file = (
+        service.models_root / "managed" / "model-packs" / "second-pack" / "files" / "model.bin"
+    )
+    assert report.progress is not None
+    assert report.progress.bytes_downloaded == len(payload)
+    assert second_file.read_bytes() == payload
+    assert first_file.samefile(second_file)
+
+    # A pre-existing verified copy from an older installer is converged on a
+    # later idempotent install without requiring network or offline bytes.
+    second_file.unlink()
+    second_file.write_bytes(payload)
+    assert not first_file.samefile(second_file)
+    reloaded.install("second-pack", offline_directory=None, allow_network=False)
+    assert first_file.samefile(second_file)
+
+    first_file.unlink()
+    assert second_file.read_bytes() == payload
 
 
 def test_slot_status_removes_stale_owner_when_kernel_lock_is_free(tmp_path: Path) -> None:

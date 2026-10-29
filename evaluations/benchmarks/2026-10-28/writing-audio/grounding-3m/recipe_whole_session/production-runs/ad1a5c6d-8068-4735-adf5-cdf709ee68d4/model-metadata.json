@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "tts": {
+    "adapter_id": "whoopy.sherpa_onnx_kokoro",
+    "versioned_model_id": "Kokoro-multilang@v1_0-release-2026-10-26",
+    "runtime_id": "sherpa-onnx",
+    "runtime_version": "1.13.4",
+    "license_id": "Apache-2.0",
+    "device": "cpu",
+    "settings": [
+      "voice=am_michael",
+      "speaker_id=16",
+      "speed=0.8",
+      "threads=2",
+      "language=en-us",
+      "sample_rate=24000"
+    ]
+  },
+  "llm": null,
+  "telemetry": {
+    "captured_at": "2026-10-29T00:32:20.322565Z",
+    "hardware_before": {
+      "snapshot": {
+        "operating_system": "darwin",
+        "architecture": "arm64",
+        "cpu_count": 14,
+        "total_ram_gb": 48.0,
+        "available_ram_gb": 22.5,
+        "free_disk_gb": 401.2,
+        "accelerators": [
+          "cpu",
+          "metal"
+        ]
+      },
+      "unavailable_reason": null
+    },
+    "hardware_after": {
+      "snapshot": {
+        "operating_system": "darwin",
+        "architecture": "arm64",
+        "cpu_count": 14,
+        "total_ram_gb": 48.0,
+        "available_ram_gb": 24.3,
+        "free_disk_gb": 401.2,
+        "accelerators": [
+          "cpu",
+          "metal"
+        ]
+      },
+      "unavailable_reason": null
+    },
+    "tts": {
+      "load_elapsed": {
+        "value": 0.6962952920002863,
+        "unit": "seconds",
+        "unavailable_reason": null
+      },
+      "inference_elapsed": {
+        "value": 50.478899751091376,
+        "unit": "seconds",
+        "unavailable_reason": null
+      },
+      "inference_speed": {
+        "value": 1.606058843063047,
+        "unit": "audio_seconds_per_second",
+        "unavailable_reason": null
+      },
+      "peak_process_tree_memory": {
+        "value": null,
+        "unit": "bytes",
+        "unavailable_reason": "PermissionError: [Errno 1] Operation not permitted (originated from sysctl() malloc 1/3)"
+      },
+      "live_process_tree_memory_after": {
+        "value": null,
+        "unit": "bytes",
+        "unavailable_reason": "PermissionError: [Errno 1] Operation not permitted (originated from sysctl() malloc 1/3)"
+      },
+      "inference_calls": {
+        "value": 8,
+        "unit": "calls",
+        "unavailable_reason": null
+      },
+      "runtime_device": "cpu",
+      "runtime_device_unavailable_reason": null
+    },
+    "llm": null
+  }
+}

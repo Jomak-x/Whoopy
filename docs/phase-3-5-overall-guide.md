@@ -1,5 +1,7 @@
 # Phase 3.5 From Zero: How Whoopy Creates A Local Meditation
 
+> **Historical implementation record.** This explains the pre-V1 tester and should not be used for current setup. Start with [the user guide](user-guide.md).
+
 This is the beginner-friendly explanation of everything Phase 3.5 added. You
 should be able to read this without knowing machine learning, audio
 programming, web development, or the command line.

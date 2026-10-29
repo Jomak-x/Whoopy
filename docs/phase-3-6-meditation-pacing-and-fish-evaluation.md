@@ -1,5 +1,7 @@
 # Phase 3.6: Meditation Pacing And Fish Speech Evaluation
 
+> **Historical evaluation record.** Preserve its measurements, but use current Studio/Lab evidence and [model capabilities](model-capabilities.md) for decisions.
+
 This change fixes a real listening problem discovered after Phase 3.5. The
 audio pipeline was technically correct, but the result did not yet feel like a
 good guided meditation.

@@ -1,0 +1,74 @@
+schema_version: 1
+roots:
+  - root_id: fish-speech-1.4-legacy
+    relative_path: experimental/fish-speech-1.4-runtime
+    targets:
+      - category: virtualenv
+        path: .venv/lib
+      - category: virtualenv
+        path: .venv/share
+      - category: virtualenv
+        path: .venv/.lock
+      - category: virtualenv
+        path: .venv/pyvenv.cfg
+      - category: virtualenv
+        path: .venv/CACHEDIR.TAG
+      - category: virtualenv
+        path: .venv/.gitignore
+      - category: git
+        path: .git
+      - category: source
+        path: .github
+      - category: source
+        path: docs
+      - category: source
+        path: fish_speech
+      - category: source
+        path: fish_speech.egg-info
+      - category: source
+        path: tools
+  - root_id: moss-tts-legacy
+    relative_path: experimental/moss-tts-runtime
+    targets:
+      - category: virtualenv
+        path: .venv/lib
+      - category: virtualenv
+        path: .venv/share
+      - category: virtualenv
+        path: .venv/.lock
+      - category: virtualenv
+        path: .venv/pyvenv.cfg
+      - category: virtualenv
+        path: .venv/CACHEDIR.TAG
+      - category: virtualenv
+        path: .venv/.gitignore
+      - category: git
+        path: .git
+      - category: source
+        path: assets
+      - category: source
+        path: clis
+      - category: source
+        path: community
+      - category: source
+        path: configs
+      - category: source
+        path: docs
+      - category: source
+        path: moss_audio_tokenizer
+      - category: source
+        path: moss_soundeffect_v2
+      - category: source
+        path: moss_tts.egg-info
+      - category: source
+        path: moss_tts_delay
+      - category: source
+        path: moss_tts_local
+      - category: source
+        path: moss_tts_local_v1.5
+      - category: source
+        path: moss_tts_realtime
+      - category: source
+        path: scripts
+      - category: stale-download
+        glob: checkpoints/**/.cache/huggingface/download/*.incomplete

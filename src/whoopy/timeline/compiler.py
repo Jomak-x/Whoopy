@@ -5,16 +5,65 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
-from typing import Literal
+from typing import Literal, cast
 from uuid import UUID
 
-from whoopy.timeline.models import SilenceSegment, SpeechSegment, Timeline, TimelineSegment
+from whoopy.timeline.models import (
+    BreathSegment,
+    DeliveryIntensity,
+    DeliveryStyle,
+    PaceIntent,
+    SilenceSegment,
+    SpeechSegment,
+    Timeline,
+    TimelineSegment,
+    VoiceMode,
+)
 
 PAUSE_PATTERN = re.compile(
     r"^\[\s*pause\s*:\s*(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>ms|s)\s*\]$",
     re.IGNORECASE,
 )
+BREATH_PATTERN = re.compile(
+    r"^\[\s*breath\s*:\s*(?P<phase>inhale|exhale)\s+"
+    r"(?P<value>\d+(?:\.\d+)?)s\s+cycle=(?P<cycle>\d+)\s+"
+    r"protocol=(?P<protocol>[a-z][a-z0-9_-]+@[1-9][0-9]*)\s*\]$",
+    re.IGNORECASE,
+)
+DELIVERY_PATTERN = re.compile(
+    r"^\[\s*delivery\s*:\s*(?P<value>[a-z_]+)\s*\]$",
+    re.IGNORECASE,
+)
+INTENSITY_PATTERN = re.compile(
+    r"^\[\s*intensity\s*:\s*(?P<value>[a-z_]+)\s*\]$",
+    re.IGNORECASE,
+)
+PACE_PATTERN = re.compile(
+    r"^\[\s*pace\s*:\s*(?P<value>[a-z_]+)\s*\]$",
+    re.IGNORECASE,
+)
+VOICE_MODE_PATTERN = re.compile(
+    r"^\[\s*voice-mode\s*:\s*(?P<value>[a-z_]+)\s*\]$",
+    re.IGNORECASE,
+)
+CONTROL_VALUES: dict[str, tuple[str, ...]] = {
+    "delivery": (
+        "neutral",
+        "warm",
+        "calm",
+        "soothing",
+        "grounded",
+        "compassionate",
+        "sleepy",
+        "encouraging",
+    ),
+    "intensity": ("subtle", "moderate"),
+    "pace": ("natural", "unhurried", "slow", "very_slow"),
+    "voice_mode": ("preset", "reference", "designed"),
+}
 MARKDOWN_LINK = re.compile(r"!?\[([^\]]+)\]\([^)]+\)")
+BRACKETED_CONTROL = re.compile(r"\[[^\]\r\n]*\]")
+ANGLE_BRACKETED_MARKUP = re.compile(r"<[^>\r\n]*>")
 MARKDOWN_PREFIX = re.compile(r"^(?:>\s*|[-*+]\s+|\d+[.)]\s+)")
 MAX_SCRIPT_CHARACTERS = 200_000
 MAX_SPEECH_CHARACTERS = 600
@@ -46,6 +95,19 @@ def _plain_spoken_text(text: str) -> str:
     """Remove a deliberately small safe subset of inline Markdown notation."""
 
     text = MARKDOWN_LINK.sub(r"\1", text)
+    unsupported = BRACKETED_CONTROL.search(text)
+    if unsupported is not None:
+        raise ScriptCompileError(
+            f"Unknown inline script control {unsupported.group(0)!r}; put supported "
+            "pause, breath, delivery, intensity, pace, or voice-mode controls on "
+            "their own line."
+        )
+    model_markup = ANGLE_BRACKETED_MARKUP.search(text)
+    if model_markup is not None:
+        raise ScriptCompileError(
+            f"Unsupported model-native markup {model_markup.group(0)!r}; deliberate "
+            "pauses must use standalone Whoopy pause controls."
+        )
     text = text.replace("**", "").replace("__", "").replace("`", "")
     text = text.replace("*", "").replace("_", "")
     return " ".join(text.split())
@@ -102,7 +164,7 @@ def build_script_timeline(
     if not script.strip():
         raise ScriptCompileError("Script cannot be empty.")
 
-    raw_blocks: list[str | int] = []
+    raw_blocks: list[str | int | tuple[str, str] | tuple[str, int, int, str]] = []
     paragraph_lines: list[str] = []
     in_front_matter = script.lstrip().startswith("---\n")
     front_matter_started = False
@@ -141,6 +203,42 @@ def build_script_timeline(
             flush_paragraph()
             raw_blocks.append(_pause_milliseconds(line))
             continue
+        if line.lower().startswith("[breath"):
+            flush_paragraph()
+            breath_match = BREATH_PATTERN.fullmatch(line)
+            if breath_match is None:
+                raise ScriptCompileError(
+                    "Invalid breath marker; breath phases must come from a reviewed protocol."
+                )
+            duration_ms = _pause_milliseconds(f"[pause: {breath_match.group('value')}s]")
+            raw_blocks.append(
+                (
+                    breath_match.group("phase").lower(),
+                    duration_ms,
+                    int(breath_match.group("cycle")),
+                    breath_match.group("protocol").lower(),
+                )
+            )
+            continue
+        control_match = None
+        for control, pattern in (
+            ("delivery", DELIVERY_PATTERN),
+            ("intensity", INTENSITY_PATTERN),
+            ("pace", PACE_PATTERN),
+            ("voice_mode", VOICE_MODE_PATTERN),
+        ):
+            control_match = pattern.fullmatch(line)
+            if control_match is not None:
+                flush_paragraph()
+                raw_blocks.append((control, control_match.group("value").lower()))
+                break
+        if control_match is not None:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            raise ScriptCompileError(
+                f"Unknown script control {line!r}; use pause, breath, delivery, "
+                "intensity, pace, or voice-mode."
+            )
         cleaned_line = MARKDOWN_PREFIX.sub("", line)
         paragraph_lines.append(cleaned_line)
     flush_paragraph()
@@ -148,7 +246,37 @@ def build_script_timeline(
     segments: list[TimelineSegment] = []
     speech_number = 0
     silence_number = 0
+    breath_number = 0
+    speech_controls: dict[str, str] = {
+        "delivery": "neutral",
+        "intensity": "subtle",
+        "pace": "natural",
+        "voice_mode": "preset",
+    }
     for block in raw_blocks:
+        if isinstance(block, tuple) and len(block) == 2:
+            name, value = block
+            allowed = CONTROL_VALUES[name]
+            if value not in allowed:
+                choices = ", ".join(allowed)
+                raise ScriptCompileError(
+                    f"Unsupported {name.replace('_', '-')} {value!r}; use {choices}."
+                )
+            speech_controls[name] = value
+            continue
+        if isinstance(block, tuple):
+            phase, duration_ms, cycle, protocol_id = block
+            breath_number += 1
+            segments.append(
+                BreathSegment(
+                    id=f"breath-{breath_number:04d}",
+                    duration_ms=duration_ms,
+                    phase=cast(Literal["inhale", "exhale"], phase),
+                    cycle=cycle,
+                    protocol_id=protocol_id,
+                )
+            )
+            continue
         if isinstance(block, int):
             if segments and isinstance(segments[-1], SilenceSegment):
                 combined = segments[-1].duration_ms + block
@@ -169,6 +297,10 @@ def build_script_timeline(
                 SpeechSegment(
                     id=f"speech-{speech_number:04d}",
                     text=block,
+                    delivery=cast(DeliveryStyle, speech_controls["delivery"]),
+                    intensity=cast(DeliveryIntensity, speech_controls["intensity"]),
+                    pace=cast(PaceIntent, speech_controls["pace"]),
+                    voice_mode=cast(VoiceMode, speech_controls["voice_mode"]),
                 )
             )
     if not any(isinstance(segment, SpeechSegment) for segment in segments):

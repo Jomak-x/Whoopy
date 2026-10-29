@@ -1,0 +1,97 @@
+{
+  "checked_at": "2026-10-28",
+  "caution": "Source audit, not a legal opinion or third-party rights clearance. Exact source snapshots and failures in licenses/sources.json.",
+  "runtime": {
+    "mlx-audio": {
+      "license": "MIT",
+      "revision": "8c244a1faff44cfa69e3151c195f52a4c1c90be5"
+    },
+    "dots-tts-mlx": {
+      "license": "Apache-2.0",
+      "revision": "f64479f51a2a9d7093533732cae86e765d8fb96e"
+    }
+  },
+  "candidates": [
+    {
+      "name": "Kokoro82M",
+      "code_license": "Apache-2.0",
+      "model_license_evidence": "Apache-2.0 model-card declaration",
+      "conversion_license_declaration": "Apache-2.0",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain Apache/license/NOTICE obligations; preserve original model-card dataset credits."
+    },
+    {
+      "name": "Qwen3-TTS1.7B CustomVoice/VoiceDesign",
+      "code_license": "Apache-2.0",
+      "model_license_evidence": "Apache-2.0 model-card declaration",
+      "conversion_license_declaration": "Apache-2.0 for pinned MLX8bit CustomVoice/VoiceDesign cards; separate MLXruntime MIT",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain Apache/license/NOTICE obligations."
+    },
+    {
+      "name": "VoxCPM2",
+      "code_license": "Apache-2.0",
+      "model_license_evidence": "Apache-2.0 model-card declaration",
+      "conversion_license_declaration": "Apache-2.0",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain Apache/license/NOTICE obligations."
+    },
+    {
+      "name": "ChatterboxMultilingualv3",
+      "code_license": "MIT",
+      "model_license_evidence": "MIT model-card declaration",
+      "conversion_license_declaration": "MIT",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain MIT copyright/license notices. S3Tokenizer conversion has no independent license declaration; upstream code Apache and model-card Apache declaration recorded."
+    },
+    {
+      "name": "MOSSLocalv1.5",
+      "code_license": "Apache-2.0",
+      "model_license_evidence": "Apache-2.0 model-card declaration",
+      "conversion_license_declaration": "Apache-2.0",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain Apache obligations and separate MOSS tokenizerv2 terms; model LICENSE404 recorded."
+    },
+    {
+      "name": "DotsSOAR",
+      "code_license": "Apache-2.0",
+      "model_license_evidence": "Apache-2.0 model-card declaration",
+      "conversion_license_declaration": "Apache-2.0",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain Apache/license/NOTICE obligations; standalone model LICENSE404 recorded."
+    },
+    {
+      "name": "FishAudioDrama3",
+      "code_license": "separate code not fully audited; model controls this exclusion",
+      "model_license": "Fish Audio Community License1.0",
+      "open_source": false,
+      "commercial_use": "community license while aggregate annual revenue <USD500000, conditions/transitions apply",
+      "hosting": "defined self-serve Hosted Service requires separate license; explicit exceptions include product-generated/controlled narration and finished-output production services; exactIII(c) retained",
+      "output": "as between user/Fish owned by user to extent permitted by law, subject to terms",
+      "redistribution": "license+notice, Built with Fish Audio attribution, use/consent/provenance restrictions",
+      "decision": "resource-preflight exclusion; no download/inference"
+    },
+    {
+      "name": "HiggsTTS3",
+      "model_license": "Boson Higgs TTS3 Research and Non-Commercial License",
+      "open_source": false,
+      "commercial_use": "separate license generally; limited Creator Use Grant for qualifying content/channels with attribution",
+      "hosting": "product/app/service embedding excluded from Creator Use Grant",
+      "output": "conditional ownership and significant output/use restrictions; not automatically reusable in a product",
+      "redistribution": "limited research/noncommercial terms; creator exception excludes distribution of materials/derivatives",
+      "decision": "license-fit exclusion; no download/inference"
+    }
+  ]
+}

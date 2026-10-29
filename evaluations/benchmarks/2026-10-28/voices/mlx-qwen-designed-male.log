@@ -1,0 +1,38 @@
+[transformers] You are using a model of type `qwen3_tts` to instantiate a model of type ``. This may be expected if you are loading a checkpoint that shares a subset of the architecture (e.g., loading a `sam2_video` checkpoint into `Sam2Model`), but is otherwise not supported and can yield errors. Please verify that the checkpoint is compatible with the model you are instantiating.
+  Initialized encoder codebooks
+Loaded speech tokenizer from /Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/weights/mlx-qwen-design/speech_tokenizer
+{
+  "candidate": "mlx-qwen-designed-male",
+  "seed": 20261028,
+  "script": "evaluations/benchmarks/2026-10-28/voice-script.txt",
+  "script_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "runner_sha256": "7d00045cc0e988f71b304a0d70ab45a5fe05c88f599d23e7f31f0a78f7ac63b6",
+  "settings": {
+    "instruct": "An adult man with a deep warm resonant baritone voice, clear English, calm natural delivery, relaxed pacing and gentle meditation guidance. No whispering.",
+    "lang_code": "English"
+  },
+  "postprocessing": [],
+  "segmentation": "identical nonempty paragraphs; native segments concatenated without inserted silence",
+  "runtime_python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "human_listening": "pending",
+  "segment_deadline_seconds": 480,
+  "available_memory_before_bytes": 13298860032,
+  "allocator_limit_bytes": 6856409088,
+  "device": "mlx-metal",
+  "model_repo": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+  "model_revision": "f90d617701d9f7f4ca499291e0b57f2b3c2fd2ee",
+  "mlx_audio_revision": "8c244a1faff44cfa69e3151c195f52a4c1c90be5",
+  "load_seconds": 6.072030333976727,
+  "status": "complete",
+  "raw_path": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-designed-male/raw.wav",
+  "raw_sha256": "cf901fa2915850c737a0b6a9e33a62d8512878008611bc49ff37a5f4a89ae389",
+  "sample_rate": 24000,
+  "duration_seconds": 45.6,
+  "synthesis_seconds": 40.73131620895583,
+  "speech_output_rtf": 0.8932306186174525,
+  "process_peak_rss_bytes": 3489251328,
+  "allocator_peak_bytes": 8043434149,
+  "mps_current_allocated_bytes": null,
+  "mps_driver_allocated_bytes": null,
+  "memory_note": "macOS ru_maxrss bytes; MLX allocator peak separately; MPS API has no peak counter here"
+}

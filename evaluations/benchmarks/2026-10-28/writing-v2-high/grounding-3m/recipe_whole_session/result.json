@@ -1,0 +1,10 @@
+{
+  "case": "grounding-3m",
+  "writing_method": "recipe_whole_session",
+  "prompt": "A seated grounding meditation after an overstimulating workday. Use contact and ordinary sounds, develop one simple practice, and return gently to the rest of the day.",
+  "target_seconds": 180,
+  "seed": 42,
+  "status": "interrupted_for_parser_fix",
+  "gpu_lock_wait_seconds": 114.89680758398026,
+  "reason": "Known model JSON fence envelope required strict normalization; completed legacy control preserved; successor writing-v3-high."
+}

@@ -1,0 +1,152 @@
+{
+  "model_revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
+  "runtime_identifier": "qwen3-tts-022e286",
+  "read_only_inventory": true,
+  "files": [
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/config.json",
+      "bytes": 4908,
+      "sha256": "17a07f527a1c25ea30b4e023a184482a23d3e279d697b1dc81b1bde498d29cf9"
+    },
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/generation_config.json",
+      "bytes": 245,
+      "sha256": "f1b90b4513f3b34c62851049e2492d7b4c5940daf1276f89c82b8ef04127f3aa"
+    },
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/merges.txt",
+      "bytes": 1671839,
+      "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+    },
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/model.safetensors",
+      "bytes": 3833402552,
+      "sha256": "38b1d5971bdbd982b561cccec982669a53b0537c3cf5e9bd4778ed07bb2f5137"
+    },
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/preprocessor_config.json",
+      "bytes": 127,
+      "sha256": "efdde1022ea9d76928bf7a9cd53139138f5ba2e466e837f08f6105ab1af1c119"
+    },
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/speech_tokenizer/config.json",
+      "bytes": 2336,
+      "sha256": "ee65bb901c876664ab8707c487157aa1a6ee57c65969b28fb5ec9dc211e68167"
+    },
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/speech_tokenizer/configuration.json",
+      "bytes": 76,
+      "sha256": "6bc26d64eb5024b4d1dab5a52371958b429256d6c9d59787f1f5294a54e0cebd"
+    },
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/speech_tokenizer/model.safetensors",
+      "bytes": 682293092,
+      "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"
+    },
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/speech_tokenizer/preprocessor_config.json",
+      "bytes": 234,
+      "sha256": "fcb3805e597e786d4067706e602f6688524640f8d3396790e2e09b5942fcbdfb"
+    },
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/tokenizer_config.json",
+      "bytes": 7344,
+      "sha256": "dc3c31c3bdaedd5016382bb3cbe07323026775ad51f5a4fb564505992ae4a670"
+    },
+    {
+      "path": "models/managed/model-packs/qwen3-tts-custom-voice-1.7b/files/vocab.json",
+      "bytes": 2776833,
+      "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/__init__.py",
+      "bytes": 839,
+      "sha256": "ea52de59d070fde366467a6902d0edcfc1b0575b8c570a0c71020c41d6a593ed"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/__main__.py",
+      "bytes": 800,
+      "sha256": "7791bc1fe172af87902c52d83262aaf32f1029219a013db1df16dc6730501d97"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/cli/demo.py",
+      "bytes": 29160,
+      "sha256": "ea28e0930753e05cbdd53ab7bd90b7be81ab859549902771db15f0b3abfcd5eb"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/__init__.py",
+      "bytes": 990,
+      "sha256": "1b380d9de843b6d585d938c339d066136567ca7125412674234204af4386679e"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/models/__init__.py",
+      "bytes": 807,
+      "sha256": "917d38d8fd7ed84de73703fd2394d535ca416e15694d1e50324e4a06d4022c82"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/models/configuration_qwen3_tts.py",
+      "bytes": 26428,
+      "sha256": "f52867f14fde06a416dd14864d503ce6d13d0a08d5f5da30191e1c80c13f5d18"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/models/modeling_qwen3_tts.py",
+      "bytes": 100211,
+      "sha256": "25c42656bcf810f06ef6bc1839bd7083f3c8cfedac3a147c4060b4262b1c96a0"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/models/processing_qwen3_tts.py",
+      "bytes": 4022,
+      "sha256": "61472203188e46eda68d740c25f0f228ece24a61ecf942e57d6e49e78b4d6bcd"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/tokenizer_12hz/configuration_qwen3_tts_tokenizer_v2.py",
+      "bytes": 7946,
+      "sha256": "9e30c24394b00cb0366d7da3482b7436468acc1cd3da1a6fe614a1d34653a5e3"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/tokenizer_12hz/modeling_qwen3_tts_tokenizer_v2.py",
+      "bytes": 40519,
+      "sha256": "844e8dd8c0182ef9c6463c874631c22ef3c5a4fd1899dd657016164cc5379628"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/tokenizer_25hz/configuration_qwen3_tts_tokenizer_v1.py",
+      "bytes": 14494,
+      "sha256": "28f94f715df7d96d365c9cea0021d9cca8c63d2f48f48423c43a3d3cae28ef02"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/tokenizer_25hz/modeling_qwen3_tts_tokenizer_v1.py",
+      "bytes": 56527,
+      "sha256": "8c6d5b7cfb133967f04286e069138ef7fe0cfca30e9acf3326106f6117135a7f"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/tokenizer_25hz/vq/assets/mel_filters.npz",
+      "bytes": 4271,
+      "sha256": "7450ae70723a5ef9d341e3cee628c7cb0177f36ce42c44b7ed2bf3325f0f6d4c"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/tokenizer_25hz/vq/core_vq.py",
+      "bytes": 20074,
+      "sha256": "d35fa9f00ef4863361493e102f4e28f092488497117df580819e93b5dff3b8de"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/tokenizer_25hz/vq/speech_vq.py",
+      "bytes": 14833,
+      "sha256": "7c68fcba8c508d8a18e2241b563302d1bf46f8ecb1515c59222263d8524bb298"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/core/tokenizer_25hz/vq/whisper_encoder.py",
+      "bytes": 14351,
+      "sha256": "a1748b34968ba8effebf902c4a4399941b3e49bca3f6c0120fc673e3ba7d767d"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/inference/qwen3_tts_model.py",
+      "bytes": 37121,
+      "sha256": "e1da450732857c1f5fe3e36ebab85db2f6dc6a48caaff6973f463384e30275e4"
+    },
+    {
+      "path": "models/managed/runtimes/qwen3-tts-022e286/qwen_tts/inference/qwen3_tts_tokenizer.py",
+      "bytes": 15699,
+      "sha256": "ac2d855022a1bd21d33ab7b267ec952eef71f81d3f8d969a306139ff1a929515"
+    }
+  ]
+}

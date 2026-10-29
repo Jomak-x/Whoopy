@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -32,6 +33,20 @@ class GenerationManifest(BaseModel):
     plan_prompt_version: int = Field(ge=1)
     section_prompt_id: str = Field(min_length=1)
     section_prompt_version: int = Field(ge=1)
+    writing_method: Literal[
+        "plan_first",
+        "blueprint_first_sparse",
+        "three_candidate_structural_selection",
+        "recipe_whole_session",
+    ] = "plan_first"
+    recipe_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    whole_session_prompt_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    whole_session_contract_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    whole_session_response_schema_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    whole_session_timing_algorithm_version: int | None = Field(default=None, ge=1)
+    whole_session_schema_algorithm_version: int | None = Field(default=None, ge=1)
     adapter: AdapterMetadata
 
 
@@ -111,6 +126,27 @@ class GenerationWorkspace:
             return section
         except (OSError, ValidationError, ValueError) as error:
             raise WorkspaceError(f"Invalid section checkpoint {path}: {error}") from error
+
+    def save_whole_session(self, value: dict[str, object]) -> None:
+        """Checkpoint a whole draft atomically; it must be revalidated as a whole."""
+
+        import json
+
+        self._write(self.root / "whole-session.json", json.dumps(value, indent=2) + "\n")
+
+    def load_whole_session(self) -> dict[str, object] | None:
+        import json
+
+        path = self.root / "whole-session.json"
+        if not path.exists():
+            return None
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(value, dict):
+                raise ValueError("whole-session checkpoint must be an object")
+            return value
+        except (OSError, ValueError) as error:
+            raise WorkspaceError(f"Invalid whole-session checkpoint: {error}") from error
 
     def save_outputs(self, script: str, timeline: Timeline) -> None:
         self._write(self.root / "script.md", script)

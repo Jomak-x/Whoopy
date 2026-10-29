@@ -1,0 +1,34 @@
+schema_version: 1
+recipes:
+  - id: good-night-reflection
+    version: 1
+    ending: sleep_taper
+    beats:
+      - {id: comfort, technique: arrival, weight: 1, purpose: Choose supported comfort and retain permission to adjust.}
+      - {id: orientation, technique: focused_attention, weight: 1, purpose: Orient through bodily contact and ambient sound.}
+      - {id: arrival, technique: focused_attention, weight: 1, purpose: Arrive at the selected anchor without requiring any change.}
+      - {id: body, technique: body_scan, weight: 2, purpose: Notice body areas in one ordered neutral sequence.}
+      - {id: reflection, technique: reflection, weight: 1, purpose: Recall one bounded ordinary moment and offer one genuine question.}
+      - {id: response, technique: resting_awareness, weight: 1, purpose: Leave response space without answering the question or adding another.}
+      - {id: release, technique: focused_attention, weight: 1, purpose: Release the reflection and return to the original bodily or sound anchor.}
+      - {id: taper, technique: sleep_transition, weight: 2, purpose: Gradually reduce guidance toward quiet rest with no waking instruction.}
+  - id: sleep-settling
+    version: 1
+    ending: sleep_taper
+    beats:
+      - {id: comfort, technique: arrival, weight: 1, purpose: Choose supported comfort and retain permission to adjust.}
+      - {id: orientation, technique: focused_attention, weight: 1, purpose: Orient through bodily contact and ambient sound.}
+      - {id: arrival, technique: focused_attention, weight: 1, purpose: Arrive at one selected anchor without requiring change.}
+      - {id: practice, technique: body_scan, weight: 2, purpose: Notice body areas in one ordered neutral sequence.}
+      - {id: integration, technique: resting_awareness, weight: 1, purpose: Rest with familiar support and fewer new instructions.}
+      - {id: taper, technique: sleep_transition, weight: 2, purpose: Gradually reduce guidance toward quiet rest with no waking instruction.}
+  - id: daytime-steadying
+    version: 1
+    ending: daytime_reorientation
+    beats:
+      - {id: comfort, technique: arrival, weight: 1, purpose: Choose supported comfort and retain permission to adjust.}
+      - {id: orientation, technique: focused_attention, weight: 1, purpose: Orient externally through sound and bodily support before inward attention.}
+      - {id: anchor, technique: focused_attention, weight: 1, purpose: Introduce one suitable anchor and explain how to return after wandering.}
+      - {id: practice, technique: focused_attention, weight: 3, purpose: Develop one practice suited to the original request using the familiar anchor.}
+      - {id: integration, technique: resting_awareness, weight: 2, purpose: Give greater independence with occasional concrete reminders and less instruction.}
+      - {id: return, technique: return, weight: 1, purpose: Reorient through surrounding sounds and optional small movement before resuming the day.}

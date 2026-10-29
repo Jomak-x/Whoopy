@@ -1,237 +1,231 @@
-# Architecture Overview
+# Local V1 Architecture
 
-## Big Picture
+Whoopy Local V1 is one self-hosted browser product around a durable native generation engine. The
+public Commons concept, accounts, cloud services, mobile generation, ambience, and publishing are
+outside this architecture.
 
-Whoopy is built as a local generation engine plus an optional public distribution layer.
-
-The local engine exists to solve the hard problem first: generate a deterministic meditation audio file natively on an ordinary Windows, macOS, or Linux laptop. The public platform comes later because it adds network, moderation, storage, and license complexity that should not block the core experience.
-
-## Why The System Is Split This Way
-
-The split is intentional:
-
-- The local core keeps the first version usable without cloud dependencies.
-- The public platform can evolve independently when the core audio pipeline is stable.
-- The same canonical timeline contract can power both products, which avoids duplicate logic.
-
-This is a common pattern in system design: keep the expensive, failure-prone, or privacy-sensitive path small and local, then build a broader networked product on top of the same data model once the core behavior is proven.
-
-## Current Executable Slice
-
-Phases 1–3 implement a small vertical slice of the future architecture:
-
-```text
-CLI -> LocalControlPlane -> run.json (queued)
-                              |
-CLI -> LocalWorker -----------+
-        |
-        +-> run.json (running)
-        +-> timeline.json (SPEECH / SILENCE)
-        +-> segments/<speech-id>/checkpoint.json + audio.pcm
-        +-> runs/.cache/segments/<sha256>/metadata.json + audio.pcm
-        +-> narration.wav
-        +-> audio-manifest.json
-        +-> quality.json
-        +-> run.json (completed or failed)
-```
-
-The control plane only accepts and records work. The worker alone processes it.
-Both use an inspectable filesystem store today; future FastAPI and queue layers
-can call the same boundaries. Speech is currently an audible fixture tone, not
-an AI-generated voice. Silence is exact PCM. Speech segments are cached by
-synthesis-input hash, checkpointed per run, retried only for classified
-transient/quality failures, and reusable during resume. The completed WAV is
-read back through an integrity gate.
-
-If a process stops during segment N, `whoopy run resume RUN_ID` revalidates the
-saved timeline and completed checkpoints, then restarts at the first unhealthy
-segment. Identical work in another run can use the shared content-addressed
-cache.
-
-## Core Components
+## Runtime Shape
 
 ```mermaid
 flowchart LR
-  A[Prompt] --> B[SvelteKit UI]
-  B --> C[FastAPI control plane]
-  C --> D[Huey job queue + SQLite]
-  D --> E[Native generation worker]
-  E --> P[Hardware profile and safe runtime]
-  P --> F[Canonical timeline JSON]
-  F --> G[TTS per segment]
-  G --> H[Audio assembly]
-  H --> I[Mix and master]
-  I --> J[FLAC / AAC / Opus output]
-  J --> K[Optional publish to Commons]
+  Browser["Studio and Lab\nSvelte static bundle"] --> API["FastAPI /api/v1\nloopback only"]
+  API --> Store["Run directories\nauthoritative"]
+  API --> Catalog["SQLite catalog\nrebuildable projection"]
+  API --> Worker["One native worker\ndurable lease + checkpoints"]
+  Worker --> LLM["Local LLM adapter\noptional in Basic"]
+  Worker --> TTS["Typed TTS adapter\none heavyweight slot"]
+  Worker --> Timeline["Canonical timeline\nspeech + exact quiet"]
+  Timeline --> Master["narration.wav\nquality evidence"]
+  Master --> Exports["WAV FLAC M4A Opus\nverified manifest"]
+  API --> Lab["Versioned experiments\nproduction artifacts"]
 ```
 
-### UI
+`whoopy app` composes these pieces, reconciles interrupted state, binds to `127.0.0.1`, serves the
+bundled frontend, and opens the browser. `whoopy web` is only a legacy alias.
 
-The UI is the human control surface. Its job is to submit prompts, show run status, surface logs, and let a user inspect or restart a generation.
+## Product Surfaces
 
-Why it exists:
+### Studio
 
-- Users need visibility into long-running generation jobs.
-- A PWA can run close to the system while still feeling lightweight.
-- The UI is not responsible for generation logic, which keeps it simpler.
+Studio presents reviewed defaults and safe controls:
 
-### FastAPI Control Plane
+- prompt or authored-script creation;
+- requested duration and meditation kind;
+- only model paths proven ready on this machine;
+- typed delivery and pace intentions;
+- durable progress/cancel/resume;
+- searchable local library;
+- Plan, Script, Timeline, Delivery, and Listen views;
+- immutable revisions, restore, and selective rerender;
+- recoverable deletion and verified finished exports.
 
-The API is the orchestration layer. It creates jobs, tracks run state, and exposes the pieces the UI needs.
+The frontend never implements generation rules. It calls `/api/v1`, renders durable state, and
+plays or downloads saved artifacts.
 
-Why it exists:
+### Lab
 
-- It gives the UI a stable contract.
-- It keeps business rules out of the frontend.
-- It makes the worker replaceable without rewriting the user-facing app.
+Lab uses the same adapters, generation paths, timelines, revisions, and audio files as Studio. Its
+domain supports five controlled comparisons:
 
-### Queue And Database
+1. LLM with prompt, seed, schema, and blueprint held constant;
+2. writing method with model inputs held constant;
+3. voice with text and silence held constant;
+4. delivery style/intensity with text, silence, voice identity, language, mode, and pace held
+   constant;
+5. pacing with script and voice held constant.
 
-The spec chooses a lightweight local queue and SQLite for the first phase.
+Experiments are versioned and sequential, not a full Cartesian product. Results retain automatic
+metrics without a hidden combined score, blind presentation assignments, human 1–5 ratings,
+baseline comparisons, and promotion/rejection decisions. The bundled Lab creates a one-case
+experiment and starts the default `LocalProductionExperimentExecutor`, which launches the same
+durable child-process generation path as Studio. A candidate condition the production pipeline does
+not expose becomes durable failed-trial evidence instead of a simulated result.
 
-Why it exists:
+## Security Boundary
 
-- It is easy to run on one machine.
-- It keeps setup simple.
-- It captures enough job state to resume, inspect, and debug runs.
+The local API:
 
-### Native Generation Worker And Runtime Selection
+- accepts only `127.0.0.1` or `localhost` hosts;
+- uses Trusted Host validation;
+- rejects cross-origin mutations;
+- bounds ordinary and voice-reference request bodies;
+- validates UUIDs, segment IDs, revision IDs, and managed paths;
+- sends no-store, content-type, and content-security response headers;
+- exposes no cloud endpoint.
 
-The worker is where model work happens. It runs natively so it can use the best local CPU or accelerator without requiring Docker. Before model management acts, hardware inspection selects the highest safe Basic, Lite, Standard, High, or Studio profile.
+Loopback is a privacy boundary, not an authentication system. Other software running as the same OS
+user may still read accessible files or attempt loopback requests. Operating-system account and
+disk security remain relevant.
 
-Why it exists:
+## Durable Source Of Truth
 
-- llama.cpp/GGUF provides the universal local text path across CPU, Metal, CUDA, Vulkan, and other supported backends.
-- sherpa-onnx/Kokoro provides the universal local speech path.
-- Optional platform accelerators remain adapters rather than product requirements.
-- Basic mode keeps the product useful without a local LLM.
-- Unsafe machines are refused before a model download or load.
+Each run directory is authoritative:
 
-### Canonical Timeline
+```text
+runs/<uuid>/
+├── run.json
+├── generation-request.json       # prompt mode before planning
+├── plan.json                     # generated mode
+├── raw-model-output/             # preserved attempts
+├── draft-sections/               # accepted section checkpoints
+├── script.md
+├── resolved-config.json
+├── model-metadata.json
+├── timeline.json
+├── segments/<segment-id>/        # verified speech checkpoints
+├── narration.wav
+├── audio-manifest.json
+├── quality.json
+├── revisions/
+├── exports/
+└── worker.log / events.jsonl
+```
 
-The canonical timeline is the most important data structure in the system. It describes the meditation as a sequence of segments such as speech, silence, breath, and music cues.
+`run.json` records queued, running, interrupted, failed, or completed state plus ownership, stage,
+heartbeat, lease, progress, recovery counters, and a durable `studio`, `lab`, or `system` audience.
+A process death cannot make a partial output look complete because artifact references are committed
+only after validation. The audience keeps production-backed experiments and acceptance diagnostics
+out of the everyday Studio library without deleting or weakening their evidence.
 
-Why it exists:
+The SQLite file at `runs/.whoopy-catalog.sqlite3` accelerates library search, stores local UI
+settings, and projects version-keyed Lab experiments, ratings, and decisions. Lab JSON under
+`runs/.whoopy-lab/` remains authoritative. Startup and Lab mutations atomically rebuild the
+disposable projection; schema upgrades discard only those derived Lab rows while preserving run
+and settings data.
 
-- It makes pauses explicit.
-- It gives the renderer a deterministic input.
-- It allows partial regeneration without losing the full structure.
-- It gives the public platform a stable artifact to share.
+## Generation Pipeline
 
-### Audio Pipeline
+### 1. Hardware and model truth
 
-The audio pipeline is intentionally staged:
+Hardware inspection normalizes the current operating system/architecture, measures live RAM and
+disk, and records available CPU/Metal/CUDA capabilities. Release acceptance additionally probes a
+working Vulkan loader. A quality profile is selected before a precise model.
 
-1. Plan the content.
-2. Write the script in small parts.
-3. Compile prose and cues into a canonical timeline.
-4. Synthesize audio per segment.
-5. Trim and normalize the segments.
-6. Assemble them with exact pauses.
-7. Add ambience, mix, master, and encode.
+Model readiness has three separate layers:
 
-Why it exists:
+1. pinned files and extracted trees match their expected hashes;
+2. the isolated runtime starts on this machine/revision;
+3. a current, offline, real synthesis returns valid audible PCM.
 
-- Small units are easier to debug than a single large generation.
-- Deterministic silence prevents TTS timing drift from corrupting pacing.
-- Per-segment synthesis allows caching and targeted fixes.
+Only the third state is `ready`. Heavy models share one kernel-backed slot and are loaded
+sequentially.
 
-## The Most Important Design Decisions
+### 2. Meditation Engine V2
 
-### 1. Native worker on every supported operating system
+Prompt mode first selects one reviewed, versioned blueprint. A plan describes the technique,
+arrival, practice development, ending, purpose of each spoken block, silence intent, breath mode,
+and delivery intent.
 
-The model worker is not put inside Docker. Windows, macOS, and Linux receive native processes built for their platform.
+The LLM supplies bounded prose. It cannot invent pause durations, breath ratios, holds, or an
+unsupported exercise. Editorial checks cover request fidelity, repetition, vague reassurance,
+abrupt transitions, unsafe claims, excessive narration, and incorrect daytime/sleep endings.
+Rejected sections can be regenerated without discarding accepted sections or raw evidence.
 
-Reason:
+### 3. Canonical typed timeline
 
-- Native execution allows llama.cpp and ONNX Runtime to use CPU, Metal, CUDA, Vulkan, and other available providers directly.
-- A single logical adapter path prevents users from choosing backends manually.
-- Container availability does not decide whether the local product works.
+The compiler converts accepted script controls into typed events:
 
-### 2. Hardware profiles before model selection
+- `SPEECH`: clean text plus delivery, intensity, language, voice mode, pace, and pronunciation
+  metadata;
+- `SILENCE`: exact milliseconds with deterministic intent/allocation upstream;
+- `BREATH`: reviewed inhale or exhale event, exact milliseconds, cycle, and protocol ID.
 
-The system selects capabilities before it selects a precise model artifact.
+Bracket controls such as `[delivery: calm]` never remain in speech text. Unknown bracket controls
+fail compilation. Model-native pause markup does not replace exact timeline silence.
 
-Reason:
+### 4. Segment synthesis, cache, and recovery
 
-- The same large model cannot run safely on every laptop.
-- Live available memory matters, not only installed memory.
-- Basic mode can still provide templates, pasted scripts, local TTS, and deterministic rendering.
-- Refusing early is safer than downloading a model and discovering an out-of-memory failure later.
+Each speech adapter declares honest capabilities and translates typed intent independently. Every
+control that can change audio is part of adapter metadata, the cache identity, and run evidence.
 
-### 3. Timeline first, audio second
+Speech segments are synthesized independently. The shared content-addressed cache and per-run
+checkpoint store validate metadata and PCM hashes before reuse. Transient failures retry within a
+bound; fatal or invalid-audio failures remain actionable. Heartbeats renew an active lease; expired
+leases reconcile to a resumable interruption. Release acceptance can opt into an otherwise dormant
+stage observer: only after `run.json` contains the new stage does it write a PID/run/stage marker and
+pause for the harness to terminate it. Recovery validation hashes healthy work before and after the
+restart; corrupt checkpoint or cache PCM is treated as a miss and regenerated rather than trusted.
 
-The system treats the timeline as the source of truth.
+### 5. Deterministic assembly, encoding, and QC
 
-Reason:
+The renderer assembles normalized mono 24 kHz signed 16-bit speech with exact silence/breath frames.
+The audio manifest maps every timeline event to exact frame ranges and hashes. Quality inspection
+checks sample format, requested quiet timing, whole/segment hashes, audible signal, headroom,
+clipping, and joins before the run becomes completed.
 
-- Prose alone is ambiguous.
-- Audio files alone are hard to reason about.
-- A timeline makes the structure inspectable, resumable, and testable.
+### 6. Revisions and selective rerender
 
-### 4. Exact silence segments
+An edit creates an immutable revision, validates it, atomically activates it, and leaves earlier
+revisions restorable. Silence-only changes require assembly; delivery changes invalidate affected
+speech; script changes compare segment identities. Healthy checkpoint/cache work remains reusable.
 
-Deliberate pauses are represented as explicit silence segments instead of being left to TTS timing.
+### 7. Finished export activation
 
-Reason:
+`narration.wav` remains the master. FFmpeg encodes PCM WAV, FLAC, AAC in M4A, and Opus into a sibling
+staging directory. FFprobe verifies expected codec, duration, channels, and metadata; FFmpeg fully
+decodes each output; SHA-256 values are saved. The complete directory is activated only after
+`export-manifest.json` is durable. Existing exports are restored if activation fails.
 
-- Meditation quality depends on pause precision.
-- TTS is not reliable enough to guess exact timing.
-- Explicit silence makes the output reproducible.
+## Ports And Adapters
 
-### 5. Ports and adapters
+Domain code depends on typed ports rather than model names. An adapter owns:
 
-LLM, TTS, ambience, renderer, publisher, and moderation are all behind typed interfaces.
+- model/runtime/license metadata;
+- accepted voice modes, delivery styles, pace intents, languages, and instructions;
+- prompt or request translation;
+- process startup, bounded diagnostics, timeout, and cleanup;
+- output PCM validation and device evidence;
+- a cache identity covering every output-affecting setting.
 
-Reason:
+Kokoro is the portable preset-voice path. Fish, MOSS, and Qwen3-TTS variants are optional expressive
+adapters with narrower contracts. See [model capabilities](model-capabilities.md).
 
-- The model choice can change without forcing a rewrite.
-- Licensing and backend metadata can travel with each adapter.
-- Testing becomes easier because each port can be mocked.
+## Offline Behavior
 
-### 6. License-aware public sharing
+Network access is an explicit acquisition concern, not an inference dependency. Defaults disable
+remote fallback. After packages and model packs are installed, Studio, generation, editing,
+evaluation artifacts, playback, and exports operate locally.
 
-Anything that may enter the public platform has to be checked for redistribution rights.
+The release audit distinguishes:
 
-Reason:
+- configured offline policy;
+- real offline smoke evidence for required models;
+- an operator assertion that the OS network was disabled during testing;
+- end-to-end scenarios run on this exact target.
 
-- The local product can be permissive.
-- The public platform has stronger legal and licensing constraints.
-- Separating them prevents accidental license contamination.
+It never infers that another target passed. The release matrix contains Windows x64, macOS
+ARM64/x64, and Linux ARM64/x64; unrun entries remain `not_run`.
 
-## How The Pieces Interact
+## Deliberate Exclusions
 
-1. The user submits a prompt in the UI.
-2. The control plane creates a job and stores the initial state.
-3. The queue hands the job to the native worker.
-4. The worker asks the planner model for a structure.
-5. The script generator writes the meditation in small sections.
-6. The compiler converts prose plus cues into the canonical timeline.
-7. The TTS backend generates each speech segment separately.
-8. The renderer inserts exact pauses, assembles the bed, mixes, and masters the final audio.
-9. The run artifacts are saved locally for inspection and replay.
-10. If the result is meant for sharing, a publish step creates the public manifest and uploads the encoded assets.
+Local V1 produces narration-only meditations. Ambience/music configuration that survives in older
+configuration or design notes is not connected to the shipped workflow. Commons, accounts, mobile
+model execution, cloud generation, and public publishing are later product decisions and cannot be
+required by the local pipeline.
 
-## Failure Domain Thinking
+## Historical Architecture Notes
 
-The architecture tries to keep failures small:
-
-- A bad segment should only require regenerating that segment.
-- A model mismatch should be isolated behind a single adapter.
-- A rendering failure should not invalidate the script.
-- A public platform problem should not stop local generation.
-
-That is a classic resilience pattern: isolate the parts that fail differently.
-
-## What To Challenge If You Disagree
-
-When you question a design choice, ask these questions:
-
-- What problem does this decision solve?
-- What breaks if we remove it?
-- What gets simpler if we replace it?
-- Does the new approach still preserve deterministic pauses and resumability?
-- Does it still work natively on supported Windows, macOS, and Linux laptops without cloud dependencies?
-- Does Basic mode remain useful when a local LLM is unsafe?
-
-If a proposed change weakens those answers, the burden of proof is on the change.
+The phase documents and old diagrams describe intermediate fixture workers, dependency-free tester
+pages, proposed Huey queues, ambience, or public publishing. They are retained to explain design
+decisions, but they are not current architecture. In particular, Local V1 reuses the durable worker
+and filesystem store; it does not add Huey, Redis, Postgres, Docker, or a separate Node process.

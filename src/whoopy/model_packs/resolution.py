@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from whoopy.model_packs.operations import ModelPackOperationError
 from whoopy.model_packs.registry import (
+    HardwareRequirement,
     ModelPackRegistry,
     ModelPackSpec,
     ModelPackState,
@@ -151,6 +152,7 @@ class ResolvedTTSModelPack(BaseModel):
     checkpoint_directory: Path
     codec_directory: Path | None = None
     reference: ResolvedVoiceReference
+    hardware_requirement: HardwareRequirement
 
 
 def models_root_from_artifact_store(artifact_store_root: Path) -> Path:
@@ -251,4 +253,5 @@ def resolve_tts_model_pack(
         checkpoint_directory=status.selected_directory,
         codec_directory=codec_directory,
         reference=resolve_voice_reference(references_path, models_root=models_root),
+        hardware_requirement=pack.hardware,
     )

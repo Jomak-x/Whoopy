@@ -1,0 +1,95 @@
+{
+  "action": "smoke-test",
+  "pack_id": "kokoro",
+  "state": "ready",
+  "message": "Offline Kokoro multilingual v1.0 probe rendered 2.27s and unloaded.",
+  "status": {
+    "pack_id": "kokoro",
+    "display_name": "Kokoro multilingual v1.0",
+    "revision": "v1_0-release-2026-10-26",
+    "state": "ready",
+    "selected_directory": "models/managed/installed/kokoro_multilang_v1_0/kokoro-multi-lang-v1_0",
+    "license_id": "Apache-2.0",
+    "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+    "commercial_use_allowed": true,
+    "license_notice": "Apache-2.0 permits commercial and non-commercial local use.",
+    "files": [
+      {
+        "relative_path": "model.onnx",
+        "absolute_path": "models/managed/installed/kokoro_multilang_v1_0/kokoro-multi-lang-v1_0/model.onnx",
+        "exists": true,
+        "expected_size_bytes": 325560556,
+        "actual_size_bytes": 325560556,
+        "digest_verified": true,
+        "message": "size and digest verified"
+      },
+      {
+        "relative_path": "voices.bin",
+        "absolute_path": "models/managed/installed/kokoro_multilang_v1_0/kokoro-multi-lang-v1_0/voices.bin",
+        "exists": true,
+        "expected_size_bytes": 28200960,
+        "actual_size_bytes": 28200960,
+        "digest_verified": true,
+        "message": "size and digest verified"
+      },
+      {
+        "relative_path": "tokens.txt",
+        "absolute_path": "models/managed/installed/kokoro_multilang_v1_0/kokoro-multi-lang-v1_0/tokens.txt",
+        "exists": true,
+        "expected_size_bytes": 687,
+        "actual_size_bytes": 687,
+        "digest_verified": true,
+        "message": "size and digest verified"
+      }
+    ],
+    "checks": [
+      {
+        "check": "platform",
+        "passed": true,
+        "message": "darwin-arm64 is supported"
+      },
+      {
+        "check": "pinned_files",
+        "passed": true,
+        "message": "all pinned files match size and digest"
+      },
+      {
+        "check": "installed_tree",
+        "passed": true,
+        "message": "the complete extracted model tree at models/managed/installed/kokoro_multilang_v1_0 matches its pinned digest"
+      },
+      {
+        "check": "shard_indexes",
+        "passed": true,
+        "message": "not sharded"
+      },
+      {
+        "check": "hardware_preflight",
+        "passed": true,
+        "message": "hardware preflight passed"
+      },
+      {
+        "check": "isolated_runtime_files",
+        "passed": true,
+        "message": "isolated runtime found at models/managed/python/sherpa_onnx_1_13_4_darwin_arm64"
+      },
+      {
+        "check": "runtime_probe",
+        "passed": true,
+        "message": "Isolated runtime started for the offline synthesis probe."
+      },
+      {
+        "check": "offline_smoke_test",
+        "passed": true,
+        "message": "Offline Kokoro multilingual v1.0 probe rendered 2.27s and unloaded."
+      },
+      {
+        "check": "playable_smoke_sample",
+        "passed": true,
+        "message": "retained playable sample matches 2.27s synthesis evidence"
+      }
+    ]
+  },
+  "progress": null,
+  "receipt_id": null
+}

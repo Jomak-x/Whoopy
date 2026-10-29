@@ -1,0 +1,21 @@
+{
+  "samples": [
+    {
+      "unix_time": 1793233134.059155,
+      "available_bytes": 17832804352,
+      "swap_used_bytes": 11797135360
+    },
+    {
+      "unix_time": 1793233136.063791,
+      "available_bytes": 25341280256,
+      "swap_used_bytes": 11797135360
+    },
+    {
+      "unix_time": 1793233138.067489,
+      "available_bytes": 27617771520,
+      "swap_used_bytes": 11788746752
+    }
+  ],
+  "stable_available_floor_bytes": 17179869184,
+  "passed": true
+}

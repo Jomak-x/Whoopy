@@ -1,0 +1,234 @@
+{
+  "scope": "local fixed-script voice audition; ASR/signal qualification is not human voice preference",
+  "script_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "runner_sha256": "87d65c6ec6e00b8ba1d3996ad09591b03abe046a4bbf366ffdaf31922601de45",
+  "rendered_complete_auditions": 9,
+  "resource_incomplete_auditions": 1,
+  "rows": [
+    {
+      "candidate": "chatterbox-v3-synthetic-male",
+      "render_status": "complete",
+      "verification_status": "pass",
+      "word_error_rate": 0.0,
+      "human_listening": "pending",
+      "duration_seconds": 41.68,
+      "synthesis_seconds": 62.458584624982905,
+      "speech_output_rtf": 1.4985265025187837,
+      "process_peak_rss_bytes": 3502833664,
+      "allocator_peak_bytes": 5301144148,
+      "settings": {
+        "lang_code": "en",
+        "exaggeration": 0.1,
+        "cfg_weight": 0.5,
+        "temperature": 0.8,
+        "max_new_tokens": 1500,
+        "verbose": false,
+        "ref_audio": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/voxcpm2-reference/raw.wav"
+      },
+      "report": "evaluations/benchmarks/2026-10-28/voices/chatterbox-v3-synthetic-male/report.json",
+      "verification_report": "evaluations/benchmarks/2026-10-28/verification/chatterbox-v3-synthetic-male.json",
+      "raw_path": "evaluations/benchmarks/2026-10-28/voices/chatterbox-v3-synthetic-male/raw.wav",
+      "raw_sha256": "f924d5883c46ecc8631313799a53974e0d8b64f124f58e24430be32e99afabaf"
+    },
+    {
+      "candidate": "dots-soar-synthetic-male",
+      "render_status": "incomplete_memory_pressure",
+      "verification_status": "not_available",
+      "word_error_rate": null,
+      "human_listening": "pending",
+      "duration_seconds": null,
+      "synthesis_seconds": null,
+      "speech_output_rtf": null,
+      "process_peak_rss_bytes": null,
+      "allocator_peak_bytes": null,
+      "settings": {
+        "num_steps": 10,
+        "guidance_scale": 1.2,
+        "speaker_scale": 1.5,
+        "language": "EN",
+        "max_generate_length": 350,
+        "trim_onset": false,
+        "streaming_decode": true
+      },
+      "report": "evaluations/benchmarks/2026-10-28/voices/dots-soar-synthetic-male/report.json",
+      "verification_report": null,
+      "raw_path": null,
+      "raw_sha256": null
+    },
+    {
+      "candidate": "kokoro-af-heart-080",
+      "render_status": "complete",
+      "verification_status": "pass",
+      "word_error_rate": 0.0,
+      "human_listening": "pending",
+      "duration_seconds": 50.25,
+      "synthesis_seconds": 7.7914012089022435,
+      "speech_output_rtf": 0.15505276037616406,
+      "process_peak_rss_bytes": 836206592,
+      "allocator_peak_bytes": 2718070255,
+      "settings": {
+        "voice": "af_heart",
+        "lang_code": "a",
+        "speed": 0.8
+      },
+      "report": "evaluations/benchmarks/2026-10-28/voices/kokoro-af-heart-080/report.json",
+      "verification_report": "evaluations/benchmarks/2026-10-28/verification/kokoro-af-heart-080.json",
+      "raw_path": "evaluations/benchmarks/2026-10-28/voices/kokoro-af-heart-080/raw.wav",
+      "raw_sha256": "5b60a9636570c8bef5bc06671009f9e94d34bd1fd164c053b0a2dd10e4476964"
+    },
+    {
+      "candidate": "kokoro-am-michael",
+      "render_status": "complete",
+      "verification_status": "pass",
+      "word_error_rate": 0.0,
+      "human_listening": "pending",
+      "duration_seconds": 44.525,
+      "synthesis_seconds": 21.434416001022328,
+      "speech_output_rtf": 0.4814018192256559,
+      "process_peak_rss_bytes": 832667648,
+      "allocator_peak_bytes": 2707771310,
+      "settings": {
+        "voice": "am_michael",
+        "lang_code": "a",
+        "speed": 1.0
+      },
+      "report": "evaluations/benchmarks/2026-10-28/voices/kokoro-am-michael/report.json",
+      "verification_report": "evaluations/benchmarks/2026-10-28/verification/kokoro-am-michael.json",
+      "raw_path": "evaluations/benchmarks/2026-10-28/voices/kokoro-am-michael/raw.wav",
+      "raw_sha256": "ab2de52ae5f95b6ed2c43409d4c31f232b6fb4b2799877b7097939d8d256ed4f"
+    },
+    {
+      "candidate": "kokoro-bm-george-080",
+      "render_status": "complete",
+      "verification_status": "pass",
+      "word_error_rate": 0.0,
+      "human_listening": "pending",
+      "duration_seconds": 54.125,
+      "synthesis_seconds": 9.554450041032396,
+      "speech_output_rtf": 0.1765256358620304,
+      "process_peak_rss_bytes": 835321856,
+      "allocator_peak_bytes": 2778234156,
+      "settings": {
+        "voice": "bm_george",
+        "lang_code": "b",
+        "speed": 0.8
+      },
+      "report": "evaluations/benchmarks/2026-10-28/voices/kokoro-bm-george-080/report.json",
+      "verification_report": "evaluations/benchmarks/2026-10-28/verification/kokoro-bm-george-080.json",
+      "raw_path": "evaluations/benchmarks/2026-10-28/voices/kokoro-bm-george-080/raw.wav",
+      "raw_sha256": "e5ed6e2cd333140fc4547552b7f19433551837aae0df75653d2bcd6b211482ac"
+    },
+    {
+      "candidate": "mlx-qwen-custom-ryan",
+      "render_status": "complete",
+      "verification_status": "pass",
+      "word_error_rate": 0.0,
+      "human_listening": "pending",
+      "duration_seconds": 60.16,
+      "synthesis_seconds": 48.787043793010525,
+      "speech_output_rtf": 0.8109548502827548,
+      "process_peak_rss_bytes": 3488317440,
+      "allocator_peak_bytes": 8275252325,
+      "settings": {
+        "voice": "Ryan",
+        "lang_code": "English",
+        "instruct": "Speak calmly and warmly, with a deep natural male voice and relaxed clear pacing."
+      },
+      "report": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-custom-ryan/report.json",
+      "verification_report": "evaluations/benchmarks/2026-10-28/verification/mlx-qwen-custom-ryan.json",
+      "raw_path": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-custom-ryan/raw.wav",
+      "raw_sha256": "7caa68b5531b5dd560d993ecbfe39f0db7df57bef843a0f43a874afa3755d729"
+    },
+    {
+      "candidate": "mlx-qwen-designed-male",
+      "render_status": "complete",
+      "verification_status": "pass",
+      "word_error_rate": 0.0,
+      "human_listening": "pending",
+      "duration_seconds": 45.6,
+      "synthesis_seconds": 40.73131620895583,
+      "speech_output_rtf": 0.8932306186174525,
+      "process_peak_rss_bytes": 3489251328,
+      "allocator_peak_bytes": 8043434149,
+      "settings": {
+        "instruct": "An adult man with a deep warm resonant baritone voice, clear English, calm natural delivery, relaxed pacing and gentle meditation guidance. No whispering.",
+        "lang_code": "English"
+      },
+      "report": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-designed-male/report.json",
+      "verification_report": "evaluations/benchmarks/2026-10-28/verification/mlx-qwen-designed-male.json",
+      "raw_path": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-designed-male/raw.wav",
+      "raw_sha256": "cf901fa2915850c737a0b6a9e33a62d8512878008611bc49ff37a5f4a89ae389"
+    },
+    {
+      "candidate": "moss-local-synthetic-male",
+      "render_status": "complete",
+      "verification_status": "pass",
+      "word_error_rate": 0.0,
+      "human_listening": "pending",
+      "duration_seconds": 51.44,
+      "synthesis_seconds": 41.68711279204581,
+      "speech_output_rtf": 0.8104026592543898,
+      "process_peak_rss_bytes": 9278881792,
+      "allocator_peak_bytes": 12956055332,
+      "settings": {
+        "max_tokens": 2048,
+        "ref_audio": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/voxcpm2-reference/raw.wav",
+        "audio_tokenizer_source": "/Users/jakob/codestuff/Whoopy/models/experimental/moss-tts-runtime/checkpoints/MOSS-Audio-Tokenizer-v2"
+      },
+      "report": "evaluations/benchmarks/2026-10-28/voices/moss-local-synthetic-male/report.json",
+      "verification_report": "evaluations/benchmarks/2026-10-28/verification/moss-local-synthetic-male.json",
+      "raw_path": "evaluations/benchmarks/2026-10-28/voices/moss-local-synthetic-male/raw.wav",
+      "raw_sha256": "f06c913b4bbc3e58d3168dbff4dcdbb1b7abd5b4fcea42c49c60c57a693b508f"
+    },
+    {
+      "candidate": "qwen-custom-ryan",
+      "render_status": "complete",
+      "verification_status": "fail",
+      "word_error_rate": 0.2601626016260163,
+      "human_listening": "pending",
+      "duration_seconds": 54.08,
+      "synthesis_seconds": 635.5881623759633,
+      "speech_output_rtf": 11.752739688904647,
+      "process_peak_rss_bytes": 4993368064,
+      "allocator_peak_bytes": null,
+      "settings": {
+        "speaker": "Ryan",
+        "instruct": "Speak calmly and warmly, with a deep natural male voice and relaxed clear pacing."
+      },
+      "report": "evaluations/benchmarks/2026-10-28/voices/qwen-custom-ryan/report.json",
+      "verification_report": "evaluations/benchmarks/2026-10-28/verification/qwen-custom-ryan-policy-v2.json",
+      "raw_path": "evaluations/benchmarks/2026-10-28/voices/qwen-custom-ryan/raw.wav",
+      "raw_sha256": "02a7de4ca97ecff16637499939d78aa74e7b3253bdac12fdc0bd10f06b77c425"
+    },
+    {
+      "candidate": "voxcpm2-designed-male",
+      "render_status": "complete",
+      "verification_status": "pass",
+      "word_error_rate": 0.0,
+      "human_listening": "pending",
+      "duration_seconds": 42.56066666666667,
+      "synthesis_seconds": 141.78248883289052,
+      "speech_output_rtf": 3.331303288628558,
+      "process_peak_rss_bytes": 3603906560,
+      "allocator_peak_bytes": 7211832072,
+      "settings": {
+        "instruct": "An adult man with a deep warm resonant voice, calm clear English, relaxed natural pacing, gentle meditation guidance.",
+        "inference_timesteps": 10,
+        "cfg_value": 2.0,
+        "max_tokens": 1500
+      },
+      "report": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/report.json",
+      "verification_report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male-aggregate.json",
+      "raw_path": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/raw.wav",
+      "raw_sha256": "94a65b18158a7ffeb350d8cc4f90374f2e8e5dffef7daeaa448231f7dd54e295"
+    }
+  ],
+  "limits": [
+    "Qwen MPS Ryan failed content screening despite render completion.",
+    "Vox qualification uses complete independent per-paragraph ASR plus exact PCM assembly; original full-file ASR omission retained.",
+    "Dots produced no complete waveform before resource stop, not a quality verdict.",
+    "Initial runs predate live resource watchdog; final MLX Ryan has the new guard and zero observed swap growth.",
+    "MPS versus MLX Ryan changes backend, quantization and token budget; not a single-variable causal comparison.",
+    "All new candidates remain isolated benchmark runtimes, not automatic managed production-pack promotion."
+  ]
+}

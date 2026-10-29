@@ -1,0 +1,280 @@
+{
+  "schema_version": 3,
+  "run_id": "4f682c67-49d1-4a8e-82e1-ff2419982ad8",
+  "created_at": "2026-10-29T00:27:49.170001Z",
+  "source": "script_file",
+  "segments": [
+    {
+      "id": "speech-0001",
+      "type": "SPEECH",
+      "text": "Let your hands rest gently on your knees or lap, palms open.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0001",
+      "type": "SILENCE",
+      "duration_ms": 2400
+    },
+    {
+      "id": "speech-0002",
+      "type": "SPEECH",
+      "text": "Notice the weight of your body supported by the chair’s edges beneath you.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0002",
+      "type": "SILENCE",
+      "duration_ms": 2400
+    },
+    {
+      "id": "speech-0003",
+      "type": "SPEECH",
+      "text": "Feel the slight pressure where your feet touch the floor.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0003",
+      "type": "SILENCE",
+      "duration_ms": 2400
+    },
+    {
+      "id": "speech-0004",
+      "type": "SPEECH",
+      "text": "If your back feels long, let your shoulders drift softly away from your ears. The chair holds you without asking you to hold it.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0004",
+      "type": "SILENCE",
+      "duration_ms": 1000
+    },
+    {
+      "id": "speech-0005",
+      "type": "SPEECH",
+      "text": "For now, let your posture find stillness like a branch settling into its natural shape.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0005",
+      "type": "SILENCE",
+      "duration_ms": 6476
+    },
+    {
+      "id": "speech-0006",
+      "type": "SPEECH",
+      "text": "Let your attention rest lightly on the air moving in and out through your nose.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0006",
+      "type": "SILENCE",
+      "duration_ms": 2400
+    },
+    {
+      "id": "speech-0007",
+      "type": "SPEECH",
+      "text": "Now, shift your focus to what you hear around you—just as it is.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0007",
+      "type": "SILENCE",
+      "duration_ms": 1000
+    },
+    {
+      "id": "speech-0008",
+      "type": "SPEECH",
+      "text": "Notice the faint hum of ventilation, a distant conversation, or the creak of wood outside.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0008",
+      "type": "SILENCE",
+      "duration_ms": 2400
+    },
+    {
+      "id": "speech-0009",
+      "type": "SPEECH",
+      "text": "Choose one sound that feels present enough to hold your attention briefly.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0009",
+      "type": "SILENCE",
+      "duration_ms": 1600
+    },
+    {
+      "id": "speech-0010",
+      "type": "SPEECH",
+      "text": "When you notice your mind wandering, simply return to that sound without labeling it good or bad.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0010",
+      "type": "SILENCE",
+      "duration_ms": 2400
+    },
+    {
+      "id": "speech-0011",
+      "type": "SPEECH",
+      "text": "Let it anchor you again. For now, focus only on hearing—not interpreting or naming the sounds.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0011",
+      "type": "SILENCE",
+      "duration_ms": 1000
+    },
+    {
+      "id": "speech-0012",
+      "type": "SPEECH",
+      "text": "Trust that this gentle return keeps your awareness steady.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0012",
+      "type": "SILENCE",
+      "duration_ms": 25642
+    },
+    {
+      "id": "speech-0013",
+      "type": "SPEECH",
+      "text": "Let your fingertips press softly against your thighs, grounding you where you sit.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0013",
+      "type": "SILENCE",
+      "duration_ms": 1600
+    },
+    {
+      "id": "speech-0014",
+      "type": "SPEECH",
+      "text": "If it feels natural, let your shoulders settle just a fraction lower.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0014",
+      "type": "SILENCE",
+      "duration_ms": 2400
+    },
+    {
+      "id": "speech-0015",
+      "type": "SPEECH",
+      "text": "No rush, no need to move further.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0015",
+      "type": "SILENCE",
+      "duration_ms": 1600
+    },
+    {
+      "id": "speech-0016",
+      "type": "SPEECH",
+      "text": "Simply notice you’re here, now, after the day’s activity.",
+      "delivery": "neutral",
+      "intensity": "subtle",
+      "language": "English",
+      "voice_mode": "preset",
+      "pace": "slow",
+      "pronunciation_overrides": [],
+      "target_duration_ms": null
+    },
+    {
+      "id": "silence-0016",
+      "type": "SILENCE",
+      "duration_ms": 17428
+    }
+  ]
+}

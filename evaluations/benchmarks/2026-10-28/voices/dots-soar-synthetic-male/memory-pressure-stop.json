@@ -1,0 +1,21 @@
+{
+  "reason": "System swap increased during Dots paragraph01; sysctl initially reported25883.38M and at protective stop28532.75M used. Stop own benchmark to preserve Mac responsiveness.",
+  "process_pid": 94210,
+  "process_rss_before_stop_bytes": 1782202368,
+  "observed_at_unix": 1793232874.173545,
+  "system_memory_before_stop": {
+    "total": 51539607552,
+    "available": 8801828864,
+    "percent": 82.9,
+    "used": 16836837376,
+    "free": 61882368,
+    "active": 8747073536,
+    "inactive": 8650588160,
+    "wired": 8089763840
+  },
+  "swap_before_stop": "vm.swapusage: total = 29696.00M  used = 28532.75M  free = 1163.25M  (encrypted)",
+  "peak_process_rss_bytes": null,
+  "peak_rss_note": "Not collected before protective external interrupt; snapshot RSS retained separately, not relabelled as peak",
+  "allocator_peak_bytes": null,
+  "phase_from_traceback": "AudioVAE decode SLSTM, before first waveform returned"
+}

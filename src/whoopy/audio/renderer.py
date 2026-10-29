@@ -19,7 +19,7 @@ from whoopy.audio.models import (
 )
 from whoopy.audio.quality import inspect_wave
 from whoopy.audio.synthesis import SpeechSynthesizer, cache_key_for
-from whoopy.timeline import SilenceSegment, Timeline
+from whoopy.timeline import BreathSegment, SilenceSegment, Timeline
 
 
 class AudioRenderError(RuntimeError):
@@ -48,7 +48,7 @@ class TimelineWaveRenderer:
         cursor = 0
 
         for segment in timeline.segments:
-            if isinstance(segment, SilenceSegment):
+            if isinstance(segment, (SilenceSegment, BreathSegment)):
                 audio = silence(segment.duration_ms)
                 requested_duration_ms: int | None = segment.duration_ms
                 segment_cache_key = None

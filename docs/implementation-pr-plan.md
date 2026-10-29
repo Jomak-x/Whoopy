@@ -1,10 +1,11 @@
 # Whoopy Step-by-Step PR Plan
 
-> [!IMPORTANT]
-> This is the complete long-range backlog. For the current local-only critical
-> path, status reconstruction, and PRs 12–21, use
-> [`local-first-master-plan.md`](./local-first-master-plan.md). That plan takes
-> precedence until the local V1 exit gate passes.
+> **Historical planning record.** It is retained for implementation context, not as Local V1 product or release status.
+
+> [!NOTE]
+> This was the long-range backlog. The linked
+> [`local-first-master-plan.md`](./local-first-master-plan.md) captured the later
+> PR 12–21 path; both are now historical.
 
 This document turns the Whoopy specification into a sequence of small pull requests. Each numbered step is one PR. Complete and merge them in order unless a PR explicitly says it can run in parallel.
 

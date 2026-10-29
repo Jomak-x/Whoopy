@@ -20,16 +20,58 @@ PromptText = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=20_000),
 ]
 SegmentId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")]
+DeliveryStyle = Literal[
+    "neutral",
+    "warm",
+    "calm",
+    "soothing",
+    "grounded",
+    "compassionate",
+    "sleepy",
+    "encouraging",
+]
+DeliveryIntensity = Literal["subtle", "moderate"]
+VoiceMode = Literal["preset", "reference", "designed"]
+PaceIntent = Literal["natural", "unhurried", "slow", "very_slow"]
+
+
+class PronunciationOverride(BaseModel):
+    """A visible, adapter-neutral pronunciation replacement."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+    pronunciation: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=160),
+    ]
 
 
 class SpeechSegment(BaseModel):
-    """One piece of text that a future speech adapter can synthesize."""
+    """One spoken block plus portable delivery intent.
+
+    Delivery metadata is deliberately separate from ``text``. Adapters may
+    translate supported intent into native controls, but unsupported bracket
+    tags can never leak into narration.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: SegmentId
     type: Literal["SPEECH"] = "SPEECH"
     text: PromptText
+    delivery: DeliveryStyle = "neutral"
+    intensity: DeliveryIntensity = "subtle"
+    language: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=2, max_length=64),
+    ] = "English"
+    voice_mode: VoiceMode = "preset"
+    pace: PaceIntent = "natural"
+    pronunciation_overrides: tuple[PronunciationOverride, ...] = ()
+    # Optional native speech-duration intent. Exact deliberate quiet remains a
+    # separate SILENCE/BREATH event; this value never creates model pause markup.
+    target_duration_ms: int | None = Field(default=None, ge=400, le=120_000)
 
 
 class SilenceSegment(BaseModel):
@@ -42,7 +84,26 @@ class SilenceSegment(BaseModel):
     duration_ms: int = Field(gt=0, le=600_000)
 
 
-TimelineSegment = Annotated[SpeechSegment | SilenceSegment, Field(discriminator="type")]
+class BreathSegment(BaseModel):
+    """One reviewed inhale or exhale phase rendered as exact silence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: SegmentId
+    type: Literal["BREATH"] = "BREATH"
+    duration_ms: int = Field(gt=0, le=30_000)
+    phase: Literal["inhale", "exhale"]
+    cycle: int = Field(ge=1, le=20)
+    protocol_id: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, pattern=r"^[a-z][a-z0-9_-]+@[1-9][0-9]*$"),
+    ]
+
+
+TimelineSegment = Annotated[
+    SpeechSegment | SilenceSegment | BreathSegment,
+    Field(discriminator="type"),
+]
 
 
 class Timeline(BaseModel):
@@ -73,8 +134,8 @@ class Timeline(BaseModel):
         if self.schema_version == 1:
             if self.source != "phase_1_prompt_passthrough":
                 raise ValueError("timeline schema v1 requires the Phase 1 source")
-            if any(isinstance(segment, SilenceSegment) for segment in self.segments):
-                raise ValueError("timeline schema v1 does not support SILENCE segments")
+            if any(not isinstance(segment, SpeechSegment) for segment in self.segments):
+                raise ValueError("timeline schema v1 supports only SPEECH segments")
         elif self.schema_version == 2 and self.source != "phase_2_fixture_meditation":
             raise ValueError("timeline schema v2 requires the Phase 2 source")
         elif self.schema_version == 3 and self.source != "script_file":

@@ -1,0 +1,10 @@
+{
+  "concurrent_ui_experiment_excluded": true,
+  "excluded_prefixes": [
+    "web/",
+    "src/whoopy/webui/static/",
+    "src/whoopy/webui/developer-static/"
+  ],
+  "original_ui_from_base_commit_retained": true,
+  "shared_checkout_files_untouched": true
+}

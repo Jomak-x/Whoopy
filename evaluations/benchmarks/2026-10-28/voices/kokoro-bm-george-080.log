@@ -1,0 +1,39 @@
+/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1491: FutureWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+  warnings.warn(
+Creating new KokoroPipeline for language: b
+{
+  "candidate": "kokoro-bm-george-080",
+  "seed": 20261028,
+  "script": "evaluations/benchmarks/2026-10-28/voice-script.txt",
+  "script_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "runner_sha256": "7d00045cc0e988f71b304a0d70ab45a5fe05c88f599d23e7f31f0a78f7ac63b6",
+  "settings": {
+    "voice": "bm_george",
+    "lang_code": "b",
+    "speed": 0.8
+  },
+  "postprocessing": [],
+  "segmentation": "identical nonempty paragraphs; native segments concatenated without inserted silence",
+  "runtime_python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "human_listening": "pending",
+  "segment_deadline_seconds": 480,
+  "available_memory_before_bytes": 15650799616,
+  "allocator_limit_bytes": 9208348672,
+  "device": "mlx-metal",
+  "model_repo": "mlx-community/Kokoro-82M-bf16",
+  "model_revision": "a71e4d38b236d968966a2002c4c895dbd12b1c3c",
+  "mlx_audio_revision": "8c244a1faff44cfa69e3151c195f52a4c1c90be5",
+  "load_seconds": 0.3463246250175871,
+  "status": "complete",
+  "raw_path": "evaluations/benchmarks/2026-10-28/voices/kokoro-bm-george-080/raw.wav",
+  "raw_sha256": "e5ed6e2cd333140fc4547552b7f19433551837aae0df75653d2bcd6b211482ac",
+  "sample_rate": 24000,
+  "duration_seconds": 54.125,
+  "synthesis_seconds": 9.554450041032396,
+  "speech_output_rtf": 0.1765256358620304,
+  "process_peak_rss_bytes": 835321856,
+  "allocator_peak_bytes": 2778234156,
+  "mps_current_allocated_bytes": null,
+  "mps_driver_allocated_bytes": null,
+  "memory_note": "macOS ru_maxrss bytes; MLX allocator peak separately; MPS API has no peak counter here"
+}

@@ -19,8 +19,15 @@ Nested environment variables use two underscores. For example, `WHOOPY_TTS__VOIC
 - `artifacts.yaml` locks exact model/runtime files, byte sizes, SHA-256
   digests, licenses, platforms, and profile component sets.
 - `models.yaml` is the provisional adapter registry. A model choice is metadata and configuration, not pipeline logic.
-- `pacing_profiles.yaml` contains product pacing presets.
+- `pacing_profiles.yaml` is the strict, versioned pacing-policy registry used by
+  production and Lab evidence. It owns speech speed and the exact timeline
+  mutation allowlist; breath timing remains in reviewed breath protocols.
 - `runtime_profiles.yaml` maps live RAM and disk safety margins to Basic, Lite, Standard, High, and Studio capabilities.
+- `runtime_packs.yaml` declares only published target archives with immutable size/SHA-256 and
+  truthful unavailable reasons when no reviewed archive exists.
+- `runtime_build_recipes.yaml` pins the source revision, Python patch, source/import markers,
+  supported targets, excluded Git submodules, and reviewed per-target dependency lock paths used
+  to build clean optional runtime releases.
 - `prompts/` holds versioned system prompts once model-backed generation is added.
 
 Validate the resolved settings with:

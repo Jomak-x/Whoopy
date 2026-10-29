@@ -95,6 +95,7 @@ class RunStage(StrEnum):
     MODEL_STARTUP = "model_startup"
     SYNTHESIZING = "synthesizing"
     ASSEMBLING = "assembling"
+    ENCODING = "encoding"
     QUALITY_CHECK = "quality_check"
     COMPLETED = "completed"
 
@@ -238,6 +239,7 @@ class RunRecord(BaseModel):
     status: RunStatus
     prompt: PromptText
     source_kind: Literal["fixture_prompt", "script_file", "generated_prompt"] = "fixture_prompt"
+    audience: Literal["studio", "lab", "system"] = "studio"
     created_at: AwareDatetime
     updated_at: AwareDatetime
     script_artifact: Literal["script.md"] | None = None
@@ -437,6 +439,7 @@ class RunStore:
         *,
         run_id: UUID | None = None,
         created_at: datetime | None = None,
+        audience: Literal["studio", "lab", "system"] = "studio",
     ) -> RunRecord:
         """Create a queued run and write its initial record before returning."""
 
@@ -447,6 +450,7 @@ class RunStore:
                 run_id=active_run_id,
                 status=RunStatus.QUEUED,
                 prompt=prompt,
+                audience=audience,
                 created_at=timestamp,
                 updated_at=timestamp,
                 recovery=RunRecovery(
@@ -481,6 +485,7 @@ class RunStore:
         generation_request: PendingGenerationConfig,
         run_id: UUID | None = None,
         created_at: datetime | None = None,
+        audience: Literal["studio", "lab", "system"] = "studio",
     ) -> RunRecord:
         """Atomically save a schema-v6 prompt run before its first LLM call."""
 
@@ -493,6 +498,7 @@ class RunStore:
                 status=RunStatus.QUEUED,
                 prompt=prompt,
                 source_kind="generated_prompt",
+                audience=audience,
                 created_at=timestamp,
                 updated_at=timestamp,
                 generation_request_artifact=GENERATION_REQUEST_FILENAME,
@@ -544,6 +550,7 @@ class RunStore:
         model_metadata: RunModelMetadata,
         run_id: UUID | None = None,
         created_at: datetime | None = None,
+        audience: Literal["studio", "lab", "system"] = "studio",
     ) -> RunRecord:
         """Atomically create a queued schema-v4 run and its immutable inputs."""
 
@@ -556,6 +563,7 @@ class RunStore:
                 status=RunStatus.QUEUED,
                 prompt=f"Render local script: {source_name}",
                 source_kind="script_file",
+                audience=audience,
                 created_at=timestamp,
                 updated_at=timestamp,
                 script_artifact=SCRIPT_FILENAME,
@@ -612,6 +620,7 @@ class RunStore:
         model_metadata: RunModelMetadata,
         run_id: UUID,
         created_at: datetime,
+        audience: Literal["studio", "lab", "system"] = "studio",
     ) -> RunRecord:
         """Atomically promote validated draft artifacts into a queued schema-v5 run."""
 
@@ -624,6 +633,7 @@ class RunStore:
                 status=RunStatus.QUEUED,
                 prompt=prompt,
                 source_kind="generated_prompt",
+                audience=audience,
                 created_at=created_at,
                 updated_at=created_at,
                 script_artifact=SCRIPT_FILENAME,
@@ -749,6 +759,7 @@ class RunStore:
                 status=RunStatus.QUEUED,
                 prompt=f"Render local script: {source_name}",
                 source_kind="script_file",
+                audience=placeholder.audience,
                 created_at=placeholder.created_at,
                 updated_at=timestamp,
                 script_artifact=SCRIPT_FILENAME,
@@ -832,6 +843,7 @@ class RunStore:
                 status=RunStatus.QUEUED,
                 prompt=placeholder.prompt,
                 source_kind="generated_prompt",
+                audience=placeholder.audience,
                 created_at=placeholder.created_at,
                 updated_at=timestamp,
                 script_artifact=SCRIPT_FILENAME,
@@ -1045,6 +1057,7 @@ class RunStore:
                 status=RunStatus.RUNNING,
                 prompt=active.prompt,
                 source_kind="generated_prompt",
+                audience=active.audience,
                 created_at=active.created_at,
                 updated_at=timestamp,
                 script_artifact=SCRIPT_FILENAME,
@@ -1232,6 +1245,9 @@ class RunStore:
             section_prompt_id=generation.section_prompt_id,
             section_prompt_version=generation.section_prompt_version,
             max_parallel_sections=generation.max_parallel_sections,
+            meditation_kind=generation.meditation_kind,
+            writing_method=generation.writing_method,
+            pacing=generation.pacing,
             model_metadata=model_metadata,
         )
         if actual != request:
@@ -1374,6 +1390,7 @@ class RunStore:
                         status=RunStatus.QUEUED,
                         prompt=placeholder.prompt,
                         source_kind="generated_prompt",
+                        audience=placeholder.audience,
                         created_at=placeholder.created_at,
                         updated_at=timestamp,
                         generation_request_artifact=GENERATION_REQUEST_FILENAME,
@@ -1638,6 +1655,24 @@ class RunStore:
             return RunModelMetadata.model_validate_json(path.read_text(encoding="utf-8"))
         except (OSError, ValidationError) as error:
             raise RunStoreError(f"Could not load model metadata {path}: {error}") from error
+
+    def write_model_metadata(
+        self,
+        run_id: UUID | str,
+        metadata: RunModelMetadata,
+    ) -> Path:
+        """Atomically add runtime evidence while preserving adapter provenance."""
+
+        parsed_run_id = self.parse_run_id(run_id)
+        record = self.load(parsed_run_id)
+        if record.model_metadata_artifact != MODEL_METADATA_FILENAME:
+            raise RunStoreError(f"Run {parsed_run_id} has no model metadata artifact")
+        current = self.load_model_metadata(parsed_run_id)
+        if metadata.tts != current.tts or metadata.llm != current.llm:
+            raise RunStoreError("Runtime telemetry cannot change immutable adapter provenance")
+        path = self.model_metadata_path(parsed_run_id)
+        self._write_json(path, metadata.model_dump_json(indent=2) + "\n")
+        return path
 
     def load_generation_request(self, run_id: UUID | str) -> PendingGenerationConfig:
         """Load and validate the immutable inputs for prompt planning."""

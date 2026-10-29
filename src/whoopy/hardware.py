@@ -25,7 +25,6 @@ SUPPORTED_TARGETS = {
     ("darwin", "x86_64"),
     ("linux", "arm64"),
     ("linux", "x86_64"),
-    ("windows", "arm64"),
     ("windows", "x86_64"),
 }
 
@@ -100,9 +99,9 @@ def inspect_hardware(path: Path = DEFAULT_INSPECTION_PATH) -> HardwareSnapshot:
     disk = psutil.disk_usage(str(path))
     operating_system = platform.system().lower()
     architecture = platform.machine().lower()
-    if architecture in {"amd64", "x64"}:
+    if architecture in {"amd64", "x64", "x86-64"}:
         architecture = "x86_64"
-    elif architecture == "aarch64":
+    elif architecture in {"aarch64", "arm64e"}:
         architecture = "arm64"
     accelerators = ["cpu"]
 
@@ -112,6 +111,8 @@ def inspect_hardware(path: Path = DEFAULT_INSPECTION_PATH) -> HardwareSnapshot:
         accelerators.append("metal")
     if _has_working_command(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"]):
         accelerators.append("cuda")
+    if _has_working_command(["vulkaninfo", "--summary"]):
+        accelerators.append("vulkan")
 
     return HardwareSnapshot(
         operating_system=operating_system,

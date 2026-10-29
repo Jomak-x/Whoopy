@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "run_id": "ad1a5c6d-8068-4735-adf5-cdf709ee68d4",
+  "segment_id": "speech-0006",
+  "cache_key": "e61e2c6cff0d771e1def0b755baa1e6f31636cd47cc3ed62bfbb1293cfb1ff63",
+  "status": "completed",
+  "attempt_count": 1,
+  "cache_hit": false,
+  "sample_rate": 24000,
+  "frame_count": 183741,
+  "byte_count": 367482,
+  "pcm_sha256": "2161b892a410816e0146d4fa99ef919785f22218d778b21f52d5fc0cfcc4711b",
+  "started_at": "2026-10-29T00:32:01.708562Z",
+  "updated_at": "2026-10-29T00:32:06.238359Z",
+  "completed_at": "2026-10-29T00:32:06.238359Z",
+  "failures": []
+}

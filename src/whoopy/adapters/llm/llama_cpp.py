@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import signal
 import subprocess
 import tempfile
+import threading
 import time
 from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
+
+import psutil
 
 from whoopy.artifacts import ArtifactLock, ArtifactSpec, ArtifactStore, TargetPlatform
 from whoopy.ports import (
@@ -20,10 +25,25 @@ from whoopy.ports import (
     InvalidAdapterOutput,
     ScriptGenerationRequest,
     ScriptGenerationResult,
+    ScriptGenerationTelemetry,
     TransientAdapterError,
 )
 
-ProcessRunner = Callable[[Sequence[str], float], subprocess.CompletedProcess[str]]
+
+@dataclass(frozen=True)
+class LlamaProcessResult:
+    """Completed subprocess plus measurements unavailable from llama.cpp logs."""
+
+    completed: subprocess.CompletedProcess[str]
+    load_elapsed_seconds: float | None = None
+    load_elapsed_unavailable_reason: str | None = None
+    peak_process_tree_memory_bytes: int | None = None
+    memory_unavailable_reason: str | None = None
+
+
+ProcessRunner = Callable[
+    [Sequence[str], float], subprocess.CompletedProcess[str] | LlamaProcessResult
+]
 MonotonicClock = Callable[[], float]
 
 
@@ -57,7 +77,8 @@ class LlamaCppSettings:
 def _run_process(
     command: Sequence[str],
     timeout_seconds: float,
-) -> subprocess.CompletedProcess[str]:
+) -> LlamaProcessResult:
+    started = time.monotonic()
     process = subprocess.Popen(
         list(command),
         stdout=subprocess.PIPE,
@@ -69,13 +90,112 @@ def _run_process(
             if os.name == "nt"
             else 0
         ),
+        bufsize=1,
     )
+    stop_sampling = threading.Event()
+    peak_bytes: int | None = None
+    memory_error: str | None = None
+    load_elapsed_seconds: float | None = None
+    output_chunks: list[str] = []
+    error_chunks: list[str] = []
+
+    def read_stream(stream: Any, chunks: list[str], *, watch_startup: bool) -> None:
+        nonlocal load_elapsed_seconds
+        for line in iter(stream.readline, ""):
+            chunks.append(line)
+            if (
+                watch_startup
+                and load_elapsed_seconds is None
+                and ("available commands:" in line or line.lstrip().startswith("> "))
+            ):
+                load_elapsed_seconds = max(0.0, time.monotonic() - started)
+
+    def sample_process_tree() -> None:
+        nonlocal peak_bytes, memory_error
+        try:
+            root = psutil.Process(process.pid)
+            while not stop_sampling.is_set():
+                total = 0
+                for current in (root, *root.children(recursive=True)):
+                    try:
+                        total += current.memory_info().rss
+                    except (psutil.NoSuchProcess, psutil.ZombieProcess):
+                        continue
+                if total > 0:
+                    peak_bytes = max(peak_bytes or total, total)
+                stop_sampling.wait(0.02)
+        except (psutil.NoSuchProcess, psutil.ZombieProcess):
+            # Normal subprocess exit can race the final sample. Any prior peak
+            # remains a complete observation of the process while it was live.
+            if peak_bytes is None:
+                memory_error = "process exited before a memory sample completed"
+        except (psutil.AccessDenied, OSError) as error:
+            memory_error = f"{type(error).__name__}: {error}"[:500]
+        except psutil.Error as error:
+            memory_error = f"{type(error).__name__}: {error}"[:500]
+
+    sampler = threading.Thread(
+        target=sample_process_tree,
+        name="whoopy-llama-memory-telemetry",
+        daemon=True,
+    )
+    sampler.start()
+    stdout_reader = threading.Thread(
+        target=read_stream,
+        args=(process.stdout, output_chunks),
+        kwargs={"watch_startup": True},
+        name="whoopy-llama-stdout-reader",
+        daemon=True,
+    )
+    stderr_reader = threading.Thread(
+        target=read_stream,
+        args=(process.stderr, error_chunks),
+        kwargs={"watch_startup": True},
+        name="whoopy-llama-stderr-reader",
+        daemon=True,
+    )
+    stdout_reader.start()
+    stderr_reader.start()
     try:
-        stdout, stderr = process.communicate(timeout=timeout_seconds)
+        process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as error:
+        _stop_process_tree(process)
+        raise subprocess.TimeoutExpired(
+            command,
+            timeout_seconds,
+            output="".join(output_chunks),
+            stderr="".join(error_chunks),
+        ) from error
     except BaseException:
         _stop_process_tree(process)
         raise
-    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    finally:
+        stop_sampling.set()
+        sampler.join(timeout=1)
+        stdout_reader.join(timeout=1)
+        stderr_reader.join(timeout=1)
+    completed = subprocess.CompletedProcess(
+        command, process.returncode, "".join(output_chunks), "".join(error_chunks)
+    )
+    return LlamaProcessResult(
+        completed=completed,
+        load_elapsed_seconds=load_elapsed_seconds,
+        load_elapsed_unavailable_reason=(
+            None
+            if load_elapsed_seconds is not None
+            else "llama.cpp emitted no observable model-ready signal"
+        ),
+        peak_process_tree_memory_bytes=(peak_bytes if memory_error is None else None),
+        memory_unavailable_reason=(
+            memory_error
+            if memory_error is not None
+            else (
+                None
+                if peak_bytes is not None
+                else "process exited before a memory sample completed"
+            )
+        ),
+    )
 
 
 def _stop_process_tree(process: subprocess.Popen[str]) -> None:
@@ -139,6 +259,50 @@ def _assistant_text(output: str) -> str:
     return normalized
 
 
+_MILLISECONDS = re.compile(r"(?P<value>[0-9]+(?:\.[0-9]+)?)\s*ms\b", re.IGNORECASE)
+_TOKEN_COUNT = re.compile(r"/\s*(?P<value>[0-9]+)\s+(?:tokens?|runs?)\b", re.IGNORECASE)
+_DEVICE = re.compile(r"\b(?:using|found) device\s*:?\s*(?P<value>[^\r\n,]+)", re.IGNORECASE)
+_GENERATION_SPEED = re.compile(
+    r"\bGeneration:\s*(?P<value>[0-9]+(?:\.[0-9]+)?)\s*t/s\b", re.IGNORECASE
+)
+
+
+def _llama_timing_evidence(diagnostic: str) -> dict[str, float | int | str | None]:
+    """Parse stable llama.cpp perf labels while tolerating version-specific prefixes."""
+
+    load_seconds: float | None = None
+    output_tokens: int | None = None
+    output_seconds: float | None = None
+    output_tokens_per_second: float | None = None
+    runtime_device: str | None = None
+    for line in diagnostic.splitlines():
+        lowered = line.lower()
+        if "load time" in lowered:
+            match = _MILLISECONDS.search(line)
+            if match is not None:
+                load_seconds = float(match.group("value")) / 1_000
+        if "eval time" in lowered and "prompt eval time" not in lowered:
+            duration = _MILLISECONDS.search(line)
+            count = _TOKEN_COUNT.search(line)
+            if duration is not None and count is not None:
+                output_seconds = float(duration.group("value")) / 1_000
+                output_tokens = int(count.group("value"))
+        if runtime_device is None:
+            match = _DEVICE.search(line)
+            if match is not None:
+                runtime_device = match.group("value").strip()
+        speed = _GENERATION_SPEED.search(line)
+        if speed is not None:
+            output_tokens_per_second = float(speed.group("value"))
+    return {
+        "load_elapsed_seconds": load_seconds,
+        "output_tokens": output_tokens,
+        "output_token_elapsed_seconds": output_seconds,
+        "output_tokens_per_second": output_tokens_per_second,
+        "runtime_device": runtime_device,
+    }
+
+
 class LlamaCppScriptGenerator:
     """Run one local generation without linking llama.cpp into the worker process."""
 
@@ -178,6 +342,7 @@ class LlamaCppScriptGenerator:
                 f"threads={self.settings.threads}",
                 f"gpu_layers={self.settings.gpu_layers}",
                 f"reasoning={self.settings.reasoning}",
+                f"timeout_seconds={self.settings.timeout_seconds}",
             ),
         )
 
@@ -196,7 +361,11 @@ class LlamaCppScriptGenerator:
 
         artifacts = artifact_lock.resolve(profile_name, target)
         runtime = _component(artifacts, "llm_runtime")
-        model_component = "llm_model_lite" if profile_name == "lite" else "llm_model_standard"
+        model_component = {
+            "lite": "llm_model_lite",
+            "standard": "llm_model_standard",
+            "high": "llm_model_high",
+        }[profile_name]
         model = _component(artifacts, model_component)
         runtime_root = store.require(runtime)
         model_path = store.require(model)
@@ -250,11 +419,11 @@ class LlamaCppScriptGenerator:
                 "--conversation",
                 "--single-turn",
                 "--no-display-prompt",
-                "--no-show-timings",
                 "--simple-io",
                 "--color",
                 "off",
                 "--offline",
+                "--perf",
             ]
             if self.settings.threads:
                 command.extend(["--threads", str(self.settings.threads)])
@@ -263,10 +432,17 @@ class LlamaCppScriptGenerator:
                 system_path.write_text(request.system_prompt, encoding="utf-8")
                 system_path.chmod(0o600)
                 command.extend(["--system-prompt-file", str(system_path)])
+            if request.response_json_schema is not None:
+                schema_path = temporary / "response-schema.json"
+                schema_path.write_text(
+                    json.dumps(request.response_json_schema, allow_nan=False), encoding="utf-8"
+                )
+                schema_path.chmod(0o600)
+                command.extend(["--json-schema-file", str(schema_path)])
 
             started = self.monotonic()
             try:
-                completed = self.process_runner(command, self.settings.timeout_seconds)
+                process_result = self.process_runner(command, self.settings.timeout_seconds)
             except subprocess.TimeoutExpired as error:
                 raise TransientAdapterError(
                     f"llama.cpp exceeded its {self.settings.timeout_seconds:g}-second timeout"
@@ -274,6 +450,19 @@ class LlamaCppScriptGenerator:
             except OSError as error:
                 raise FatalAdapterError(f"Could not start llama.cpp: {error}") from error
             elapsed = max(0.0, self.monotonic() - started)
+
+            if isinstance(process_result, LlamaProcessResult):
+                completed = process_result.completed
+                external_load_seconds = process_result.load_elapsed_seconds
+                external_load_reason = process_result.load_elapsed_unavailable_reason
+                peak_memory = process_result.peak_process_tree_memory_bytes
+                memory_reason = process_result.memory_unavailable_reason
+            else:
+                completed = process_result
+                external_load_seconds = None
+                external_load_reason = "injected process runner did not report model-ready timing"
+                peak_memory = None
+                memory_reason = "injected process runner did not report process-tree memory"
 
             if completed.returncode != 0:
                 diagnostic = completed.stderr.strip()[-2_000:] or "no diagnostic output"
@@ -288,8 +477,61 @@ class LlamaCppScriptGenerator:
                 ) from error
             if not text:
                 raise InvalidAdapterOutput("llama.cpp returned empty text")
+            timing = _llama_timing_evidence(f"{completed.stderr}\n{completed.stdout}")
+            load_seconds = cast(float | None, timing["load_elapsed_seconds"])
+            if load_seconds is None:
+                load_seconds = external_load_seconds
+            output_tokens = cast(int | None, timing["output_tokens"])
+            output_seconds = cast(float | None, timing["output_token_elapsed_seconds"])
+            output_tokens_per_second = cast(float | None, timing["output_tokens_per_second"])
+            runtime_device = cast(str | None, timing["runtime_device"])
+            if output_tokens is not None and output_tokens < 1:
+                output_tokens = None
+            if output_seconds is not None and output_seconds <= 0:
+                output_seconds = None
             return ScriptGenerationResult(
                 text=text,
                 metadata=self.metadata,
                 elapsed_seconds=elapsed,
+                telemetry=ScriptGenerationTelemetry(
+                    load_elapsed_seconds=load_seconds,
+                    load_elapsed_unavailable_reason=(
+                        None
+                        if load_seconds is not None
+                        else external_load_reason
+                        or "llama.cpp did not emit a parseable load-time metric"
+                    ),
+                    output_tokens=output_tokens,
+                    output_tokens_unavailable_reason=(
+                        None
+                        if output_tokens is not None
+                        else "llama.cpp did not emit a parseable output-token count"
+                    ),
+                    output_token_elapsed_seconds=output_seconds,
+                    output_token_elapsed_unavailable_reason=(
+                        None
+                        if output_seconds is not None
+                        else "llama.cpp did not emit a parseable output-token duration"
+                    ),
+                    output_tokens_per_second=output_tokens_per_second,
+                    output_tokens_per_second_unavailable_reason=(
+                        None
+                        if output_tokens_per_second is not None
+                        else "llama.cpp did not emit parseable generation throughput"
+                    ),
+                    peak_process_tree_memory_bytes=peak_memory,
+                    peak_process_tree_memory_unavailable_reason=(
+                        None if peak_memory is not None else memory_reason
+                    ),
+                    live_process_tree_memory_after_unavailable_reason=(
+                        "llama.cpp exits after each invocation, so no live subprocess tree "
+                        "remains after completion"
+                    ),
+                    runtime_device=runtime_device,
+                    runtime_device_unavailable_reason=(
+                        None
+                        if runtime_device is not None
+                        else "llama.cpp did not emit a parseable selected-device line"
+                    ),
+                ),
             )

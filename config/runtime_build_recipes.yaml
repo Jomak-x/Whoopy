@@ -1,0 +1,55 @@
+# Release engineering inputs for optional heavyweight Python runtimes.
+# A target is publishable only after its requirements lock and complete wheelhouse
+# have been reviewed. Missing lock_paths are intentional, machine-readable blockers.
+schema_version: 1
+runtimes:
+  - runtime_id: fish-speech
+    revision: 1359896b0648c688dee901794969d976a06c86be
+    upstream_repository: https://github.com/fishaudio/fish-speech
+    upstream_revision: 1359896b0648c688dee901794969d976a06c86be
+    python_version: 3.10.19
+    source_markers: [pyproject.toml, fish_speech/models/vqgan/__init__.py]
+    import_modules: [fish_speech.models.vqgan, tools.llama.generate, tools.vqgan.inference, transformers, torch, torchaudio]
+    # Match the production model-pack declaration. A build recipe is not a
+    # portability claim for targets where the adapter has not been validated.
+    supported_targets: [darwin-arm64]
+    lock_paths:
+      darwin-arm64: config/runtime-locks/fish-speech-darwin-arm64.txt
+    excluded_submodules: {}
+
+  - runtime_id: moss-tts
+    revision: 58b20a0d5fcc6766658d50967a90a9d890009a46
+    upstream_repository: https://github.com/OpenMOSS/MOSS-TTS
+    upstream_revision: 58b20a0d5fcc6766658d50967a90a9d890009a46
+    python_version: 3.12.12
+    source_markers: [pyproject.toml, moss_tts_local_v1.5/__init__.py, moss_tts_delay/modeling_moss_tts.py]
+    # The Local v1.5 source directory contains a dot and is loaded by
+    # Transformers' reviewed remote-code loader; it is not a legal Python
+    # import statement. Its files remain source markers, while the import probe
+    # uses the normal flagship package plus the runtime dependencies exercised
+    # by the production worker.
+    import_modules: [moss_tts_delay.modeling_moss_tts, transformers, torch, torchaudio]
+    supported_targets: [darwin-arm64, linux-x86_64]
+    lock_paths:
+      darwin-arm64: config/runtime-locks/moss-tts-darwin-arm64.txt
+    # Audio tokenizer weights/runtime are a separate managed model-pack artifact.
+    # The Git link is recorded but intentionally excluded from this Python runtime archive.
+    excluded_submodules:
+      moss_audio_tokenizer: 56776e867cb38446fa4bc00d0aceccab5001b008
+
+  - runtime_id: qwen3-tts
+    revision: 022e286b98fbec7e1e916cb940cdf532cd9f488e
+    upstream_repository: https://github.com/QwenLM/Qwen3-TTS
+    upstream_revision: 022e286b98fbec7e1e916cb940cdf532cd9f488e
+    python_version: 3.12.12
+    source_markers: [pyproject.toml, qwen_tts/__init__.py, qwen_tts/inference/qwen3_tts_model.py]
+    # Upstream 0.1.1 pins Transformers and Accelerate but leaves the rest of
+    # the dependency graph floating. The release remains blocked until this
+    # complete import surface has a reviewed, hashed target lock and wheelhouse.
+    import_modules: [qwen_tts, qwen_tts.inference.qwen3_tts_model, transformers, accelerate, torch, torchaudio, soundfile, librosa, onnxruntime, einops, gradio, sox]
+    # Start with the primary Local V1 machine. This is a build target, not a
+    # compatibility or readiness claim; real offline synthesis is still required.
+    supported_targets: [darwin-arm64]
+    lock_paths:
+      darwin-arm64: config/runtime-locks/qwen3-tts-darwin-arm64.txt
+    excluded_submodules: {}

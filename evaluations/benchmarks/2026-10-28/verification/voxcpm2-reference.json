@@ -1,0 +1,205 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-28T23:53:21.003007+00:00",
+  "status": "pass",
+  "failure_reasons": [],
+  "review_reasons": [],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/voxcpm2-reference/raw.wav",
+  "audio_sha256": "37383b3c2f8136926c756ab93688b65a5a18bbb827e2a51cafd1aaafa47400bc",
+  "expected_transcript": "Settle into a position that feels comfortable.",
+  "expected_text_sha256": "a43df81197ba86cf78576bbdd08bed1b1367f7c74d56a2e885a500c141659943",
+  "mode": "speech",
+  "pcm": {
+    "frame_count": 161288,
+    "sample_rate": 48000,
+    "duration_seconds": 3.3601666666666667,
+    "nonfinite_samples": 0,
+    "peak": 0.15429329872131348,
+    "rms": 0.024919265114488356,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.09467455621301775,
+    "leading_silence_seconds": 0.0,
+    "trailing_silence_seconds": 0.2,
+    "zero_crossing_fraction": 0.05567714694922715,
+    "difference_to_signal_energy": 0.027967113422327234,
+    "speech_established_by_pcm": false
+  },
+  "asr": {
+    "engine": "mlx-whisper",
+    "model_path": "/Users/jakob/.cache/huggingface/hub/models--mlx-community--whisper-small-mlx/snapshots/45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_revision": "45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_weights_sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
+    "model_config_sha256": "e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e",
+    "audio_sha256": "37383b3c2f8136926c756ab93688b65a5a18bbb827e2a51cafd1aaafa47400bc",
+    "text": " settle into a position that feels comfortable.",
+    "language": "en",
+    "segments": [
+      {
+        "id": 0,
+        "seek": 0,
+        "start": 0.0,
+        "end": 2.94,
+        "text": " settle into a position that feels comfortable.",
+        "tokens": [
+          50364,
+          11852,
+          666,
+          257,
+          2535,
+          300,
+          3417,
+          4619,
+          13,
+          50524
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.3331815979697488,
+        "compression_ratio": 0.8846153846153846,
+        "no_speech_prob": 0.002773832995444536,
+        "words": [
+          {
+            "word": " settle",
+            "start": 0.0,
+            "end": 0.48,
+            "probability": 0.8388671875
+          },
+          {
+            "word": " into",
+            "start": 0.48,
+            "end": 0.86,
+            "probability": 0.96875
+          },
+          {
+            "word": " a",
+            "start": 0.86,
+            "end": 1.04,
+            "probability": 0.99658203125
+          },
+          {
+            "word": " position",
+            "start": 1.04,
+            "end": 1.48,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " that",
+            "start": 1.48,
+            "end": 1.86,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " feels",
+            "start": 1.86,
+            "end": 2.28,
+            "probability": 0.99609375
+          },
+          {
+            "word": " comfortable.",
+            "start": 2.28,
+            "end": 2.94,
+            "probability": 0.986328125
+          }
+        ]
+      }
+    ],
+    "inference_seconds": 1.8026953330263495,
+    "versions": {
+      "mlx-whisper": "0.4.3",
+      "mlx": "0.32.4",
+      "mlx-metal": "0.32.4",
+      "numpy": "2.4.6",
+      "soundfile": "0.14.0"
+    },
+    "python": "3.11.16",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "decoding": {
+      "language": "en",
+      "temperature": 0.0,
+      "condition_on_previous_text": false,
+      "expected_text_prompted": false
+    },
+    "gpu_lock": "/tmp/whoopy-benchmark-gpu.lock",
+    "gpu_lock_wait_seconds": 53.44178920896957,
+    "network": "offline; existing local snapshot only"
+  },
+  "content": {
+    "expected_word_count": 7,
+    "observed_word_count": 7,
+    "word_error_rate": 0.0,
+    "ordered_word_coverage": 1.0,
+    "matches": 7,
+    "deletions": 0,
+    "insertions": 0,
+    "substitutions": 0,
+    "missing_words": [],
+    "unexpected_words": [],
+    "excess_repeated_words": {},
+    "missing_tail_words": [],
+    "possible_truncation": false,
+    "alignment": [
+      {
+        "operation": "match",
+        "expected": "settle",
+        "observed": "settle",
+        "expected_index": 0,
+        "observed_index": 0
+      },
+      {
+        "operation": "match",
+        "expected": "into",
+        "observed": "into",
+        "expected_index": 1,
+        "observed_index": 1
+      },
+      {
+        "operation": "match",
+        "expected": "a",
+        "observed": "a",
+        "expected_index": 2,
+        "observed_index": 2
+      },
+      {
+        "operation": "match",
+        "expected": "position",
+        "observed": "position",
+        "expected_index": 3,
+        "observed_index": 3
+      },
+      {
+        "operation": "match",
+        "expected": "that",
+        "observed": "that",
+        "expected_index": 4,
+        "observed_index": 4
+      },
+      {
+        "operation": "match",
+        "expected": "feels",
+        "observed": "feels",
+        "expected_index": 5,
+        "observed_index": 5
+      },
+      {
+        "operation": "match",
+        "expected": "comfortable",
+        "observed": "comfortable",
+        "expected_index": 6,
+        "observed_index": 6
+      }
+    ]
+  },
+  "limits": [
+    "ASR is independent evidence, not a human transcription or a proof of perfect speech.",
+    "Noise rejection requires content agreement; duration and RMS do not prove speech.",
+    "Warmth, naturalness, voice identity, and quality require listener judgment.",
+    "Narration mode permits intentional silence; expected words still require recognition."
+  ],
+  "thresholds": {
+    "pass_max_wer": 0.15,
+    "pass_min_coverage": 0.85,
+    "fail_wer_above": 0.35,
+    "fail_coverage_below": 0.65
+  },
+  "verifier_source_sha256": "3669cf3793b7200110dab88dd698d4eed1816a291f3f8581de7c6bf7dd83b3d3",
+  "harness_source_sha256": "a35b1cc25f4418de82b402e1ca5bc361ea22c6c6ee13eeee778c84db8854b8b5"
+}

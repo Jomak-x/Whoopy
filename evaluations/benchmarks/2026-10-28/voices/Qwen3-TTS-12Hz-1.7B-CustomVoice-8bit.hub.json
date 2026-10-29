@@ -1,0 +1,155 @@
+{
+  "_id": "6972a974090611b89c35ff6b",
+  "id": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+  "private": false,
+  "pipeline_tag": "text-to-speech",
+  "library_name": "mlx-audio",
+  "tags": [
+    "mlx-audio",
+    "safetensors",
+    "qwen3_tts",
+    "mlx",
+    "text-to-speech",
+    "speech",
+    "speech generation",
+    "voice cloning",
+    "tts",
+    "base_model:Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+    "base_model:quantized:Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+    "license:apache-2.0",
+    "8-bit",
+    "region:us"
+  ],
+  "downloads": 9605,
+  "likes": 36,
+  "modelId": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+  "author": "mlx-community",
+  "sha": "41d3337e8b7f2843a75841595fc14e4b9a7a4b96",
+  "lastModified": "2026-01-26T20:11:42.000Z",
+  "gated": false,
+  "disabled": false,
+  "model-index": null,
+  "config": {
+    "architectures": [
+      "Qwen3TTSForConditionalGeneration"
+    ],
+    "model_type": "qwen3_tts",
+    "quantization_config": {
+      "bits": 8
+    },
+    "tokenizer_config": {
+      "bos_token": null,
+      "eos_token": "<|im_end|>",
+      "pad_token": "<|endoftext|>",
+      "unk_token": null
+    }
+  },
+  "cardData": {
+    "license": "apache-2.0",
+    "library_name": "mlx-audio",
+    "tags": [
+      "mlx",
+      "text-to-speech",
+      "speech",
+      "speech generation",
+      "voice cloning",
+      "tts",
+      "mlx-audio"
+    ],
+    "base_model": [
+      "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+    ]
+  },
+  "siblings": [
+    {
+      "rfilename": ".gitattributes",
+      "blobId": "a6344aac8c09253b3b630fb776ae94478aa0275b",
+      "size": 1519
+    },
+    {
+      "rfilename": "README.md",
+      "blobId": "7079aa2e05499e10430f03e00bfb93ace84c4a79",
+      "size": 1118
+    },
+    {
+      "rfilename": "config.json",
+      "blobId": "85a45518a8c20295dc0a15f6d35223d203ce31b8",
+      "size": 6058
+    },
+    {
+      "rfilename": "generation_config.json",
+      "blobId": "1872b16d4535564abf2db5d6debe6cddd82b7f2e",
+      "size": 245
+    },
+    {
+      "rfilename": "merges.txt",
+      "blobId": "20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0",
+      "size": 1671839
+    },
+    {
+      "rfilename": "model.safetensors",
+      "blobId": "fe2382fab5cd050f80f8212fa1f415f06166afc3",
+      "size": 2393308931,
+      "lfs": {
+        "sha256": "b696f4bf45f54497b6de758981e76f1410bd68af05a657477dee466b0202df1a",
+        "size": 2393308931,
+        "pointerSize": 135
+      }
+    },
+    {
+      "rfilename": "model.safetensors.index.json",
+      "blobId": "00d72d3b1f0a86f8f0d2ba37646953f2e6b82691",
+      "size": 71786
+    },
+    {
+      "rfilename": "preprocessor_config.json",
+      "blobId": "0525dd953bb9241912f7147666f0d535165d5d4f",
+      "size": 127
+    },
+    {
+      "rfilename": "speech_tokenizer/config.json",
+      "blobId": "06cc8dc4c5ec8a1929086b71b98c313020d9268b",
+      "size": 2336
+    },
+    {
+      "rfilename": "speech_tokenizer/configuration.json",
+      "blobId": "ab58e2eaf53cd14a1a2a7527d9261ceea93a24cd",
+      "size": 76
+    },
+    {
+      "rfilename": "speech_tokenizer/model.safetensors",
+      "blobId": "026d66bfb5d730dcfd56450c5e9e51b3ef4e0712",
+      "size": 682293092,
+      "lfs": {
+        "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258",
+        "size": 682293092,
+        "pointerSize": 134
+      }
+    },
+    {
+      "rfilename": "speech_tokenizer/preprocessor_config.json",
+      "blobId": "ba40914f4f49ab98a8ca545d4892ef7291a39592",
+      "size": 234
+    },
+    {
+      "rfilename": "tokenizer_config.json",
+      "blobId": "6ff9fd60cc623bb54bbd603cbd418c97a11528d7",
+      "size": 7344
+    },
+    {
+      "rfilename": "vocab.json",
+      "blobId": "4783fe10ac3adce15ac8f358ef5462739852c569",
+      "size": 2776833
+    }
+  ],
+  "spaces": [],
+  "createdAt": "2026-01-22T22:49:24.000Z",
+  "safetensors": {
+    "parameters": {
+      "U32": 1536163840,
+      "BF16": 380512512
+    },
+    "total": 1916676352
+  },
+  "usedStorage": 5112317378
+}

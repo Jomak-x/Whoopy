@@ -1,5 +1,7 @@
 # PR 14: Managed Local Model Packs
 
+> **Historical implementation record.** Use [model capabilities](model-capabilities.md) and live `models pack list` output for current readiness.
+
 PR 14 turns optional voice experiments into named, inspectable local packs.
 It does not choose Whoopy's final voice. It gives you a safe way to compare
 the available voices on your own laptop.

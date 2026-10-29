@@ -26,6 +26,7 @@ class PromptBundle(BaseModel):
     plan: PromptDocument
     section: PromptDocument
     editorial: PromptDocument
+    whole_session: PromptDocument | None = None
 
 
 class PromptLoadError(ValueError):
@@ -54,4 +55,9 @@ def load_prompt_bundle(directory: Path) -> PromptBundle:
         plan=_load_document(directory / "plan_system.md"),
         section=_load_document(directory / "script_system.md"),
         editorial=_load_document(directory / "editorial_system.md"),
+        whole_session=(
+            _load_document(directory / "whole_session_system.md")
+            if (directory / "whole_session_system.md").exists()
+            else None
+        ),
     )

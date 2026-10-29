@@ -1,0 +1,56 @@
+{
+  "created_at": "2026-10-29T00:09:01.783110+00:00",
+  "scope": "same_model_writing_method_comparison_not_voice_quality",
+  "human_review": "pending",
+  "profile": "high",
+  "seed": 42,
+  "results": [
+    {
+      "case": "grounding-3m",
+      "writing_method": "plan_first",
+      "prompt": "A seated grounding meditation after an overstimulating workday. Use contact and ordinary sounds, develop one simple practice, and return gently to the rest of the day.",
+      "target_seconds": 180,
+      "seed": 42,
+      "status": "generated_pending_content_review",
+      "gpu_lock_wait_seconds": 6.154197035357356e-05,
+      "elapsed_seconds": 215.2678412499954,
+      "estimated_duration_seconds": 179.99965853658534,
+      "sections": 3,
+      "words": 217,
+      "attempts": 5,
+      "recipe_id": "grounding@1",
+      "model": {
+        "adapter_id": "whoopy.llama_cpp",
+        "versioned_model_id": "Ministral 3 14B Q4_K_M@74fac473c43357d7fb2671713608183cc72496d0#Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+        "runtime_id": "llama.cpp",
+        "runtime_version": "b10142",
+        "license_id": "Apache-2.0",
+        "device": "cpu,metal",
+        "settings": [
+          "context_tokens=32768",
+          "temperature=0.7",
+          "top_p=0.9",
+          "threads=0",
+          "gpu_layers=auto",
+          "reasoning=off",
+          "timeout_seconds=300"
+        ]
+      },
+      "script_sha256": "7573200ff97fbf07e535277d1fe5866c2cfa9e377f100e4c44844972bed6b829",
+      "script": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/writing-v2-high/grounding-3m/plan_first/artifacts/script.md",
+      "reused_control_source": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/writing-v3-high/grounding-3m/plan_first",
+      "reuse_reason": "Legacy model, prompt, context, sampling and code unchanged; new structured-output schema affects only new method."
+    },
+    {
+      "case": "grounding-3m",
+      "writing_method": "recipe_whole_session",
+      "prompt": "A seated grounding meditation after an overstimulating workday. Use contact and ordinary sounds, develop one simple practice, and return gently to the rest of the day.",
+      "target_seconds": 180,
+      "seed": 42,
+      "status": "failed",
+      "gpu_lock_wait_seconds": 6.687501445412636e-05,
+      "elapsed_seconds": 130.08729716698872,
+      "error": "GenerationError: whole-session rejected after one holistic revision: comfort paragraph 1: prepare the following quiet with a concrete practice invitation; anchor paragraph 1: use the selected sound anchor without breath guidance; practice paragraph 2: 28 words; requires 29-59; practice paragraph 2: prose leaves 16.3s quiet outside slot contract"
+    }
+  ]
+}

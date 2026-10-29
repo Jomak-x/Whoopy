@@ -1,5 +1,14 @@
 """Managed local model-pack declarations, inspection, and lifecycle helpers."""
 
+from whoopy.model_packs.eligibility import ModelEligibility, classify_model_eligibility
+from whoopy.model_packs.legacy_cleanup import (
+    CleanupPlan,
+    CleanupReceipt,
+    LegacyCleanupError,
+    LegacyCleanupManifest,
+    LegacyRuntimeCleanup,
+    load_legacy_cleanup_manifest,
+)
 from whoopy.model_packs.manager import (
     ManagedModelPacks,
     PackListReport,
@@ -41,11 +50,25 @@ from whoopy.model_packs.registry import (
     RuntimeSpec,
     ShardIndexSpec,
     SmokeTestEvidence,
+    hardware_requirement_error,
     load_model_pack_registry,
+)
+from whoopy.model_packs.runtime import (
+    ManagedRuntimePacks,
+    RuntimeBundleSpec,
+    RuntimeInstallReceipt,
+    RuntimePackManifest,
+    RuntimePackSpec,
+    RuntimePackState,
+    RuntimePackStatus,
+    current_runtime_target,
+    load_runtime_pack_manifest,
 )
 
 __all__ = [
     "AcceleratorUsage",
+    "CleanupPlan",
+    "CleanupReceipt",
     "DigestSpec",
     "FileInspection",
     "FileRole",
@@ -53,9 +76,14 @@ __all__ = [
     "HeavyweightModelSlot",
     "HeavyweightModelSlotUnavailable",
     "HeavyweightSlotStatus",
+    "LegacyCleanupError",
+    "LegacyCleanupManifest",
+    "LegacyRuntimeCleanup",
     "MachineIdentity",
     "ManagedModelPacks",
     "ManagedPackTrash",
+    "ManagedRuntimePacks",
+    "ModelEligibility",
     "ModelPackError",
     "ModelPackManifest",
     "ModelPackOperationError",
@@ -74,12 +102,23 @@ __all__ = [
     "PerformanceRecordStore",
     "PinnedFileSpec",
     "ReadinessCheck",
+    "RuntimeBundleSpec",
     "RuntimeEvidence",
+    "RuntimeInstallReceipt",
+    "RuntimePackManifest",
+    "RuntimePackSpec",
+    "RuntimePackState",
+    "RuntimePackStatus",
     "RuntimeSpec",
     "ShardIndexSpec",
     "SmokeResult",
     "SmokeTestEvidence",
     "TransferState",
+    "classify_model_eligibility",
+    "current_runtime_target",
+    "hardware_requirement_error",
+    "load_legacy_cleanup_manifest",
     "load_model_pack_registry",
+    "load_runtime_pack_manifest",
     "safe_managed_path",
 ]

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import re
 
-SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+# Keep closing quotation marks attached to the sentence while still splitting
+# after them. The older boundary joined two short quoted well-wishes into one
+# apparent 40-word sentence and caused valid self-compassion prose to fail.
+SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+|(?<=[.!?]['\"\u201d\u2019])\s+")
 WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
 
 # These pauses are deliberately audio events rather than prompt suggestions.

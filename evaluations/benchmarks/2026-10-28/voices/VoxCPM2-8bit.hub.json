@@ -1,0 +1,143 @@
+{
+  "_id": "69d5beddc7952a7566cd18f4",
+  "id": "mlx-community/VoxCPM2-8bit",
+  "private": false,
+  "pipeline_tag": "text-to-speech",
+  "library_name": "mlx-audio",
+  "tags": [
+    "mlx-audio",
+    "safetensors",
+    "voxcpm2",
+    "mlx",
+    "tts",
+    "text-to-speech",
+    "voice-cloning",
+    "voice-design",
+    "multilingual",
+    "en",
+    "zh",
+    "id",
+    "ja",
+    "ko",
+    "base_model:openbmb/VoxCPM2",
+    "base_model:finetune:openbmb/VoxCPM2",
+    "license:apache-2.0",
+    "region:us"
+  ],
+  "downloads": 5361,
+  "likes": 10,
+  "modelId": "mlx-community/VoxCPM2-8bit",
+  "author": "mlx-community",
+  "sha": "d52725898a0675703f7f9ddc5a4d1a3cdbb99032",
+  "lastModified": "2026-04-08T04:40:39.000Z",
+  "gated": false,
+  "disabled": false,
+  "model-index": null,
+  "config": {
+    "model_type": "voxcpm2",
+    "tokenizer_config": {
+      "bos_token": "<s>",
+      "eos_token": "<|im_end|>",
+      "pad_token": null,
+      "unk_token": "<unk>",
+      "use_default_system_prompt": false,
+      "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
+    }
+  },
+  "cardData": {
+    "license": "apache-2.0",
+    "base_model": "openbmb/VoxCPM2",
+    "tags": [
+      "mlx",
+      "tts",
+      "text-to-speech",
+      "voice-cloning",
+      "voice-design",
+      "multilingual"
+    ],
+    "library_name": "mlx-audio",
+    "pipeline_tag": "text-to-speech",
+    "language": [
+      "en",
+      "zh",
+      "id",
+      "ja",
+      "ko",
+      "multilingual"
+    ]
+  },
+  "siblings": [
+    {
+      "rfilename": ".gitattributes",
+      "blobId": "d20efff7cf3385a790c66381c4f4e1eba1e177dc",
+      "size": 1615
+    },
+    {
+      "rfilename": "README.md",
+      "blobId": "fb4c311fa21b6f7f177c276368e7c6a85544ac33",
+      "size": 2223
+    },
+    {
+      "rfilename": "config.json",
+      "blobId": "2597aa6bb87468353e1acfa88c9e3d26e792ba07",
+      "size": 5332
+    },
+    {
+      "rfilename": "model.safetensors",
+      "blobId": "ff2090a19cc56f82c3ad4f933f1d915abdfaace0",
+      "size": 3221772935,
+      "lfs": {
+        "sha256": "c07c59aca742fe8f53384a3da4d8a3b3fd98ddc77066dd4bd35b51e08c34a72f",
+        "size": 3221772935,
+        "pointerSize": 135
+      }
+    },
+    {
+      "rfilename": "special_tokens_map.json",
+      "blobId": "8619dda6f3eb6d60d0a1bb274820054e46f41699",
+      "size": 1632
+    },
+    {
+      "rfilename": "test_en.wav",
+      "blobId": "29a554d3ca4c400c1c7260ed16df9e3d18186a30",
+      "size": 583740,
+      "lfs": {
+        "sha256": "e3947e1ab2948247ec8b1bcf85ab78b5e713ae050343e4a1f86eb54e9105f2b5",
+        "size": 583740,
+        "pointerSize": 131
+      }
+    },
+    {
+      "rfilename": "test_id.wav",
+      "blobId": "b2b13970379c14cc613432aa45797bd17db9790e",
+      "size": 568380,
+      "lfs": {
+        "sha256": "0ccb6231c3b6b20baa5fd6f6af41cfd2364b8a64a0d537e021fd6bbd06e61e37",
+        "size": 568380,
+        "pointerSize": 131
+      }
+    },
+    {
+      "rfilename": "tokenizer.json",
+      "blobId": "41a5c2a8dba4058dd1ad73fb898abf5e4f64f0f9",
+      "size": 3676772
+    },
+    {
+      "rfilename": "tokenizer_config.json",
+      "blobId": "213f667d43be76ffdf226393fe58375f913747fc",
+      "size": 4952
+    }
+  ],
+  "spaces": [],
+  "createdAt": "2026-04-08T02:35:09.000Z",
+  "safetensors": {
+    "parameters": {
+      "I32": 3,
+      "F32": 93787393,
+      "U32": 1849114624,
+      "BF16": 440889920
+    },
+    "total": 2383791940
+  },
+  "usedStorage": 3222925055
+}

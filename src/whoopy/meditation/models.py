@@ -13,6 +13,8 @@ from pydantic import (
     model_validator,
 )
 
+from whoopy.ports import ScriptGenerationTelemetry
+
 SectionId = Annotated[
     str,
     StringConstraints(strip_whitespace=True, pattern=r"^[a-z0-9][a-z0-9-]{0,47}$"),
@@ -20,7 +22,7 @@ SectionId = Annotated[
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=240)]
 SpokenText = Annotated[
     str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=5_000),
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=20_000),
 ]
 MeditationTechnique = Literal[
     "arrival",
@@ -34,6 +36,40 @@ MeditationTechnique = Literal[
     "sleep_transition",
     "visualization",
 ]
+MeditationKind = Literal[
+    "grounding",
+    "focused_attention",
+    "breath_awareness",
+    "body_scan",
+    "noting",
+    "reflection",
+    "loving_kindness",
+    "self_compassion",
+    "visualization",
+    "open_awareness",
+    "sleep",
+]
+PracticeBeat = Literal[
+    "arrival",
+    "instruction",
+    "practice",
+    "reminder",
+    "deeper_practice",
+    "ending",
+]
+PauseIntent = Literal["instruction", "embodied", "reflection", "practice", "extended"]
+BreathMode = Literal["natural_awareness", "paced_no_hold", "external_anchor"]
+EndingBehavior = Literal["daytime_reorientation", "sleep_taper"]
+DeliveryIntent = Literal[
+    "neutral",
+    "warm",
+    "calm",
+    "soothing",
+    "grounded",
+    "compassionate",
+    "sleepy",
+    "encouraging",
+]
 
 
 class ProposedSection(BaseModel):
@@ -46,7 +82,10 @@ class ProposedSection(BaseModel):
     purpose: ShortText
     technique: MeditationTechnique
     weight: int = Field(ge=1, le=5)
-    pause_seconds: float = Field(ge=6, le=20)
+    pause_intent: PauseIntent = "practice"
+    # Accepted only for v1 prompt compatibility. V2 allocates duration from
+    # typed intent rather than trusting a model-proposed number.
+    pause_seconds: float | None = Field(default=None, ge=6, le=20)
 
 
 class ProposedPlan(BaseModel):
@@ -75,10 +114,13 @@ class PlannedSection(BaseModel):
     title: ShortText
     purpose: ShortText
     technique: MeditationTechnique = "focused_attention"
+    beat: PracticeBeat = "practice"
+    pause_intent: PauseIntent = "practice"
+    delivery: DeliveryIntent = "calm"
     target_speech_seconds: int = Field(ge=8)
     # Very short requests with many sections may scale the model's generous
     # proposal down, while normal practices retain the requested 6-20 seconds.
-    pause_after_ms: int = Field(ge=1_000, le=20_000)
+    pause_after_ms: int = Field(ge=1_000, le=120_000)
     minimum_words: int = Field(ge=8)
     maximum_words: int = Field(ge=8)
 
@@ -94,12 +136,28 @@ class MeditationPlan(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 2
     title: ShortText
     intention: ShortText
+    requested_outcome: ShortText = "Support the requested meditation outcome."
+    meditation_kind: MeditationKind = "focused_attention"
+    blueprint_id: str = "focused_attention@1"
+    blueprint_version: int = Field(default=1, ge=1)
+    breath_mode: BreathMode = "natural_awareness"
+    ending_behavior: EndingBehavior = "daytime_reorientation"
+    recipe_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    writing_prompt_id: str | None = None
+    writing_prompt_version: int | None = Field(default=None, ge=1)
+    writing_prompt_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    timing_compiler_algorithm_version: int | None = Field(default=None, ge=1)
+    response_schema_algorithm_version: int | None = Field(default=None, ge=1)
+    response_schema_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    posture: Literal["sitting", "lying_down"] | None = None
+    anchor: Literal["natural_breath", "sound", "contact"] | None = None
+    silence_budget_seconds: int = Field(default=0, ge=0)
     requested_duration_seconds: int = Field(ge=60, le=1_800)
     words_per_minute: int = Field(default=165, ge=80, le=220)
-    sections: list[PlannedSection] = Field(min_length=3, max_length=6)
+    sections: list[PlannedSection] = Field(min_length=3, max_length=12)
 
 
 class DraftedSection(BaseModel):
@@ -138,4 +196,7 @@ class RawGenerationAttempt(BaseModel):
     attempt: int = Field(ge=1)
     text: str
     elapsed_seconds: float = Field(ge=0)
+    request_seed: int | None = None
+    max_output_tokens: int | None = Field(default=None, ge=1)
+    telemetry: ScriptGenerationTelemetry = Field(default_factory=ScriptGenerationTelemetry)
     validation_error: str | None = None

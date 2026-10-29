@@ -22,13 +22,19 @@ import yaml
 from whoopy.adapters.llm import LlamaCppScriptGenerator, LlamaCppSettings
 from whoopy.adapters.tts import (
     MOSS_LANGUAGES,
+    QWEN3_TTS_LANGUAGES,
+    QWEN3_TTS_SPEAKERS,
     FishSpeech14Adapter,
     FishSpeechSettings,
     MossTTSAdapter,
     MossTTSSettings,
     MossVariant,
+    Qwen3TTSAdapter,
+    Qwen3TTSSettings,
+    Qwen3TTSVariant,
     SherpaOnnxKokoroAdapter,
     SherpaOnnxSettings,
+    resolve_qwen3_tts_installation,
 )
 from whoopy.artifacts import (
     ArtifactError,
@@ -43,13 +49,20 @@ from whoopy.audio.processing import ProcessedSpeechSynthesizer, SpeechProcessing
 from whoopy.config import ConfigError, load_settings
 from whoopy.control import LocalControlPlane
 from whoopy.evaluation import BakeoffRunner, EvaluationSetError, load_evaluation_set
+from whoopy.evaluation.pacing_profiles import (
+    PacingProfileRegistry,
+    apply_pacing_profile,
+)
 from whoopy.hardware import DoctorResult, diagnose, inspect_hardware, load_runtime_profiles
+from whoopy.locations import SOURCE_PROJECT_ROOT, default_config_directory, runtime_worker_script
 from whoopy.meditation import (
     GenerationError,
     GenerationWorkspace,
     LocalMeditationGenerator,
+    MeditationPlan,
     load_prompt_bundle,
 )
+from whoopy.meditation.models import MeditationKind
 from whoopy.meditation.prompts import PromptLoadError
 from whoopy.meditation.workspace import WorkspaceError
 from whoopy.model_packs.operations import ModelPackOperationError
@@ -61,6 +74,7 @@ from whoopy.model_packs.resolution import (
 from whoopy.pipeline import (
     GenerationRunSettings,
     LocalWorker,
+    PacingRunSettings,
     PendingGenerationConfig,
     RunModelMetadata,
     RunRecord,
@@ -72,16 +86,36 @@ from whoopy.pipeline import (
     TTSRunSettings,
     prepare_segment_regeneration,
 )
+from whoopy.pipeline.acceptance_stage import observe_acceptance_stage
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
+from whoopy.pipeline.revisions import (
+    RevisionError,
+    RevisionStore,
+    validate_semantic_plan_edit,
+)
 from whoopy.pipeline.runs import RunNotFoundError, RunStoreError
 from whoopy.pipeline.worker import WorkerError
-from whoopy.ports import AdapterError, SpeechSynthesizer
-from whoopy.timeline import ScriptCompileError, Timeline, build_script_timeline
+from whoopy.ports import AdapterError, SpeechCapabilities, SpeechSynthesizer
+from whoopy.timeline import (
+    ScriptCompileError,
+    SpeechSegment,
+    Timeline,
+    TimelineSegment,
+    build_script_timeline,
+)
+from whoopy.voice_references import VoiceReferenceManager
 from whoopy.voices import KOKORO_ENGLISH_VOICES, kokoro_speaker_id
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = SOURCE_PROJECT_ROOT
 GENERATION_HEARTBEAT_SECONDS = 2.0
 GENERATION_LEASE_SECONDS = 15.0
+QWEN_BACKEND_VARIANTS: dict[str, Qwen3TTSVariant] = {
+    "qwen3-custom-voice-0.6b": "custom-voice-0.6b",
+    "qwen3-custom-voice-1.7b": "custom-voice-1.7b",
+    "qwen3-voice-design-1.7b": "voice-design-1.7b",
+    "qwen3-base-clone-0.6b": "base-clone-0.6b",
+    "qwen3-base-clone-1.7b": "base-clone-1.7b",
+}
 
 
 class _GenerationHeartbeat:
@@ -121,6 +155,13 @@ class _GenerationHeartbeat:
             self._stage = resolved
             self._message = message
             self._renew()
+            record = self.store.load(self.run_id)
+        observe_acceptance_stage(
+            run_id=self.run_id,
+            stage=stage,
+            durable_run_status=record.status.value,
+            durable_run_stage=resolved.value,
+        )
 
     def stop(self) -> None:
         self._stop.set()
@@ -374,7 +415,7 @@ def _add_run_location_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config-dir",
         type=Path,
-        default=Path("config"),
+        default=default_config_directory(),
         help="Directory containing default.yaml and optional local.yaml.",
     )
     parser.add_argument(
@@ -405,7 +446,7 @@ def _add_model_location_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config-dir",
         type=Path,
-        default=Path("config"),
+        default=default_config_directory(),
         help="Directory containing runtime_profiles.yaml.",
     )
     _add_runtime_model_arguments(parser)
@@ -423,7 +464,7 @@ def _add_model_pack_location_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--pack-registry",
         type=Path,
-        default=Path("config/model_packs.yaml"),
+        default=default_config_directory() / "model_packs.yaml",
         help="Versioned declaration of the optional voice packs.",
     )
     parser.add_argument(
@@ -448,6 +489,24 @@ def _add_runtime_model_arguments(parser: argparse.ArgumentParser) -> None:
         default=Path("models/managed"),
         help="Ignored directory for verified downloads and extracted runtimes.",
     )
+
+
+def _llm_settings_for_writing_method(writing_method: str) -> LlamaCppSettings:
+    """Reserve context for the complete draft and a complete holistic revision."""
+    return LlamaCppSettings(
+        context_tokens=32_768 if writing_method == "recipe_whole_session" else 8_192
+    )
+
+
+def _planning_words_per_minute(backend: str, speed: float, pace: str, writing_method: str) -> int:
+    if backend != "kokoro":
+        return 133
+    if writing_method != "recipe_whole_session":
+        return max(80, round(205 * speed))
+    # The restored portable Michael control measured 94.8 WPM at 0.6/slow.
+    # Treat this as an estimate; the worker still measures real speech duration.
+    multiplier = {"natural": 1.0, "unhurried": 0.92, "slow": 0.82, "very_slow": 0.72}[pace]
+    return max(80, min(220, round(193 * speed * multiplier)))
 
 
 def _model_plan(
@@ -507,6 +566,24 @@ def _model_pack_service(args: argparse.Namespace) -> Any:
     )
 
 
+def _runtime_pack_service(args: argparse.Namespace) -> Any:
+    """Create the isolated-runtime installer only at the CLI boundary."""
+
+    manager_type = import_module("whoopy.model_packs").ManagedRuntimePacks
+    return manager_type.from_path(args.runtime_registry, models_root=args.models_dir)
+
+
+def _legacy_cleanup_service(args: argparse.Namespace) -> Any:
+    """Create the manifest-constrained legacy-runtime cleanup service."""
+
+    cleanup_type = import_module("whoopy.model_packs").LegacyRuntimeCleanup
+    return cleanup_type.from_path(
+        args.cleanup_manifest,
+        models_root=args.models_dir,
+        runs_root=args.runs_dir,
+    )
+
+
 def _model_pack_json(value: Any) -> Any:
     """Turn an operation result into safe JSON without prescribing its model type."""
 
@@ -526,6 +603,95 @@ def _print_model_pack_result(value: Any, *, json_output: bool) -> None:
         print(json.dumps(payload, indent=2))
         return
     print(yaml.safe_dump(payload, sort_keys=False), end="")
+
+
+def _qwen_reference_manager(models_dir: Path) -> VoiceReferenceManager:
+    models_root = models_root_from_artifact_store(models_dir)
+    return VoiceReferenceManager(models_root / "voice-references")
+
+
+def _qwen_adapter_from_durable(
+    durable: TTSRunSettings,
+    *,
+    models_dir: Path,
+) -> Qwen3TTSAdapter:
+    """Reconstruct exactly the Qwen adapter selected before the run started."""
+
+    variant = QWEN_BACKEND_VARIANTS.get(durable.backend)
+    if variant is None:
+        raise GenerationError(f"Unsupported durable Qwen backend: {durable.backend}")
+    models_root = models_root_from_artifact_store(models_dir)
+    installation = resolve_qwen3_tts_installation(models_root, variant)
+    if (
+        installation.model_revision != durable.qwen_model_revision
+        or installation.runtime_revision != durable.qwen_runtime_revision
+    ):
+        raise GenerationError(
+            "The local Qwen3-TTS model/runtime revision changed after this run was created. "
+            "Restore the recorded revision before resuming."
+        )
+    reference_audio: Path | None = None
+    reference_text: Path | None = None
+    consent_scope: Literal["local_voice_cloning_experiment_only"] | None = None
+    if variant.startswith("base-clone"):
+        assert durable.reference_id is not None
+        assert durable.reference_revision is not None
+        reference_manager = _qwen_reference_manager(models_dir)
+        reference = reference_manager.load_revision(
+            durable.reference_id, durable.reference_revision
+        )
+        if (
+            reference.revision_id != durable.reference_revision_id
+            or reference.audio_sha256 != durable.reference_audio_sha256
+            or reference.transcript_sha256 != durable.reference_transcript_sha256
+            or reference.consent.scope != durable.reference_consent_scope
+        ):
+            raise GenerationError(
+                "The consented Qwen voice-reference revision no longer matches this run."
+            )
+        reference_audio = reference_manager.root / reference.audio_path
+        reference_text = reference_manager.root / reference.transcript_path
+        consent_scope = reference.consent.scope
+    settings = Qwen3TTSSettings(
+        runtime_directory=installation.runtime_directory,
+        worker_script=runtime_worker_script("qwen3_tts_worker.py"),
+        model_directory=installation.model_directory,
+        variant=variant,
+        model_revision=installation.model_revision,
+        runtime_revision=installation.runtime_revision,
+        speaker=durable.voice_name,
+        language=durable.language,
+        voice_design_preset=durable.qwen_voice_design_preset,
+        reference_audio=reference_audio,
+        reference_text=reference_text,
+        consent_scope=consent_scope,
+        seed=durable.seed,
+        models_root=models_root,
+    )
+    error = Qwen3TTSAdapter.availability_error(settings)
+    if error is not None:
+        raise GenerationError(f"{durable.backend} is not ready: {error}.")
+    return Qwen3TTSAdapter(settings)
+
+
+def _managed_reference_paths(
+    durable: TTSRunSettings, *, models_dir: Path
+) -> tuple[Path, Path] | None:
+    """Resolve and checksum-verify a recorded managed reference revision."""
+
+    if durable.reference_id is None:
+        return None
+    assert durable.reference_revision is not None
+    manager = _qwen_reference_manager(models_dir)
+    reference = manager.load_revision(durable.reference_id, durable.reference_revision)
+    if (
+        reference.revision_id != durable.reference_revision_id
+        or reference.audio_sha256 != durable.reference_audio_sha256
+        or reference.transcript_sha256 != durable.reference_transcript_sha256
+        or reference.consent.scope != durable.reference_consent_scope
+    ):
+        raise GenerationError("The consented voice-reference revision no longer matches this run.")
+    return manager.root / reference.audio_path, manager.root / reference.transcript_path
 
 
 def _real_script_worker(
@@ -549,15 +715,23 @@ def _real_script_worker(
             references_path=pack_config_dir / "voice_references.yaml",
             models_root=models_root_from_artifact_store(models_dir),
         )
+        reference_paths = _managed_reference_paths(resolved.tts, models_dir=models_dir)
         raw_synthesizer = FishSpeech14Adapter(
             FishSpeechSettings(
                 runtime_directory=pack.runtime_directory,
-                worker_script=PROJECT_ROOT / "scripts" / "fish_speech_1_4_worker.py",
+                worker_script=runtime_worker_script("fish_speech_1_4_worker.py"),
                 checkpoint_directory=pack.checkpoint_directory,
-                reference_audio=pack.reference.audio_path,
-                reference_text=pack.reference.transcript_path,
+                reference_audio=(
+                    pack.reference.audio_path if reference_paths is None else reference_paths[0]
+                ),
+                reference_text=(
+                    pack.reference.transcript_path
+                    if reference_paths is None
+                    else reference_paths[1]
+                ),
                 seed=resolved.tts.seed,
                 models_root=models_root_from_artifact_store(models_dir),
+                hardware_requirement=pack.hardware_requirement,
             )
         )
     elif resolved.tts.backend in {"moss-local-v1.5", "moss-v1.5"}:
@@ -569,21 +743,27 @@ def _real_script_worker(
             models_root=models_root_from_artifact_store(models_dir),
         )
         assert pack.codec_directory is not None
+        reference_paths = _managed_reference_paths(resolved.tts, models_dir=models_dir)
         raw_synthesizer = MossTTSAdapter(
             MossTTSSettings(
                 runtime_directory=pack.runtime_directory,
-                worker_script=PROJECT_ROOT / "scripts" / "moss_tts_worker.py",
+                worker_script=runtime_worker_script("moss_tts_worker.py"),
                 model_directory=pack.checkpoint_directory,
                 codec_directory=pack.codec_directory,
                 variant=cast(MossVariant, resolved.tts.backend),
-                reference_audio=pack.reference.audio_path,
+                reference_audio=(
+                    pack.reference.audio_path if reference_paths is None else reference_paths[0]
+                ),
                 language=resolved.tts.language,
                 instruction=resolved.tts.instruction,
                 use_reference=resolved.tts.use_reference,
                 seed=resolved.tts.seed,
                 models_root=models_root_from_artifact_store(models_dir),
+                hardware_requirement=pack.hardware_requirement,
             )
         )
+    elif resolved.tts.backend in QWEN_BACKEND_VARIANTS:
+        raw_synthesizer = _qwen_adapter_from_durable(resolved.tts, models_dir=models_dir)
     else:
         tts_settings = SherpaOnnxSettings(
             voice_name=resolved.tts.voice_name,
@@ -604,9 +784,17 @@ def _real_script_worker(
         raw_synthesizer,
         settings=resolved.processing,
     )
+    if resolved.tts.backend == "fish-1.4":
+        effective_voice_mode = "reference"
+    elif resolved.tts.backend in {"moss-local-v1.5", "moss-v1.5"}:
+        effective_voice_mode = "reference" if resolved.tts.use_reference else "designed"
+    elif resolved.tts.backend in QWEN_BACKEND_VARIANTS:
+        effective_voice_mode = resolved.tts.voice_mode
+    else:
+        effective_voice_mode = "preset"
 
     def timeline_builder(active_record: RunRecord, created_at: datetime) -> Timeline:
-        return build_script_timeline(
+        timeline = build_script_timeline(
             run_id=active_record.run_id,
             script=store.load_script(active_record.run_id),
             created_at=created_at,
@@ -616,6 +804,26 @@ def _real_script_worker(
                 else "script_file"
             ),
         )
+        timeline = _apply_global_speech_overrides(timeline, resolved.tts)
+        if resolved.generation is not None and resolved.generation.pacing is not None:
+            registry_path = pack_config_dir / "pacing_profiles.yaml"
+            registry = (
+                PacingProfileRegistry.load(registry_path)
+                if registry_path.is_file()
+                else PacingProfileRegistry.load_bundled()
+            )
+            saved = resolved.generation.pacing
+            profile = registry.get(saved.profile_id)
+            if profile.version != saved.version or profile.digest != saved.sha256:
+                raise GenerationError(
+                    "The reviewed pacing profile changed since this run was created."
+                )
+            timeline = apply_pacing_profile(timeline, profile)
+        return _apply_speech_capability_fallbacks(
+            timeline,
+            raw_synthesizer.capabilities,
+            voice_mode=effective_voice_mode,
+        )
 
     return LocalWorker(
         store,
@@ -624,6 +832,79 @@ def _real_script_worker(
         timeline_builder=timeline_builder,
         bypass_cache_segment_ids=bypass_cache_segment_ids,
     )
+
+
+def _apply_global_speech_overrides(timeline: Timeline, settings: TTSRunSettings) -> Timeline:
+    """Apply durable adapter-neutral controls to every spoken timeline segment."""
+
+    changes = {
+        key: value
+        for key, value in {
+            "delivery": settings.delivery_override,
+            "intensity": settings.intensity_override,
+            "pace": settings.pace_override,
+        }.items()
+        if value is not None
+    }
+    if not changes:
+        return timeline
+    return timeline.model_copy(
+        update={
+            "segments": [
+                segment.model_copy(update=changes)
+                if isinstance(segment, SpeechSegment)
+                else segment
+                for segment in timeline.segments
+            ]
+        }
+    )
+
+
+def _apply_speech_capability_fallbacks(
+    timeline: Timeline,
+    capabilities: SpeechCapabilities,
+    *,
+    voice_mode: str,
+) -> Timeline:
+    """Persist the controls an adapter will actually apply, never ignored intent."""
+
+    segments: list[TimelineSegment] = []
+    selected_voice_mode = (
+        voice_mode if voice_mode in capabilities.voice_modes else capabilities.voice_modes[0]
+    )
+    for segment in timeline.segments:
+        if not isinstance(segment, SpeechSegment):
+            segments.append(segment)
+            continue
+        changes: dict[str, object] = {
+            "voice_mode": selected_voice_mode,
+            "delivery": (
+                segment.delivery
+                if segment.delivery in capabilities.delivery_styles
+                else capabilities.delivery_styles[0]
+            ),
+            "intensity": (
+                segment.intensity
+                if segment.intensity in capabilities.intensity_levels
+                else capabilities.intensity_levels[0]
+            ),
+            "pace": (
+                segment.pace
+                if segment.pace in capabilities.pace_intents
+                else capabilities.pace_intents[0]
+            ),
+            "language": (
+                segment.language
+                if segment.language in capabilities.languages
+                else capabilities.languages[0]
+            ),
+        }
+        if not capabilities.supports_pronunciation_overrides:
+            changes["pronunciation_overrides"] = ()
+        if not capabilities.supports_duration_control:
+            changes["target_duration_ms"] = None
+        segments.append(segment.model_copy(update=changes))
+    return timeline.model_copy(update={"segments": segments})
 
 
 def _worker_for_record(
@@ -713,6 +994,8 @@ def _pending_generation_resume_arguments(
         str(pending.seed),
         "--parallel-sections",
         str(pending.max_parallel_sections),
+        "--writing-method",
+        pending.writing_method,
         "--tts-model",
         pending.tts.backend,
         "--config-dir",
@@ -721,7 +1004,22 @@ def _pending_generation_resume_arguments(
         str(args.models_dir),
         "--runs-dir",
         str(store.root),
+        "--audience",
+        record.audience,
     ]
+    if pending.pacing is not None:
+        command.extend(
+            [
+                "--pacing-profile",
+                pending.pacing.profile_id,
+                "--pacing-profile-version",
+                str(pending.pacing.version),
+                "--pacing-profile-sha256",
+                pending.pacing.sha256,
+            ]
+        )
+    if pending.meditation_kind is not None:
+        command.extend(["--meditation-kind", pending.meditation_kind])
     if pending.tts.backend == "kokoro":
         command.extend(
             [
@@ -742,6 +1040,47 @@ def _pending_generation_resume_arguments(
         )
         if not pending.tts.use_reference:
             command.append("--moss-direct-voice")
+    elif pending.tts.backend in QWEN_BACKEND_VARIANTS:
+        command.extend(["--qwen-language", pending.tts.language])
+        if pending.tts.backend.startswith("qwen3-custom-voice-"):
+            command.extend(["--qwen-speaker", pending.tts.voice_name])
+        elif pending.tts.backend == "qwen3-voice-design-1.7b":
+            command.extend(["--qwen-voice-design-preset", pending.tts.qwen_voice_design_preset])
+        else:
+            assert pending.tts.reference_id is not None
+            assert pending.tts.reference_revision is not None
+            command.extend(
+                [
+                    "--qwen-reference",
+                    pending.tts.reference_id,
+                    "--qwen-reference-revision",
+                    str(pending.tts.reference_revision),
+                ]
+            )
+    if (
+        pending.tts.backend
+        in {
+            "fish-1.4",
+            "moss-local-v1.5",
+            "moss-v1.5",
+        }
+        and pending.tts.reference_id is not None
+    ):
+        assert pending.tts.reference_revision is not None
+        command.extend(
+            [
+                "--voice-reference",
+                pending.tts.reference_id,
+                "--voice-reference-revision",
+                str(pending.tts.reference_revision),
+            ]
+        )
+    if pending.tts.delivery_override is not None:
+        command.extend(["--delivery", pending.tts.delivery_override])
+    if pending.tts.intensity_override is not None:
+        command.extend(["--intensity", pending.tts.intensity_override])
+    if pending.tts.pace_override is not None:
+        command.extend(["--pace", pending.tts.pace_override])
     if args.artifact_lock is not None:
         command.extend(["--artifact-lock", str(args.artifact_lock)])
     if args.json:
@@ -765,7 +1104,7 @@ def _build_parser() -> argparse.ArgumentParser:
     show_parser.add_argument(
         "--config-dir",
         type=Path,
-        default=Path("config"),
+        default=default_config_directory(),
         help="Directory containing default.yaml and optional local.yaml.",
     )
     # These flags establish CLI as the highest-priority config layer without
@@ -781,7 +1120,7 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor_parser.add_argument(
         "--config-dir",
         type=Path,
-        default=Path("config"),
+        default=default_config_directory(),
         help="Directory containing runtime_profiles.yaml.",
     )
     doctor_parser.add_argument(
@@ -791,7 +1130,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     doctor_parser.add_argument(
         "--profile",
-        choices=("auto", "basic", "lite", "standard", "high", "studio"),
+        choices=("auto", "basic", "lite", "standard", "high", "high", "studio"),
         help="Test a named profile instead of the configured automatic selection.",
     )
 
@@ -817,7 +1156,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     models_doctor_parser.add_argument(
         "--profile",
-        choices=("auto", "basic", "lite", "standard", "high", "studio"),
+        choices=("auto", "basic", "lite", "standard", "high", "high", "studio"),
         default="auto",
         help="Resolve a named profile or choose automatically.",
     )
@@ -839,7 +1178,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     models_install_parser.add_argument(
         "--profile",
-        choices=("auto", "basic", "lite", "standard", "high", "studio"),
+        choices=("auto", "basic", "lite", "standard", "high", "high", "studio"),
         default="auto",
         help="Install a named profile or choose automatically.",
     )
@@ -949,6 +1288,76 @@ def _build_parser() -> argparse.ArgumentParser:
     model_packs_restore_parser.add_argument("--json", action="store_true")
     _add_model_pack_location_arguments(model_packs_restore_parser)
 
+    model_runtimes_parser = model_commands.add_parser(
+        "runtime",
+        help="Inspect or install checksum-pinned isolated voice-model runtimes.",
+    )
+    model_runtime_commands = model_runtimes_parser.add_subparsers(dest="model_runtime_command")
+    for runtime_command, runtime_help in (
+        ("list", "List runtime bundles and their truthful availability."),
+        ("verify", "Verify one managed isolated runtime without importing it."),
+        ("install", "Install one reviewed runtime bundle with resumable transfer."),
+    ):
+        runtime_parser = model_runtime_commands.add_parser(runtime_command, help=runtime_help)
+        if runtime_command != "list":
+            runtime_parser.add_argument("runtime_id")
+        if runtime_command == "install":
+            runtime_parser.add_argument("--offline-dir", type=Path)
+            runtime_parser.add_argument("--no-network", action="store_true")
+            runtime_parser.add_argument(
+                "--python",
+                type=Path,
+                help="Exact Python interpreter required by a locked-wheelhouse runtime bundle.",
+            )
+        runtime_parser.add_argument("--json", action="store_true")
+        runtime_parser.add_argument(
+            "--runtime-registry",
+            type=Path,
+            default=default_config_directory() / "runtime_packs.yaml",
+        )
+        runtime_parser.add_argument("--models-dir", type=Path, default=Path("models"))
+
+    model_cleanup_parser = model_commands.add_parser(
+        "cleanup",
+        help="Inspect or recoverably quarantine allowlisted legacy runtime files.",
+    )
+    model_cleanup_commands = model_cleanup_parser.add_subparsers(dest="model_cleanup_command")
+    for cleanup_command, cleanup_help in (
+        ("inspect", "Dry-run the reviewed allowlist and report exact reclaimable bytes."),
+        ("apply", "Move the inspected candidates to recoverable local quarantine."),
+        ("receipts", "List durable cleanup and restoration receipts."),
+        ("restore", "Restore one cleanup receipt after verifying every quarantined byte."),
+        ("purge", "Irreversibly delete one verified quarantine payload and retain its receipt."),
+    ):
+        cleanup_parser = model_cleanup_commands.add_parser(cleanup_command, help=cleanup_help)
+        if cleanup_command in {"restore", "purge"}:
+            cleanup_parser.add_argument("receipt_id")
+        if cleanup_command in {"apply", "restore", "purge"}:
+            cleanup_parser.add_argument(
+                "--confirm",
+                required=True,
+                help="Exact confirmation token printed by inspect or the receipt.",
+            )
+        cleanup_parser.add_argument("--json", action="store_true")
+        cleanup_parser.add_argument(
+            "--cleanup-manifest",
+            type=Path,
+            default=default_config_directory() / "legacy_cleanup.yaml",
+            help="Checked-in allowlist of disposable legacy runtime paths.",
+        )
+        cleanup_parser.add_argument(
+            "--models-dir",
+            type=Path,
+            default=Path("models"),
+            help="Models root containing experimental legacy runtimes.",
+        )
+        cleanup_parser.add_argument(
+            "--runs-dir",
+            type=Path,
+            default=Path("runs"),
+            help="Run root checked for active generation worker locks.",
+        )
+
     draft_parser = subcommands.add_parser(
         "draft",
         help="Generate a validated local meditation plan, script, and timeline.",
@@ -962,11 +1371,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     draft_parser.add_argument(
         "--profile",
-        choices=("auto", "lite", "standard"),
+        choices=("auto", "lite", "standard", "high"),
         default="auto",
         help="Choose a local LLM profile or select one safely.",
     )
     draft_parser.add_argument("--seed", type=int, default=42, help="Reproducible model seed.")
+    draft_parser.add_argument(
+        "--writing-method",
+        choices=(
+            "plan_first",
+            "blueprint_first_sparse",
+            "three_candidate_structural_selection",
+            "recipe_whole_session",
+        ),
+        default="plan_first",
+        help="Choose legacy section drafting or a coherent recipe-guided whole-session draft.",
+    )
     draft_parser.add_argument(
         "--draft-id",
         help="Resume this draft UUID and reuse its validated plan and sections.",
@@ -998,14 +1418,14 @@ def _build_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument(
         "--profiles",
         nargs="+",
-        choices=("lite", "standard"),
-        default=("lite", "standard"),
+        choices=("lite", "standard", "high"),
+        default=("lite", "standard", "high"),
         help="Candidates to measure against the same cases.",
     )
     evaluate_parser.add_argument(
         "--evaluation-set",
         type=Path,
-        default=Path("config/evaluation/phase-3-5.yaml"),
+        default=default_config_directory() / "evaluation" / "phase-3-5.yaml",
         help="Versioned YAML evaluation fixture.",
     )
     evaluate_parser.add_argument(
@@ -1015,6 +1435,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="New directory for report.json and per-case artifacts.",
     )
     evaluate_parser.add_argument("--seed", type=int, default=42)
+    evaluate_parser.add_argument(
+        "--writing-method",
+        choices=(
+            "plan_first",
+            "blueprint_first_sparse",
+            "three_candidate_structural_selection",
+            "recipe_whole_session",
+        ),
+        default="plan_first",
+        help=(
+            "Production drafting strategy recorded for every corpus case; "
+            "blueprint-first is the safest Meditation Engine V2 path."
+        ),
+    )
     _add_model_location_arguments(evaluate_parser)
 
     generate_parser = subcommands.add_parser(
@@ -1037,6 +1471,46 @@ def _build_parser() -> argparse.ArgumentParser:
         default=3.0,
         help="Prompt-mode target duration from 1 to 30 minutes (default: 3).",
     )
+    generate_parser.add_argument(
+        "--requested-duration-seconds",
+        type=int,
+        help=argparse.SUPPRESS,
+    )
+    generate_parser.add_argument(
+        "--meditation-kind",
+        choices=(
+            "grounding",
+            "focused_attention",
+            "breath_awareness",
+            "body_scan",
+            "noting",
+            "reflection",
+            "loving_kindness",
+            "self_compassion",
+            "visualization",
+            "open_awareness",
+            "sleep",
+        ),
+        help="Use a reviewed technique blueprint instead of inferring one from the prompt.",
+    )
+    generate_parser.add_argument(
+        "--writing-method",
+        choices=(
+            "plan_first",
+            "blueprint_first_sparse",
+            "three_candidate_structural_selection",
+            "recipe_whole_session",
+        ),
+        default="plan_first",
+        help="Production drafting strategy; Lab uses this for controlled comparisons.",
+    )
+    generate_parser.add_argument(
+        "--pacing-profile",
+        default="meditative-v2",
+        help="Reviewed product pacing profile; its exact revision is saved with the run.",
+    )
+    generate_parser.add_argument("--pacing-profile-version", type=int, help=argparse.SUPPRESS)
+    generate_parser.add_argument("--pacing-profile-sha256", help=argparse.SUPPRESS)
     generate_parser.add_argument("--seed", type=int, default=42, help="Local LLM seed.")
     generate_parser.add_argument(
         "--parallel-sections",
@@ -1061,15 +1535,40 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     generate_parser.add_argument(
         "--profile",
-        choices=("auto", "basic", "lite", "standard"),
+        choices=("auto", "basic", "lite", "standard", "high"),
         default="auto",
         help="Use Basic for scripts; prompt mode safely selects Lite or Standard.",
     )
     generate_parser.add_argument(
         "--tts-model",
-        choices=("kokoro", "fish-1.4", "moss-local-v1.5", "moss-v1.5"),
+        choices=(
+            "kokoro",
+            "fish-1.4",
+            "moss-local-v1.5",
+            "moss-v1.5",
+            *QWEN_BACKEND_VARIANTS,
+        ),
         default="kokoro",
         help="Speech model; larger experimental models require local checkpoints.",
+    )
+    generate_parser.add_argument(
+        "--delivery",
+        choices=(
+            "neutral",
+            "warm",
+            "calm",
+            "soothing",
+            "grounded",
+            "compassionate",
+            "sleepy",
+            "encouraging",
+        ),
+        help="Apply one reviewed typed delivery intent to every spoken block.",
+    )
+    generate_parser.add_argument(
+        "--intensity",
+        choices=("subtle", "moderate"),
+        help="Apply one typed delivery intensity to every spoken block.",
     )
     generate_parser.add_argument(
         "--moss-language",
@@ -1088,15 +1587,63 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Let MOSS choose a voice instead of cloning Whoopy's slow reference.",
     )
     generate_parser.add_argument(
+        "--voice-reference",
+        help="Consented managed reference ID for Fish or MOSS reference mode.",
+    )
+    generate_parser.add_argument(
+        "--voice-reference-revision",
+        type=int,
+        help="Immutable managed Fish/MOSS reference revision used during resume.",
+    )
+    generate_parser.add_argument(
+        "--qwen-language",
+        choices=QWEN3_TTS_LANGUAGES,
+        default="English",
+        help="Explicit Qwen3-TTS language (Lab-only backends).",
+    )
+    generate_parser.add_argument(
+        "--qwen-speaker",
+        choices=QWEN3_TTS_SPEAKERS,
+        default="Serena",
+        help="Preset speaker for Qwen3-TTS CustomVoice.",
+    )
+    generate_parser.add_argument(
+        "--qwen-voice-design-preset",
+        choices=("warm_meditation", "grounded_meditation", "sleep_meditation"),
+        default="warm_meditation",
+        help="Reviewed VoiceDesign profile; arbitrary instructions are not accepted.",
+    )
+    generate_parser.add_argument(
+        "--qwen-reference",
+        help="Consented local reference ID required by Qwen3-TTS Base cloning.",
+    )
+    generate_parser.add_argument(
+        "--qwen-reference-revision",
+        type=int,
+        help="Immutable reference revision used when reconstructing a durable run.",
+    )
+    generate_parser.add_argument(
         "--voice",
         choices=tuple(sorted(KOKORO_ENGLISH_VOICES)),
         help="Kokoro voice name; defaults to config/default.yaml.",
     )
     generate_parser.add_argument("--speed", type=float, help="Positive Kokoro speech-speed factor.")
     generate_parser.add_argument(
+        "--pace",
+        choices=("natural", "unhurried", "slow", "very_slow"),
+        default="slow",
+        help="Adapter-neutral narration pace applied to every spoken segment.",
+    )
+    generate_parser.add_argument(
         "--json",
         action="store_true",
         help="Print only the machine-readable completed run record.",
+    )
+    generate_parser.add_argument(
+        "--audience",
+        choices=("studio", "lab", "system"),
+        default="studio",
+        help=argparse.SUPPRESS,
     )
     _add_model_location_arguments(generate_parser)
     generate_parser.add_argument(
@@ -1183,6 +1730,26 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_run_location_arguments(run_regenerate_parser)
     _add_runtime_model_arguments(run_regenerate_parser)
 
+    run_plan_regenerate_parser = run_commands.add_parser(
+        "regenerate-plan",
+        help="Redraft a reviewed semantic plan edit through the original local LLM context.",
+    )
+    run_plan_regenerate_parser.add_argument("run_id", help="UUID of a stopped generated run.")
+    run_plan_regenerate_parser.add_argument(
+        "--plan-file",
+        type=Path,
+        required=True,
+        help="Validated edited meditation-plan JSON.",
+    )
+    run_plan_regenerate_parser.add_argument(
+        "--note",
+        default="Reviewed plan regenerated in Whoopy Studio.",
+        help="Immutable revision note.",
+    )
+    run_plan_regenerate_parser.add_argument("--json", action="store_true")
+    _add_run_location_arguments(run_plan_regenerate_parser)
+    _add_runtime_model_arguments(run_plan_regenerate_parser)
+
     cache_parser = subcommands.add_parser(
         "cache",
         help="Inspect the local content-addressed speech cache.",
@@ -1217,45 +1784,53 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_run_location_arguments(process_parser)
     _add_runtime_model_arguments(process_parser)
 
-    web_parser = subcommands.add_parser(
-        "web",
-        help="Start the private local browser interface.",
-    )
-    web_parser.add_argument(
-        "--host",
-        choices=("127.0.0.1", "localhost"),
-        default="127.0.0.1",
-        help="Loopback address to use (default: 127.0.0.1).",
-    )
-    web_parser.add_argument(
-        "--port",
-        type=int,
-        default=8765,
-        help="Local TCP port from 1 to 65535 (default: 8765).",
-    )
-    web_parser.add_argument(
-        "--open",
-        action="store_true",
-        help="Open the interface in the default browser after starting.",
-    )
-    web_parser.add_argument(
-        "--config-dir",
-        type=Path,
-        default=Path("config"),
-        help="Directory containing Whoopy configuration.",
-    )
-    web_parser.add_argument(
-        "--models-dir",
-        type=Path,
-        default=Path("models/managed"),
-        help="Directory containing verified model artifacts.",
-    )
-    web_parser.add_argument(
-        "--runs-dir",
-        type=Path,
-        default=Path("runs"),
-        help="Directory containing durable generation runs.",
-    )
+    for command, help_text, opens_by_default in (
+        ("app", "Start the permanent private local Studio and Lab.", True),
+        ("web", "Legacy alias for the private local application.", False),
+    ):
+        local_app_parser = subcommands.add_parser(command, help=help_text)
+        local_app_parser.add_argument(
+            "--host",
+            choices=("127.0.0.1", "localhost"),
+            default="127.0.0.1",
+            help="Loopback address to use (default: 127.0.0.1).",
+        )
+        local_app_parser.add_argument(
+            "--port",
+            type=int,
+            default=8765,
+            help="Local TCP port from 1 to 65535 (default: 8765).",
+        )
+        browser_action = "store_false" if opens_by_default else "store_true"
+        local_app_parser.add_argument(
+            "--no-open" if opens_by_default else "--open",
+            action=browser_action,
+            dest="open",
+            default=opens_by_default,
+            help=(
+                "Do not open the Studio in a browser."
+                if opens_by_default
+                else "Open the interface in the default browser after starting."
+            ),
+        )
+        local_app_parser.add_argument(
+            "--config-dir",
+            type=Path,
+            default=default_config_directory(),
+            help="Directory containing Whoopy configuration.",
+        )
+        local_app_parser.add_argument(
+            "--models-dir",
+            type=Path,
+            default=Path("models/managed"),
+            help="Directory containing verified model artifacts.",
+        )
+        local_app_parser.add_argument(
+            "--runs-dir",
+            type=Path,
+            default=Path("runs"),
+            help="Directory containing durable generation runs.",
+        )
 
     return parser
 
@@ -1351,6 +1926,73 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_model_pack_result(report, json_output=args.json)
         return 0
 
+    if args.command == "models" and args.models_command == "runtime":
+        try:
+            operation = args.model_runtime_command
+            if operation is None:
+                raise ArtifactError("Choose a `whoopy models runtime` subcommand.")
+            service = _runtime_pack_service(args)
+            if operation == "list":
+                runtime_report: Any = {"runtime_packs": service.list()}
+            elif operation == "verify":
+                runtime_report = service.inspect(args.runtime_id)
+            elif operation == "install":
+                runtime_report = service.install(
+                    args.runtime_id,
+                    offline_directory=args.offline_dir,
+                    allow_network=not args.no_network,
+                    python_executable=args.python,
+                )
+            else:
+                raise ArtifactError("Choose a `whoopy models runtime` subcommand.")
+        except (ArtifactError, OSError, ValueError) as error:
+            parser.error(str(error))
+        if isinstance(runtime_report, dict):
+            payload = {
+                key: [item.model_dump(mode="json") for item in value]
+                for key, value in runtime_report.items()
+            }
+            if args.json:
+                print(json.dumps(payload, indent=2))
+            else:
+                print(yaml.safe_dump(payload, sort_keys=False), end="")
+        else:
+            _print_model_pack_result(runtime_report, json_output=args.json)
+        return 0
+
+    if args.command == "models" and args.models_command == "cleanup":
+        try:
+            operation = args.model_cleanup_command
+            if operation is None:
+                raise ArtifactError("Choose a `whoopy models cleanup` subcommand.")
+            cleanup = _legacy_cleanup_service(args)
+            if operation == "inspect":
+                cleanup_report: Any = cleanup.inspect()
+            elif operation == "apply":
+                cleanup_report = cleanup.apply(confirmation=args.confirm)
+            elif operation == "receipts":
+                cleanup_report = {"receipts": cleanup.receipts()}
+            elif operation == "restore":
+                cleanup_report = cleanup.restore(args.receipt_id, confirmation=args.confirm)
+            elif operation == "purge":
+                cleanup_report = cleanup.purge(args.receipt_id, confirmation=args.confirm)
+            else:
+                raise ArtifactError("Choose a `whoopy models cleanup` subcommand.")
+        except (ArtifactError, OSError, ValueError) as error:
+            parser.error(str(error))
+        if isinstance(cleanup_report, dict):
+            payload = {
+                key: [item.model_dump(mode="json") for item in value]
+                for key, value in cleanup_report.items()
+            }
+            if args.json:
+                print(json.dumps(payload, indent=2))
+            else:
+                print(yaml.safe_dump(payload, sort_keys=False), end="")
+        else:
+            _print_model_pack_result(cleanup_report, json_output=args.json)
+        return 0
+
     if args.command == "models" and args.models_command == "list":
         try:
             lock_path = args.artifact_lock or args.config_dir / "artifacts.yaml"
@@ -1432,7 +2074,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     print(message)
                 return 2
             profile_name = cast(
-                Literal["basic", "lite", "standard"],
+                Literal["basic", "lite", "standard", "high"],
                 result.selected_profile.name,
             )
             callback = None if args.json else lambda message: print(f"  {message}")
@@ -1474,7 +2116,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     print(message)
                 return 2
             profile_name = cast(
-                Literal["lite", "standard"],
+                Literal["lite", "standard", "high"],
                 result.selected_profile.name,
             )
             if args.profile == "auto" and profile_name == "lite":
@@ -1483,8 +2125,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "Use Standard, Basic script mode, or explicitly request "
                     "--profile lite for experimentation."
                 )
-            if profile_name not in ("lite", "standard"):
-                raise GenerationError("Drafting requires the Lite or Standard LLM profile.")
+            if profile_name not in ("lite", "standard", "high"):
+                raise GenerationError("Drafting requires the Lite, Standard, or High LLM profile.")
             artifact_lock = load_artifact_lock(_artifact_lock_path(args))
             adapter = LlamaCppScriptGenerator.from_artifact_store(
                 artifact_lock=artifact_lock,
@@ -1492,7 +2134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 profile_name=profile_name,
                 target=target,
                 device=",".join(result.snapshot.accelerators),
-                settings=LlamaCppSettings(),
+                settings=_llm_settings_for_writing_method(args.writing_method),
             )
             run_id = UUID(args.draft_id) if args.draft_id is not None else uuid4()
             workspace = GenerationWorkspace(args.output_dir / str(run_id))
@@ -1506,6 +2148,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 duration_seconds=duration_seconds,
                 run_id=run_id,
                 seed=args.seed,
+                writing_method=args.writing_method,
             )
         except (
             AdapterError,
@@ -1554,6 +2197,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 prompts=prompts,
                 output_directory=args.output_dir,
                 seed=args.seed,
+                writing_method=args.writing_method,
             )
             candidates: dict[str, LlamaCppScriptGenerator] = {}
             all_results = []
@@ -1568,8 +2212,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                         f"Profile {requested} is unsafe on this machine: "
                         + "; ".join(result.messages)
                     )
-                profile_name = cast(Literal["lite", "standard"], requested)
-                component = "llm_model_lite" if profile_name == "lite" else "llm_model_standard"
+                profile_name = cast(Literal["lite", "standard", "high"], requested)
+                component = {
+                    "lite": "llm_model_lite",
+                    "standard": "llm_model_standard",
+                    "high": "llm_model_high",
+                }[profile_name]
                 model_artifacts = [
                     artifact for artifact in artifacts if artifact.component == component
                 ]
@@ -1583,7 +2231,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     profile_name=profile_name,
                     target=target,
                     device=",".join(result.snapshot.accelerators),
-                    settings=LlamaCppSettings(),
+                    settings=_llm_settings_for_writing_method(args.writing_method),
                 )
                 candidates[profile_name] = adapter
                 platform_name = f"{target.operating_system}-{target.architecture}"
@@ -1640,6 +2288,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise GenerationError("--run-id and the deprecated --draft-id must match.")
             settings = load_settings(args.config_dir)
             prompt_mode = args.prompt is not None
+            if prompt_mode and args.requested_duration_seconds is not None:
+                raise GenerationError(
+                    "--requested-duration-seconds is available only with --script-file."
+                )
+            if args.requested_duration_seconds is not None and not (
+                60 <= args.requested_duration_seconds <= 1_800
+            ):
+                raise GenerationError("--requested-duration-seconds must be between 60 and 1800")
             if args.prompt is not None:
                 args.prompt = args.prompt.strip()
             requested_profile = args.profile if prompt_mode or args.profile != "auto" else "basic"
@@ -1652,7 +2308,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     print(message)
                 return 2
             profile_name = cast(
-                Literal["basic", "lite", "standard"],
+                Literal["basic", "lite", "standard", "high"],
                 result.selected_profile.name,
             )
             if prompt_mode and profile_name == "basic":
@@ -1681,13 +2337,63 @@ def main(argv: Sequence[str] | None = None) -> int:
                     placeholder_prompt,
                     run_id=run_id,
                     created_at=created_at,
+                    audience=args.audience,
+                )
+            if placeholder.audience != args.audience:
+                raise GenerationError(
+                    f"Run {run_id} belongs to the {placeholder.audience} audience, not "
+                    f"{args.audience}; resume or regenerate it through its owning surface."
                 )
             created_at = placeholder.created_at
             artifact_lock = load_artifact_lock(_artifact_lock_path(args))
             voice_name = args.voice or settings.tts.voice
-            speed = args.speed if args.speed is not None else settings.tts.speed
+            pacing_path = args.config_dir / "pacing_profiles.yaml"
+            pacing_registry = (
+                PacingProfileRegistry.load(pacing_path)
+                if pacing_path.is_file()
+                else PacingProfileRegistry.load_bundled()
+            )
+            pacing_profile = pacing_registry.get(args.pacing_profile)
+            if (
+                args.pacing_profile_version is not None
+                and args.pacing_profile_version != pacing_profile.version
+            ):
+                raise GenerationError("The requested pacing profile version is no longer active.")
+            if (
+                args.pacing_profile_sha256 is not None
+                and args.pacing_profile_sha256 != pacing_profile.digest
+            ):
+                raise GenerationError("The requested pacing profile content changed before launch.")
+            pacing_run = PacingRunSettings(
+                profile_id=pacing_profile.profile_id,
+                version=pacing_profile.version,
+                sha256=pacing_profile.digest,
+            )
+            speed = (
+                pacing_profile.speech_speed
+                if prompt_mode
+                else args.speed
+                if args.speed is not None
+                else settings.tts.speed
+            )
             if not 0.5 <= speed <= 1.2:
                 raise GenerationError("--speed must be between 0.5 and 1.2")
+            managed_reference = None
+            if args.voice_reference is not None:
+                if args.tts_model not in {"fish-1.4", "moss-local-v1.5", "moss-v1.5"}:
+                    raise GenerationError(
+                        "--voice-reference is accepted only by Fish or MOSS reference mode."
+                    )
+                if args.moss_direct_voice:
+                    raise GenerationError("MOSS direct voice mode cannot use --voice-reference.")
+                manager = _qwen_reference_manager(args.models_dir)
+                managed_reference = (
+                    manager.load(args.voice_reference)
+                    if args.voice_reference_revision is None
+                    else manager.load_revision(args.voice_reference, args.voice_reference_revision)
+                )
+            elif args.voice_reference_revision is not None:
+                raise GenerationError("--voice-reference-revision requires --voice-reference.")
             raw_synthesizer: SpeechSynthesizer
             if args.tts_model == "fish-1.4":
                 pack = resolve_tts_model_pack(
@@ -1696,23 +2402,34 @@ def main(argv: Sequence[str] | None = None) -> int:
                     references_path=args.config_dir / "voice_references.yaml",
                     models_root=models_root_from_artifact_store(args.models_dir),
                 )
+                fish_reference_audio = (
+                    pack.reference.audio_path
+                    if managed_reference is None
+                    else manager.root / managed_reference.audio_path
+                )
+                fish_reference_text = (
+                    pack.reference.transcript_path
+                    if managed_reference is None
+                    else manager.root / managed_reference.transcript_path
+                )
                 fish_error = FishSpeech14Adapter.availability_error(
                     pack.runtime_directory,
                     pack.checkpoint_directory,
-                    pack.reference.audio_path,
-                    pack.reference.transcript_path,
+                    fish_reference_audio,
+                    fish_reference_text,
                 )
                 if fish_error is not None:
                     raise GenerationError(f"Fish Speech 1.4 is not ready: {fish_error}.")
                 raw_synthesizer = FishSpeech14Adapter(
                     FishSpeechSettings(
                         runtime_directory=pack.runtime_directory,
-                        worker_script=PROJECT_ROOT / "scripts" / "fish_speech_1_4_worker.py",
+                        worker_script=runtime_worker_script("fish_speech_1_4_worker.py"),
                         checkpoint_directory=pack.checkpoint_directory,
-                        reference_audio=pack.reference.audio_path,
-                        reference_text=pack.reference.transcript_path,
+                        reference_audio=fish_reference_audio,
+                        reference_text=fish_reference_text,
                         seed=args.seed,
                         models_root=models_root_from_artifact_store(args.models_dir),
+                        hardware_requirement=pack.hardware_requirement,
                     )
                 )
                 durable_tts = TTSRunSettings(
@@ -1724,6 +2441,28 @@ def main(argv: Sequence[str] | None = None) -> int:
                     provider="auto",
                     language="en",
                     seed=args.seed,
+                    delivery_override=args.delivery,
+                    intensity_override=args.intensity,
+                    pace_override=args.pace,
+                    voice_mode="reference",
+                    reference_id=(
+                        None if managed_reference is None else managed_reference.reference_id
+                    ),
+                    reference_revision=(
+                        None if managed_reference is None else managed_reference.revision
+                    ),
+                    reference_revision_id=(
+                        None if managed_reference is None else managed_reference.revision_id
+                    ),
+                    reference_audio_sha256=(
+                        None if managed_reference is None else managed_reference.audio_sha256
+                    ),
+                    reference_transcript_sha256=(
+                        None if managed_reference is None else managed_reference.transcript_sha256
+                    ),
+                    reference_consent_scope=(
+                        None if managed_reference is None else managed_reference.consent.scope
+                    ),
                 )
             elif args.tts_model in {"moss-local-v1.5", "moss-v1.5"}:
                 backend = cast(OptionalTTSBackend, args.tts_model)
@@ -1734,27 +2473,34 @@ def main(argv: Sequence[str] | None = None) -> int:
                     models_root=models_root_from_artifact_store(args.models_dir),
                 )
                 assert pack.codec_directory is not None
+                moss_reference_audio = (
+                    pack.reference.audio_path
+                    if managed_reference is None
+                    else manager.root / managed_reference.audio_path
+                )
                 moss_error = MossTTSAdapter.availability_error(
                     pack.runtime_directory,
                     pack.checkpoint_directory,
                     pack.codec_directory,
-                    pack.reference.audio_path,
+                    moss_reference_audio,
+                    use_reference=not args.moss_direct_voice,
                 )
                 if moss_error is not None:
                     raise GenerationError(f"{args.tts_model} is not ready: {moss_error}.")
                 raw_synthesizer = MossTTSAdapter(
                     MossTTSSettings(
                         runtime_directory=pack.runtime_directory,
-                        worker_script=PROJECT_ROOT / "scripts" / "moss_tts_worker.py",
+                        worker_script=runtime_worker_script("moss_tts_worker.py"),
                         model_directory=pack.checkpoint_directory,
                         codec_directory=pack.codec_directory,
                         variant=cast(MossVariant, args.tts_model),
-                        reference_audio=pack.reference.audio_path,
+                        reference_audio=moss_reference_audio,
                         language=args.moss_language,
                         instruction=args.moss_instruction,
                         use_reference=not args.moss_direct_voice,
                         seed=args.seed,
                         models_root=models_root_from_artifact_store(args.models_dir),
+                        hardware_requirement=pack.hardware_requirement,
                     )
                 )
                 durable_tts = TTSRunSettings(
@@ -1770,6 +2516,96 @@ def main(argv: Sequence[str] | None = None) -> int:
                     seed=args.seed,
                     instruction=args.moss_instruction,
                     use_reference=not args.moss_direct_voice,
+                    delivery_override=args.delivery,
+                    intensity_override=args.intensity,
+                    pace_override=args.pace,
+                    voice_mode=("reference" if not args.moss_direct_voice else "designed"),
+                    reference_id=(
+                        None if managed_reference is None else managed_reference.reference_id
+                    ),
+                    reference_revision=(
+                        None if managed_reference is None else managed_reference.revision
+                    ),
+                    reference_revision_id=(
+                        None if managed_reference is None else managed_reference.revision_id
+                    ),
+                    reference_audio_sha256=(
+                        None if managed_reference is None else managed_reference.audio_sha256
+                    ),
+                    reference_transcript_sha256=(
+                        None if managed_reference is None else managed_reference.transcript_sha256
+                    ),
+                    reference_consent_scope=(
+                        None if managed_reference is None else managed_reference.consent.scope
+                    ),
+                )
+            elif args.tts_model in QWEN_BACKEND_VARIANTS:
+                variant = QWEN_BACKEND_VARIANTS[args.tts_model]
+                installation = resolve_qwen3_tts_installation(
+                    models_root_from_artifact_store(args.models_dir), variant
+                )
+                is_clone = variant.startswith("base-clone")
+                if is_clone and args.qwen_reference is None:
+                    raise GenerationError(
+                        f"{args.tts_model} requires --qwen-reference with explicit consent."
+                    )
+                if not is_clone and (
+                    args.qwen_reference is not None or args.qwen_reference_revision is not None
+                ):
+                    raise GenerationError(
+                        "Only Qwen3-TTS Base cloning accepts --qwen-reference controls."
+                    )
+                reference = None
+                if is_clone:
+                    manager = _qwen_reference_manager(args.models_dir)
+                    reference = (
+                        manager.load(args.qwen_reference)
+                        if args.qwen_reference_revision is None
+                        else manager.load_revision(
+                            args.qwen_reference, args.qwen_reference_revision
+                        )
+                    )
+                voice_mode: Literal["preset", "reference", "designed"]
+                if variant.startswith("custom-voice"):
+                    voice_mode = "preset"
+                    qwen_voice_name = args.qwen_speaker
+                elif variant == "voice-design-1.7b":
+                    voice_mode = "designed"
+                    qwen_voice_name = args.qwen_voice_design_preset
+                else:
+                    assert reference is not None
+                    voice_mode = "reference"
+                    qwen_voice_name = reference.reference_id
+                durable_tts = TTSRunSettings(
+                    backend=args.tts_model,
+                    voice_name=qwen_voice_name,
+                    speaker_id=0,
+                    speed=1.0,
+                    num_threads=1,
+                    provider="auto",
+                    language=args.qwen_language,
+                    seed=args.seed,
+                    use_reference=is_clone,
+                    voice_mode=voice_mode,
+                    qwen_model_revision=installation.model_revision,
+                    qwen_runtime_revision=installation.runtime_revision,
+                    qwen_voice_design_preset=args.qwen_voice_design_preset,
+                    delivery_override=args.delivery,
+                    intensity_override=args.intensity,
+                    pace_override=args.pace,
+                    reference_id=None if reference is None else reference.reference_id,
+                    reference_revision=None if reference is None else reference.revision,
+                    reference_revision_id=None if reference is None else reference.revision_id,
+                    reference_audio_sha256=(None if reference is None else reference.audio_sha256),
+                    reference_transcript_sha256=(
+                        None if reference is None else reference.transcript_sha256
+                    ),
+                    reference_consent_scope=(
+                        None if reference is None else reference.consent.scope
+                    ),
+                )
+                raw_synthesizer = _qwen_adapter_from_durable(
+                    durable_tts, models_dir=args.models_dir
                 )
             else:
                 tts_settings = SherpaOnnxSettings(
@@ -1796,6 +2632,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     provider=tts_settings.provider,
                     language=tts_settings.language,
                     seed=args.seed,
+                    delivery_override=args.delivery,
+                    intensity_override=args.intensity,
+                    pace_override=args.pace,
                 )
             processing = SpeechProcessingSettings()
             generation_attempt_id: UUID | None = None
@@ -1819,7 +2658,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     profile_name=profile_name,
                     target=target,
                     device=",".join(result.snapshot.accelerators),
-                    settings=LlamaCppSettings(),
+                    settings=_llm_settings_for_writing_method(args.writing_method),
                 )
                 prompts = load_prompt_bundle(args.config_dir / "prompts")
                 model_metadata = RunModelMetadata(
@@ -1827,7 +2666,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     llm=llm.metadata,
                 )
                 pending_request = PendingGenerationConfig(
-                    profile=cast(Literal["lite", "standard"], profile_name),
+                    profile=cast(Literal["lite", "standard", "high"], profile_name),
                     target=target,
                     tts=durable_tts,
                     processing=processing,
@@ -1838,6 +2677,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     section_prompt_id=prompts.section.prompt_id,
                     section_prompt_version=prompts.section.version,
                     max_parallel_sections=args.parallel_sections,
+                    meditation_kind=cast(MeditationKind | None, args.meditation_kind),
+                    writing_method=args.writing_method,
+                    pacing=pacing_run,
                     model_metadata=model_metadata,
                 )
                 if placeholder.schema_version == 3:
@@ -1891,16 +2733,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 prompts,
                                 max_parallel_sections=args.parallel_sections,
                                 # Kokoro's speech rate scales approximately with this input.
-                                # Real-device calibration measured about 122 WPM at 0.6.
-                                articulation_words_per_minute=(
-                                    133
-                                    if args.tts_model
-                                    in (
-                                        "fish-1.4",
-                                        "moss-local-v1.5",
-                                        "moss-v1.5",
-                                    )
-                                    else max(80, round(205 * speed))
+                                articulation_words_per_minute=_planning_words_per_minute(
+                                    args.tts_model, speed, args.pace, args.writing_method
                                 ),
                                 workspace=workspace,
                                 progress_callback=heartbeat.set_stage,
@@ -1910,6 +2744,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 run_id=run_id,
                                 created_at=created_at,
                                 seed=args.seed,
+                                meditation_kind=cast(MeditationKind | None, args.meditation_kind),
+                                writing_method=args.writing_method,
                             )
                             heartbeat.raise_if_failed()
                             resolved_config = ScriptRunConfig(
@@ -1926,6 +2762,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                                     section_prompt_id=prompts.section.prompt_id,
                                     section_prompt_version=prompts.section.version,
                                     max_parallel_sections=args.parallel_sections,
+                                    meditation_kind=cast(
+                                        MeditationKind | None,
+                                        args.meditation_kind,
+                                    ),
+                                    writing_method=args.writing_method,
+                                    pacing=pacing_run,
                                     estimated_duration_seconds=(
                                         generated.estimated_duration_seconds
                                     ),
@@ -1997,6 +2839,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                             target=target,
                             tts=durable_tts,
                             processing=processing,
+                            requested_duration_seconds=args.requested_duration_seconds,
                         ),
                         model_metadata=RunModelMetadata(tts=raw_synthesizer.metadata),
                         promoted_at=datetime.now(UTC),
@@ -2159,6 +3002,128 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_run(record, store, as_json=args.json)
         return 0
 
+    if args.command == "run" and args.run_command == "regenerate-plan":
+        try:
+            store = _run_store(args)
+            existing = store.load(args.run_id)
+            if existing.status in (RunStatus.QUEUED, RunStatus.RUNNING):
+                raise RevisionError("Wait for generation to stop before editing the plan.")
+            if existing.source_kind != "generated_prompt":
+                raise RevisionError("Only prompt-generated meditations have drafting context.")
+            base_plan = MeditationPlan.model_validate_json(
+                store.plan_path(existing.run_id).read_text(encoding="utf-8")
+            )
+            requested_plan = MeditationPlan.model_validate_json(
+                args.plan_file.read_text(encoding="utf-8")
+            )
+            blueprint_path = args.config_dir / "meditation_blueprints.yaml"
+            normalized_plan = validate_semantic_plan_edit(
+                base_plan,
+                requested_plan,
+                blueprint_path=blueprint_path,
+            )
+            pending = store.load_generation_request(existing.run_id)
+            result, target, artifact_store, _artifacts = _model_plan(
+                args,
+                requested_profile=pending.profile,
+            )
+            if not result.supported or result.selected_profile is None:
+                raise RevisionError("The original local LLM profile is not safe to load now.")
+            if target != pending.target:
+                raise RevisionError("The current machine differs from the saved drafting target.")
+            prompts = load_prompt_bundle(args.config_dir / "prompts")
+            if (
+                prompts.plan.prompt_id != pending.plan_prompt_id
+                or prompts.plan.version != pending.plan_prompt_version
+                or prompts.section.prompt_id != pending.section_prompt_id
+                or prompts.section.version != pending.section_prompt_version
+            ):
+                raise RevisionError(
+                    "Prompt revisions changed since this run; create a new meditation "
+                    "instead of silently mixing drafting contexts."
+                )
+            artifact_lock = load_artifact_lock(_artifact_lock_path(args))
+            llm = LlamaCppScriptGenerator.from_artifact_store(
+                artifact_lock=artifact_lock,
+                store=artifact_store,
+                profile_name=pending.profile,
+                target=target,
+                device=",".join(result.snapshot.accelerators),
+                settings=_llm_settings_for_writing_method(pending.writing_method),
+            )
+            if llm.metadata != pending.model_metadata.llm:
+                raise RevisionError(
+                    "The local LLM revision or runtime differs from the original run."
+                )
+            regeneration_id = uuid4()
+            workspace = GenerationWorkspace(
+                store.run_directory(existing.run_id)
+                / "history"
+                / "plan-regeneration"
+                / str(regeneration_id)
+            )
+            workspace.save_plan(normalized_plan)
+            generated = LocalMeditationGenerator(
+                llm,
+                prompts,
+                max_parallel_sections=pending.max_parallel_sections,
+                articulation_words_per_minute=base_plan.words_per_minute,
+                workspace=workspace,
+            ).generate(
+                prompt=existing.prompt,
+                duration_seconds=pending.duration_seconds,
+                run_id=existing.run_id,
+                created_at=datetime.now(UTC),
+                seed=pending.seed,
+                meditation_kind=normalized_plan.meditation_kind,
+                writing_method=pending.writing_method,
+            )
+            revision = RevisionStore(store).create_semantic_plan_revision(
+                existing.run_id,
+                base_plan=base_plan,
+                requested_plan=normalized_plan,
+                generated=generated,
+                note=args.note,
+                blueprint_path=blueprint_path,
+            )
+            worker = _worker_for_record(
+                store,
+                store.load(existing.run_id),
+                artifact_lock_path=_artifact_lock_path(args),
+                models_dir=args.models_dir,
+                config_dir=args.config_dir,
+            )
+            with _interruptible_sigterm():
+                record = worker.resume(existing.run_id)
+        except (
+            AdapterError,
+            ArtifactError,
+            ConfigError,
+            GenerationError,
+            ModelPackOperationError,
+            OSError,
+            PromptLoadError,
+            RevisionError,
+            RunStoreError,
+            ValueError,
+            WorkerError,
+            WorkspaceError,
+        ) as error:
+            parser.error(str(error))
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "run": record.model_dump(mode="json"),
+                        "revision": revision.model_dump(mode="json"),
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            print(f"Regenerated plan revision {revision.revision_id} for {record.run_id}.")
+        return 0
+
     if args.command == "run" and args.run_command == "resume":
         try:
             store = _run_store(args)
@@ -2231,7 +3196,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_run(record, store, as_json=args.json)
         return 0
 
-    if args.command == "web":
+    if args.command in {"app", "web"}:
         if not 1 <= args.port <= 65_535:
             parser.error("--port must be between 1 and 65535")
         # Import lazily so normal CLI commands do not initialize the HTTP layer.

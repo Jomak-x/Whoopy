@@ -32,16 +32,29 @@ artifacts:
     operating_systems: [all]
     architectures: [all]
 
+  - artifact_id: ministral_3_14b_q4_k_m
+    component: llm_model_high
+    display_name: Ministral 3 14B Q4_K_M
+    version: 74fac473c43357d7fb2671713608183cc72496d0
+    kind: model
+    license_id: Apache-2.0
+    source_url: https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF/resolve/74fac473c43357d7fb2671713608183cc72496d0/Ministral-3-14B-Instruct-2512-Q4_K_M.gguf
+    filename: Ministral-3-14B-Instruct-2512-Q4_K_M.gguf
+    size_bytes: 8239593024
+    sha256: 824e0f3373e69b84f2cae46fdcb9bd1ebc6ab3bfc7acc125d818b7b8178cc613
+    operating_systems: [all]
+    architectures: [all]
+
   - artifact_id: kokoro_multilang_v1_0
     component: tts_model
     display_name: Kokoro multilingual v1.0
-    version: v1_0
+    version: v1_0-release-2026-10-26
     kind: tts_model
     license_id: Apache-2.0
     source_url: https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2
     filename: kokoro-multi-lang-v1_0.tar.bz2
-    size_bytes: 349418188
-    sha256: c133d26353d776da730870dac7da07dbfc9a5e3bc80cc5e8e83ab6e823be7046
+    size_bytes: 349886476
+    sha256: 60703707bc05ccd48d60e1eb723f38b07d6e474795a0b6a588d7220400e0f7a4
     operating_systems: [all]
     architectures: [all]
     archive: tar.bz2
@@ -277,6 +290,13 @@ profiles:
     components:
       - llm_runtime
       - llm_model_standard
+      - tts_model
+      - sherpa_onnx_python
+      - sherpa_onnx_core
+  high:
+    components:
+      - llm_runtime
+      - llm_model_high
       - tts_model
       - sherpa_onnx_python
       - sherpa_onnx_core

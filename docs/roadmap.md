@@ -1,13 +1,12 @@
 # Roadmap
 
+> **Historical planning record.** Milestone status and future interfaces in this file may be obsolete; it is not the Local V1 release contract.
+
 This roadmap turns the spec into implementation phases. Each phase has a reason for existing, not just a deliverable list.
 
-> [!IMPORTANT]
-> The authoritative near-term sequence is now
-> [`local-first-master-plan.md`](./local-first-master-plan.md). It reconstructs
-> the real merged/local/model state and defines PRs 12–21 required before the
-> permanent Phase 4 UI begins. The broader phase descriptions below remain the
-> long-range product map.
+> [!NOTE]
+> The linked [`local-first-master-plan.md`](./local-first-master-plan.md) was the
+> near-term sequence used to reach Local V1. Both documents are now historical.
 
 Implementation status:
 

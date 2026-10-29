@@ -1,0 +1,140 @@
+{
+  "_id": "6a6cf2cfb67326f9e63b89dc",
+  "id": "mlx-community/chatterbox-multilingual-v3",
+  "private": false,
+  "pipeline_tag": "text-to-speech",
+  "library_name": "mlx-audio",
+  "tags": [
+    "mlx-audio",
+    "safetensors",
+    "chatterbox",
+    "mlx",
+    "text-to-speech",
+    "voice-cloning",
+    "ar",
+    "da",
+    "de",
+    "el",
+    "en",
+    "es",
+    "fi",
+    "fr",
+    "he",
+    "hi",
+    "it",
+    "ja",
+    "ko",
+    "ms",
+    "nl",
+    "no",
+    "pl",
+    "pt",
+    "ru",
+    "sv",
+    "sw",
+    "tr",
+    "zh",
+    "base_model:ResembleAI/chatterbox",
+    "base_model:finetune:ResembleAI/chatterbox",
+    "license:mit",
+    "region:us"
+  ],
+  "downloads": 6305,
+  "likes": 8,
+  "modelId": "mlx-community/chatterbox-multilingual-v3",
+  "author": "mlx-community",
+  "sha": "03565773edd72e949572557597af8063bb49a18a",
+  "lastModified": "2026-07-31T19:28:07.000Z",
+  "gated": false,
+  "disabled": false,
+  "model-index": null,
+  "config": {
+    "model_type": "chatterbox"
+  },
+  "cardData": {
+    "library_name": "mlx-audio",
+    "license": "mit",
+    "base_model": [
+      "ResembleAI/chatterbox"
+    ],
+    "language": [
+      "ar",
+      "da",
+      "de",
+      "el",
+      "en",
+      "es",
+      "fi",
+      "fr",
+      "he",
+      "hi",
+      "it",
+      "ja",
+      "ko",
+      "ms",
+      "nl",
+      "no",
+      "pl",
+      "pt",
+      "ru",
+      "sv",
+      "sw",
+      "tr",
+      "zh"
+    ],
+    "pipeline_tag": "text-to-speech",
+    "tags": [
+      "mlx",
+      "text-to-speech",
+      "voice-cloning"
+    ]
+  },
+  "siblings": [
+    {
+      "rfilename": ".gitattributes",
+      "blobId": "a6344aac8c09253b3b630fb776ae94478aa0275b",
+      "size": 1519
+    },
+    {
+      "rfilename": "Cangjie5_TC.json",
+      "blobId": "d77891f84ca1db0d6f7058a4ee081d4bb0bfe88e",
+      "size": 1920163
+    },
+    {
+      "rfilename": "README.md",
+      "blobId": "1227f0d11d0e9b5c73b27acd19045d8954a42ba4",
+      "size": 1289
+    },
+    {
+      "rfilename": "config.json",
+      "blobId": "d53329554e3ca5e3cf7441a9e9cbe0893251b8b1",
+      "size": 666
+    },
+    {
+      "rfilename": "model.safetensors",
+      "blobId": "462a37b759f51035f90c4943f528a74a43774cbd",
+      "size": 2711113780,
+      "lfs": {
+        "sha256": "e702f2c441e040bd360e59a86c85d462539759d665e41cfd1938adadd74187a3",
+        "size": 2711113780,
+        "pointerSize": 135
+      }
+    },
+    {
+      "rfilename": "tokenizer.json",
+      "blobId": "d27fb3f2fd38ca39b7bbfbf83a13b3c617e551df",
+      "size": 69989
+    }
+  ],
+  "spaces": [
+    "AntonDergunov/LexiBeat"
+  ],
+  "createdAt": "2026-07-31T19:09:03.000Z",
+  "safetensors": {
+    "parameters": {
+      "F32": 677696431
+    },
+    "total": 677696431
+  },
+  "usedStorage": 5422227560
+}

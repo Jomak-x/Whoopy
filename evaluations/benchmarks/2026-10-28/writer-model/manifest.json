@@ -1,0 +1,23 @@
+{
+  "model": "mistralai/Ministral-3-14B-Instruct-2512-GGUF",
+  "revision": "74fac473c43357d7fb2671713608183cc72496d0",
+  "filename": "Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+  "path": "/Users/jakob/codestuff/Whoopy/models/experimental/writer-quality-2026-10-28/Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+  "source_url": "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF/resolve/74fac473c43357d7fb2671713608183cc72496d0/Ministral-3-14B-Instruct-2512-Q4_K_M.gguf?download=true",
+  "metadata_url": "https://huggingface.co/api/models/mistralai/Ministral-3-14B-Instruct-2512-GGUF/revision/74fac473c43357d7fb2671713608183cc72496d0?blobs=true",
+  "license": "Apache-2.0",
+  "official_lfs_sha256": "824e0f3373e69b84f2cae46fdcb9bd1ebc6ab3bfc7acc125d818b7b8178cc613",
+  "actual_sha256": "824e0f3373e69b84f2cae46fdcb9bd1ebc6ab3bfc7acc125d818b7b8178cc613",
+  "expected_size_bytes": 8239593024,
+  "actual_size_bytes": 8239593024,
+  "vendor_lfs_digest_matches": true,
+  "download_seconds": 88.77711616700981,
+  "text_only": true,
+  "vision_projector_downloaded": false,
+  "verified_utc": "2026-10-28T23:56:20.394689+00:00",
+  "model_card_url": "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF/blob/74fac473c43357d7fb2671713608183cc72496d0/README.md",
+  "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+  "license_evidence": "official-model-metadata.json cardData.license and official-model-card.md License section",
+  "runtime_binary": "models/managed/installed/llama_cpp_b10142_darwin_arm64/llama-b10142/llama-cli",
+  "runtime_version": "10142 (3d1c3a897), AppleClang 21.0.0.21000101, Darwin arm64"
+}

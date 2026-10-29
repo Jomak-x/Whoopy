@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID
+
+import pytest
 
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.audio.models import PcmAudio
@@ -10,7 +13,7 @@ from whoopy.audio.synthesis import cache_key_for
 from whoopy.pipeline.cache import CACHE_AUDIO_FILENAME, SegmentCache
 from whoopy.pipeline.runs import RunRecord, RunStore
 from whoopy.pipeline.worker import LocalWorker
-from whoopy.timeline import SpeechSegment
+from whoopy.timeline import PronunciationOverride, SpeechSegment
 
 START = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
 FIRST_RUN_ID = UUID("44444444-4444-4444-8444-444444444444")
@@ -105,3 +108,35 @@ def test_corrupt_cache_entry_is_detected_and_regenerated(tmp_path: Path) -> None
     assert second.recovery.cache_hits == 1
     assert second.recovery.cache_misses == 1
     assert cache.load(cache_key) is not None
+
+
+def test_delivery_intent_changes_the_synthesis_cache_key() -> None:
+    synthesizer = CountingSynthesizer()
+    neutral = SpeechSegment(id="speech-0001", text="Welcome.")
+    calm = neutral.model_copy(update={"delivery": "calm"})
+
+    assert cache_key_for(neutral, synthesizer) != cache_key_for(calm, synthesizer)
+
+
+@pytest.mark.parametrize(
+    "change",
+    (
+        {"delivery": "calm"},
+        {"intensity": "moderate"},
+        {"language": "German"},
+        {"voice_mode": "reference"},
+        {"pace": "very_slow"},
+        {"target_duration_ms": 4_000},
+        {
+            "pronunciation_overrides": (
+                PronunciationOverride(source="Whoopy", pronunciation="Woo-pee"),
+            )
+        },
+    ),
+)
+def test_every_typed_delivery_control_invalidates_speech_cache(change: dict[str, Any]) -> None:
+    synthesizer = CountingSynthesizer()
+    baseline = SpeechSegment(id="speech-0001", text="Welcome.")
+    changed = baseline.model_copy(update=change)
+
+    assert cache_key_for(baseline, synthesizer) != cache_key_for(changed, synthesizer)

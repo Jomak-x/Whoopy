@@ -1,0 +1,12 @@
+User:
+Write a brief meditation opening in natural English. Return only a JSON object with exactly these keys: "title" (string), "spoken_text" (string containing 35 to 50 words), "pause_seconds" (integer 2). The opening should gently invite the listener to notice their breath without changing it. Do not instruct holding, counting, or deepening the breath. Avoid claims about treating symptoms, safety guarantees, or spirituality. Do not use Markdown.
+
+Assistant:
+```json
+{
+  "title": "Gentle Breath Awareness",
+  "spoken_text": "Take a moment to settle in, wherever you are. Notice the natural rhythm of your breath—coming and going, just as it is. No need to change anything. Simply allow yourself to feel the quiet presence of each breath.",
+  "pause_seconds": 2
+}
+```
+

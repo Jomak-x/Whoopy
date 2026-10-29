@@ -1,0 +1,583 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-28T23:54:32.570058+00:00",
+  "status": "fail",
+  "failure_reasons": [
+    "ASR transcript substantially disagrees with expected content."
+  ],
+  "review_reasons": [],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/qwen-custom-ryan/segment-02.wav",
+  "audio_sha256": "12e3d66ae47f4130b275a6aee51d6120ff8b0533cf3199d0055a100b9871ef63",
+  "expected_transcript": "There is no need to make your breathing slower or deeper. For now, listen for one sound nearby. Notice how it begins, changes, or fades. You do not have to identify it.\n",
+  "expected_text_sha256": "776137572cf7514d81ddd1e1acccd93f19ea8758e94f2c28a70e381abd659759",
+  "mode": "speech",
+  "pcm": {
+    "frame_count": 341760,
+    "sample_rate": 24000,
+    "duration_seconds": 14.24,
+    "nonfinite_samples": 0,
+    "peak": 0.56689453125,
+    "rms": 0.0671462950116512,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.06882022471910113,
+    "leading_silence_seconds": 0.0,
+    "trailing_silence_seconds": 0.06,
+    "zero_crossing_fraction": 0.08579144953022451,
+    "difference_to_signal_energy": 0.053476253664830324,
+    "speech_established_by_pcm": false
+  },
+  "asr": {
+    "engine": "mlx-whisper",
+    "model_path": "/Users/jakob/.cache/huggingface/hub/models--mlx-community--whisper-small-mlx/snapshots/45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_revision": "45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_weights_sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
+    "model_config_sha256": "e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e",
+    "audio_sha256": "12e3d66ae47f4130b275a6aee51d6120ff8b0533cf3199d0055a100b9871ef63",
+    "text": " Valky do tone 9s OG, fed the blot the blot the wits to win, or circation so use work. Saudisun peel, the blot bake or take them, and the fungus OG.",
+    "language": "en",
+    "segments": [
+      {
+        "id": 0,
+        "seek": 0,
+        "start": 0.0,
+        "end": 7.74,
+        "text": " Valky do tone 9s OG, fed the blot the blot the wits to win, or circation so use work.",
+        "tokens": [
+          50364,
+          691,
+          667,
+          88,
+          360,
+          8027,
+          1722,
+          82,
+          32477,
+          11,
+          4636,
+          264,
+          888,
+          310,
+          264,
+          888,
+          310,
+          264,
+          261,
+          1208,
+          281,
+          1942,
+          11,
+          420,
+          3510,
+          399,
+          370,
+          764,
+          589,
+          13,
+          50814
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.5863534487210788,
+        "compression_ratio": 1.3008849557522124,
+        "no_speech_prob": 0.07720198482275009,
+        "words": [
+          {
+            "word": " Valky",
+            "start": 0.0,
+            "end": 0.42,
+            "probability": 0.2366943359375
+          },
+          {
+            "word": " do",
+            "start": 0.42,
+            "end": 0.8,
+            "probability": 0.144287109375
+          },
+          {
+            "word": " tone",
+            "start": 0.8,
+            "end": 1.34,
+            "probability": 0.456298828125
+          },
+          {
+            "word": " 9s",
+            "start": 1.34,
+            "end": 2.04,
+            "probability": 0.5478515625
+          },
+          {
+            "word": " OG,",
+            "start": 2.04,
+            "end": 2.38,
+            "probability": 0.388671875
+          },
+          {
+            "word": " fed",
+            "start": 2.78,
+            "end": 3.0,
+            "probability": 0.5478515625
+          },
+          {
+            "word": " the",
+            "start": 3.0,
+            "end": 3.32,
+            "probability": 0.78515625
+          },
+          {
+            "word": " blot",
+            "start": 3.32,
+            "end": 3.56,
+            "probability": 0.615234375
+          },
+          {
+            "word": " the",
+            "start": 3.56,
+            "end": 3.72,
+            "probability": 0.8173828125
+          },
+          {
+            "word": " blot",
+            "start": 3.72,
+            "end": 4.02,
+            "probability": 0.96826171875
+          },
+          {
+            "word": " the",
+            "start": 4.02,
+            "end": 4.22,
+            "probability": 0.95654296875
+          },
+          {
+            "word": " wits",
+            "start": 4.22,
+            "end": 4.6,
+            "probability": 0.53173828125
+          },
+          {
+            "word": " to",
+            "start": 4.6,
+            "end": 4.78,
+            "probability": 0.62548828125
+          },
+          {
+            "word": " win,",
+            "start": 4.78,
+            "end": 5.1,
+            "probability": 0.80224609375
+          },
+          {
+            "word": " or",
+            "start": 5.34,
+            "end": 5.58,
+            "probability": 0.970703125
+          },
+          {
+            "word": " circation",
+            "start": 5.58,
+            "end": 6.38,
+            "probability": 0.471435546875
+          },
+          {
+            "word": " so",
+            "start": 6.38,
+            "end": 6.78,
+            "probability": 0.57763671875
+          },
+          {
+            "word": " use",
+            "start": 6.78,
+            "end": 7.22,
+            "probability": 0.6357421875
+          },
+          {
+            "word": " work.",
+            "start": 7.22,
+            "end": 7.74,
+            "probability": 0.96728515625
+          }
+        ]
+      },
+      {
+        "id": 1,
+        "seek": 0,
+        "start": 9.180000000000001,
+        "end": 13.96,
+        "text": " Saudisun peel, the blot bake or take them, and the fungus OG.",
+        "tokens": [
+          50814,
+          15717,
+          271,
+          409,
+          13889,
+          11,
+          264,
+          888,
+          310,
+          16562,
+          420,
+          747,
+          552,
+          11,
+          293,
+          264,
+          39788,
+          32477,
+          13,
+          51074
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.5863534487210788,
+        "compression_ratio": 1.3008849557522124,
+        "no_speech_prob": 0.07720198482275009,
+        "words": [
+          {
+            "word": " Saudisun",
+            "start": 9.180000000000001,
+            "end": 9.82,
+            "probability": 0.44873046875
+          },
+          {
+            "word": " peel,",
+            "start": 9.82,
+            "end": 10.06,
+            "probability": 0.52392578125
+          },
+          {
+            "word": " the",
+            "start": 10.58,
+            "end": 10.72,
+            "probability": 0.9697265625
+          },
+          {
+            "word": " blot",
+            "start": 10.72,
+            "end": 11.04,
+            "probability": 0.97265625
+          },
+          {
+            "word": " bake",
+            "start": 11.04,
+            "end": 11.3,
+            "probability": 0.76953125
+          },
+          {
+            "word": " or",
+            "start": 11.3,
+            "end": 11.58,
+            "probability": 0.65478515625
+          },
+          {
+            "word": " take",
+            "start": 11.58,
+            "end": 11.94,
+            "probability": 0.990234375
+          },
+          {
+            "word": " them,",
+            "start": 11.94,
+            "end": 12.22,
+            "probability": 0.98388671875
+          },
+          {
+            "word": " and",
+            "start": 12.74,
+            "end": 12.84,
+            "probability": 0.98193359375
+          },
+          {
+            "word": " the",
+            "start": 12.84,
+            "end": 12.96,
+            "probability": 0.93896484375
+          },
+          {
+            "word": " fungus",
+            "start": 12.96,
+            "end": 13.26,
+            "probability": 0.71533203125
+          },
+          {
+            "word": " OG.",
+            "start": 13.26,
+            "end": 13.96,
+            "probability": 0.79931640625
+          }
+        ]
+      }
+    ],
+    "inference_seconds": 2.4136846670298837,
+    "versions": {
+      "mlx-whisper": "0.4.3",
+      "mlx": "0.32.4",
+      "mlx-metal": "0.32.4",
+      "numpy": "2.4.6",
+      "soundfile": "0.14.0"
+    },
+    "python": "3.11.16",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "decoding": {
+      "language": "en",
+      "temperature": 0.0,
+      "condition_on_previous_text": false,
+      "expected_text_prompted": false
+    },
+    "gpu_lock": "/tmp/whoopy-benchmark-gpu.lock",
+    "gpu_lock_wait_seconds": 9.054096881300211e-05,
+    "network": "offline; existing local snapshot only"
+  },
+  "content": {
+    "expected_word_count": 32,
+    "observed_word_count": 31,
+    "word_error_rate": 1.0,
+    "ordered_word_coverage": 0.0,
+    "matches": 0,
+    "deletions": 1,
+    "insertions": 0,
+    "substitutions": 31,
+    "missing_words": [
+      "there"
+    ],
+    "unexpected_words": [],
+    "excess_repeated_words": {},
+    "missing_tail_words": [],
+    "possible_truncation": false,
+    "alignment": [
+      {
+        "operation": "delete",
+        "expected": "there",
+        "observed": null,
+        "expected_index": 0
+      },
+      {
+        "operation": "substitute",
+        "expected": "is",
+        "observed": "valky",
+        "expected_index": 1,
+        "observed_index": 0
+      },
+      {
+        "operation": "substitute",
+        "expected": "no",
+        "observed": "do",
+        "expected_index": 2,
+        "observed_index": 1
+      },
+      {
+        "operation": "substitute",
+        "expected": "need",
+        "observed": "tone",
+        "expected_index": 3,
+        "observed_index": 2
+      },
+      {
+        "operation": "substitute",
+        "expected": "to",
+        "observed": "9s",
+        "expected_index": 4,
+        "observed_index": 3
+      },
+      {
+        "operation": "substitute",
+        "expected": "make",
+        "observed": "og",
+        "expected_index": 5,
+        "observed_index": 4
+      },
+      {
+        "operation": "substitute",
+        "expected": "your",
+        "observed": "fed",
+        "expected_index": 6,
+        "observed_index": 5
+      },
+      {
+        "operation": "substitute",
+        "expected": "breathing",
+        "observed": "the",
+        "expected_index": 7,
+        "observed_index": 6
+      },
+      {
+        "operation": "substitute",
+        "expected": "slower",
+        "observed": "blot",
+        "expected_index": 8,
+        "observed_index": 7
+      },
+      {
+        "operation": "substitute",
+        "expected": "or",
+        "observed": "the",
+        "expected_index": 9,
+        "observed_index": 8
+      },
+      {
+        "operation": "substitute",
+        "expected": "deeper",
+        "observed": "blot",
+        "expected_index": 10,
+        "observed_index": 9
+      },
+      {
+        "operation": "substitute",
+        "expected": "for",
+        "observed": "the",
+        "expected_index": 11,
+        "observed_index": 10
+      },
+      {
+        "operation": "substitute",
+        "expected": "now",
+        "observed": "wits",
+        "expected_index": 12,
+        "observed_index": 11
+      },
+      {
+        "operation": "substitute",
+        "expected": "listen",
+        "observed": "to",
+        "expected_index": 13,
+        "observed_index": 12
+      },
+      {
+        "operation": "substitute",
+        "expected": "for",
+        "observed": "win",
+        "expected_index": 14,
+        "observed_index": 13
+      },
+      {
+        "operation": "substitute",
+        "expected": "one",
+        "observed": "or",
+        "expected_index": 15,
+        "observed_index": 14
+      },
+      {
+        "operation": "substitute",
+        "expected": "sound",
+        "observed": "circation",
+        "expected_index": 16,
+        "observed_index": 15
+      },
+      {
+        "operation": "substitute",
+        "expected": "nearby",
+        "observed": "so",
+        "expected_index": 17,
+        "observed_index": 16
+      },
+      {
+        "operation": "substitute",
+        "expected": "notice",
+        "observed": "use",
+        "expected_index": 18,
+        "observed_index": 17
+      },
+      {
+        "operation": "substitute",
+        "expected": "how",
+        "observed": "work",
+        "expected_index": 19,
+        "observed_index": 18
+      },
+      {
+        "operation": "substitute",
+        "expected": "it",
+        "observed": "saudisun",
+        "expected_index": 20,
+        "observed_index": 19
+      },
+      {
+        "operation": "substitute",
+        "expected": "begins",
+        "observed": "peel",
+        "expected_index": 21,
+        "observed_index": 20
+      },
+      {
+        "operation": "substitute",
+        "expected": "changes",
+        "observed": "the",
+        "expected_index": 22,
+        "observed_index": 21
+      },
+      {
+        "operation": "substitute",
+        "expected": "or",
+        "observed": "blot",
+        "expected_index": 23,
+        "observed_index": 22
+      },
+      {
+        "operation": "substitute",
+        "expected": "fades",
+        "observed": "bake",
+        "expected_index": 24,
+        "observed_index": 23
+      },
+      {
+        "operation": "substitute",
+        "expected": "you",
+        "observed": "or",
+        "expected_index": 25,
+        "observed_index": 24
+      },
+      {
+        "operation": "substitute",
+        "expected": "do",
+        "observed": "take",
+        "expected_index": 26,
+        "observed_index": 25
+      },
+      {
+        "operation": "substitute",
+        "expected": "not",
+        "observed": "them",
+        "expected_index": 27,
+        "observed_index": 26
+      },
+      {
+        "operation": "substitute",
+        "expected": "have",
+        "observed": "and",
+        "expected_index": 28,
+        "observed_index": 27
+      },
+      {
+        "operation": "substitute",
+        "expected": "to",
+        "observed": "the",
+        "expected_index": 29,
+        "observed_index": 28
+      },
+      {
+        "operation": "substitute",
+        "expected": "identify",
+        "observed": "fungus",
+        "expected_index": 30,
+        "observed_index": 29
+      },
+      {
+        "operation": "substitute",
+        "expected": "it",
+        "observed": "og",
+        "expected_index": 31,
+        "observed_index": 30
+      }
+    ]
+  },
+  "limits": [
+    "ASR is independent evidence, not a human transcription or a proof of perfect speech.",
+    "Noise rejection requires content agreement; duration and RMS do not prove speech.",
+    "Warmth, naturalness, voice identity, and quality require listener judgment.",
+    "Narration mode permits intentional silence; expected words still require recognition."
+  ],
+  "thresholds": {
+    "pass_max_wer": 0.15,
+    "pass_min_coverage": 0.85,
+    "fail_wer_above": 0.35,
+    "fail_coverage_below": 0.65
+  },
+  "verifier_source_sha256": "3669cf3793b7200110dab88dd698d4eed1816a291f3f8581de7c6bf7dd83b3d3",
+  "harness_source_sha256": "a35b1cc25f4418de82b402e1ca5bc361ea22c6c6ee13eeee778c84db8854b8b5"
+}

@@ -8,6 +8,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import wave
 from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import partial
@@ -37,10 +38,12 @@ from whoopy.model_packs.registry import (
     ModelPackSpec,
     ModelPackState,
     ModelPackStatus,
+    PinnedFileSpec,
     RuntimeEvidence,
     SmokeTestEvidence,
     load_model_pack_registry,
 )
+from whoopy.model_packs.runtime import ManagedRuntimePacks, RuntimePackStatus
 from whoopy.ports.errors import FatalAdapterError, TransientAdapterError
 
 
@@ -53,6 +56,26 @@ class SmokeResult(BaseModel):
     sample_rate: int
     message: str
     validated_dependencies: tuple[str, ...] = ()
+
+
+class SmokeProbeFailure(ModelPackOperationError):
+    """A real offline probe failed after reporting how far startup progressed.
+
+    Keeping this stage typed prevents an empty or invalid synthesis result from
+    being misreported as a runtime-import failure.  The original exception is
+    retained so transient timeouts and busy-slot failures remain non-durable.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        runtime_probe_passed: bool,
+        cause: BaseException,
+    ) -> None:
+        super().__init__(message)
+        self.runtime_probe_passed = runtime_probe_passed
+        self.cause = cause
 
 
 class SmokeRunner(Protocol):
@@ -81,6 +104,7 @@ class PackListReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     packs: tuple[ModelPackStatus, ...]
+    runtime_packs: tuple[RuntimePackStatus, ...] = ()
     trash_receipts: tuple[str, ...]
 
 
@@ -132,6 +156,8 @@ def _deterministic_smoke_failure(error: BaseException) -> bool:
     violations with deterministic inputs, are persisted as incompatible.
     """
 
+    if isinstance(error, SmokeProbeFailure):
+        error = error.cause
     if isinstance(error, (TransientAdapterError, HeavyweightModelSlotUnavailable, TimeoutError)):
         return False
     return isinstance(error, (FatalAdapterError, ModelPackOperationError, ValueError, TypeError))
@@ -145,10 +171,12 @@ class ManagedModelPacks:
         registry: ModelPackRegistry,
         *,
         smoke_runner: SmokeRunner | None = None,
+        runtime_packs: ManagedRuntimePacks | None = None,
     ) -> None:
         self.registry = registry
         self.models_root = registry.models_root
         self.smoke_runner = smoke_runner
+        self.runtime_packs = runtime_packs
         self.trash = ManagedPackTrash(self.models_root / "managed" / "model-packs")
 
     @classmethod
@@ -158,17 +186,25 @@ class ManagedModelPacks:
         # real CLI and local web API never silently use a placeholder probe.
         from whoopy.model_packs.smoke import OfflineModelPackSmokeRunner
 
+        runtime_manifest = registry_path.parent / "runtime_packs.yaml"
+        runtime_packs = (
+            ManagedRuntimePacks.from_path(runtime_manifest, models_root=models_root)
+            if runtime_manifest.is_file()
+            else None
+        )
         return cls(
             registry,
             smoke_runner=OfflineModelPackSmokeRunner(
                 registry,
                 references_path=registry_path.parent / "voice_references.yaml",
             ),
+            runtime_packs=runtime_packs,
         )
 
     def list(self) -> PackListReport:
         return PackListReport(
             packs=tuple(self.registry.list_statuses()),
+            runtime_packs=() if self.runtime_packs is None else self.runtime_packs.list(),
             trash_receipts=tuple(entry.trash_id for entry in self.trash.list()),
         )
 
@@ -184,12 +220,17 @@ class ManagedModelPacks:
                 " Checkpoint bytes are installed, but the matching isolated runtime "
                 "is still required before this pack can become ready."
             )
+            if self.runtime_packs is not None:
+                runtime_status = self.runtime_packs.inspect(
+                    self.registry.get(pack_id).runtime.runtime_id
+                )
+                message += f" {runtime_status.message} {runtime_status.remedy or ''}".rstrip()
         return PackOperationReport(
             action="verify",
             pack_id=pack_id,
             state=status.state,
             status=status,
-            message=f"Pinned files inspected; pack is {status.state}.",
+            message=f"Pinned files inspected; pack is {status.state}. {message}",
         )
 
     def install(
@@ -300,6 +341,15 @@ class ManagedModelPacks:
                         "Move the pack to managed trash first."
                     )
                 if _file_is_verified(installed, size_bytes=file.size_bytes, digest=file.digest):
+                    reusable = self._verified_managed_source(pack_id, file)
+                    if reusable is not None:
+                        self._deduplicate_verified_install(
+                            reusable,
+                            installed,
+                            size_bytes=file.size_bytes,
+                            digest=file.digest,
+                            operation_id=operation_id,
+                        )
                     progress = progress_store.update_artifact(
                         operation_id,
                         artifact_id,
@@ -337,8 +387,17 @@ class ManagedModelPacks:
                         safe_managed_path(self.models_root, complete, label="verified staging file")
                         partial_path.replace(complete)
                     else:
+                        reusable = self._verified_managed_source(pack_id, file)
                         source = self._offline_source(offline_directory, file.path)
-                        if source is not None:
+                        if reusable is not None:
+                            self._reuse_with_progress(
+                                reusable,
+                                partial_path,
+                                expected_size=file.size_bytes,
+                                progress=progress_callback,
+                                safety_root=self.models_root,
+                            )
+                        elif source is not None:
                             self._copy_with_progress(
                                 source,
                                 partial_path,
@@ -405,6 +464,73 @@ class ManagedModelPacks:
             progress=progress,
             message="All pinned model-pack files were installed and verified.",
         )
+
+    def _verified_managed_source(
+        self, target_pack_id: str, target_file: PinnedFileSpec
+    ) -> Path | None:
+        """Find immutable installed bytes already declared by another pack.
+
+        Model families commonly ship identical tokenizers in every repository.
+        Reusing only a file whose pinned size and digest are identical avoids a
+        second download and lets the filesystem share storage without making
+        either pack depend on the other's directory remaining present.
+        """
+
+        size_bytes = target_file.size_bytes
+        digest = target_file.digest
+        for candidate_pack in self.registry.packs:
+            if candidate_pack.pack_id == target_pack_id:
+                continue
+            for candidate_file in candidate_pack.files:
+                if candidate_file.size_bytes != size_bytes or candidate_file.digest != digest:
+                    continue
+                candidate = safe_managed_path(
+                    self.models_root,
+                    self.models_root / candidate_pack.managed_directory / candidate_file.path,
+                    label="reusable managed model file",
+                )
+                if not candidate.is_symlink() and _file_is_verified(
+                    candidate, size_bytes=size_bytes, digest=digest
+                ):
+                    return candidate
+        return None
+
+    def _deduplicate_verified_install(
+        self,
+        source: Path,
+        installed: Path,
+        *,
+        size_bytes: int,
+        digest: DigestSpec,
+        operation_id: str,
+    ) -> None:
+        """Atomically converge verified duplicate files onto one inode.
+
+        Failure to hard-link is only an optimization miss: the already
+        verified installation remains intact and usable.
+        """
+
+        try:
+            if source.samefile(installed):
+                return
+        except OSError:
+            return
+        temporary = safe_managed_path(
+            self.models_root,
+            installed.with_name(f".{installed.name}.{operation_id}.dedup.tmp"),
+            label="model-pack deduplication file",
+        )
+        try:
+            temporary.unlink(missing_ok=True)
+            os.link(source, temporary, follow_symlinks=False)
+            if not _file_is_verified(temporary, size_bytes=size_bytes, digest=digest):
+                return
+            safe_managed_path(self.models_root, installed, label="managed model file")
+            temporary.replace(installed)
+        except OSError:
+            return
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def smoke_test(self, pack_id: str) -> PackOperationReport:
         """Run an injected adapter probe and bind evidence to this machine/revision."""
@@ -487,6 +613,9 @@ class ManagedModelPacks:
             if not isinstance(error, Exception):
                 raise
             if _deterministic_smoke_failure(error):
+                runtime_passed = (
+                    error.runtime_probe_passed if isinstance(error, SmokeProbeFailure) else False
+                )
                 runtime = RuntimeEvidence(
                     pack_id=pack_id,
                     model_revision=pack.revision,
@@ -494,13 +623,31 @@ class ManagedModelPacks:
                     runtime_fingerprint=runtime_fingerprint,
                     machine_id=machine.machine_id,
                     checked_at=checked_at,
-                    success=False,
+                    success=runtime_passed,
                     message=f"{type(error).__name__}: {error}"[:2_000],
                 )
                 _atomic_evidence(records / "runtime.json", runtime, safety_root=self.models_root)
+                if runtime_passed:
+                    failed_smoke = SmokeTestEvidence(
+                        pack_id=pack_id,
+                        model_revision=pack.revision,
+                        runtime_revision=pack.runtime.revision,
+                        runtime_fingerprint=runtime_fingerprint,
+                        machine_id=machine.machine_id,
+                        checked_at=checked_at,
+                        success=False,
+                        offline=True,
+                        message=f"{type(error).__name__}: {error}"[:2_000],
+                    )
+                    _atomic_evidence(
+                        records / "smoke.json",
+                        failed_smoke,
+                        safety_root=self.models_root,
+                    )
             raise ModelPackOperationError(
                 f"{pack_id} offline smoke test failed: {type(error).__name__}: {error}"
             ) from error
+        self._write_smoke_sample(records / "smoke.wav", audio)
         _atomic_evidence(records / "runtime.json", runtime, safety_root=self.models_root)
         _atomic_evidence(records / "smoke.json", smoke, safety_root=self.models_root)
         # A model-specific probe may exercise a declared dependency as part of
@@ -543,6 +690,7 @@ class ManagedModelPacks:
                 output_duration_seconds=smoke.output_duration_seconds,
                 message=f"Encode and decode paths passed inside the {pack_id} smoke test.",
             )
+            self._write_smoke_sample(dependency_records / "smoke.wav", audio)
             _atomic_evidence(
                 dependency_records / "runtime.json",
                 dependency_runtime,
@@ -561,6 +709,83 @@ class ManagedModelPacks:
             status=final,
             message=smoke.message,
         )
+
+    def smoke_sample_path(self, pack_id: str) -> Path:
+        """Return a playable sample only when it matches current READY evidence."""
+
+        status = self.registry.inspect(pack_id)
+        if status.state is not ModelPackState.READY:
+            sample_failure = next(
+                (
+                    check.message
+                    for check in status.checks
+                    if check.check == "playable_smoke_sample" and not check.passed
+                ),
+                None,
+            )
+            raise ModelPackOperationError(
+                f"No current playable sample exists for {pack_id}; the pack is {status.state}"
+                + (f": {sample_failure}." if sample_failure else ".")
+            )
+        records = self.registry.records_directory(pack_id)
+        try:
+            evidence = SmokeTestEvidence.model_validate_json(
+                (records / "smoke.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError) as error:
+            raise ModelPackOperationError(
+                f"No valid current smoke evidence exists for {pack_id}."
+            ) from error
+        sample = safe_managed_path(
+            self.models_root,
+            records / "smoke.wav",
+            label="model-pack smoke sample",
+        )
+        try:
+            with wave.open(str(sample), "rb") as source:
+                if (
+                    source.getnchannels() != 1
+                    or source.getsampwidth() != 2
+                    or source.getframerate() != 24_000
+                ):
+                    raise ModelPackOperationError(
+                        f"The saved {pack_id} smoke sample has an invalid PCM format."
+                    )
+                pcm = source.readframes(source.getnframes())
+        except (OSError, EOFError, wave.Error) as error:
+            raise ModelPackOperationError(
+                f"The saved {pack_id} smoke sample is missing or corrupt."
+            ) from error
+        if (
+            evidence.output_sha256 is None
+            or hashlib.sha256(pcm).hexdigest() != evidence.output_sha256
+        ):
+            raise ModelPackOperationError(
+                f"The saved {pack_id} smoke sample does not match current synthesis evidence."
+            )
+        return sample
+
+    def _write_smoke_sample(self, path: Path, audio: PcmAudio) -> None:
+        """Atomically retain the exact PCM accepted by the smoke quality gate."""
+
+        path = safe_managed_path(self.models_root, path, label="model-pack smoke sample")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+        )
+        os.close(descriptor)
+        temporary = Path(temporary_name)
+        try:
+            with wave.open(str(temporary), "wb") as destination:
+                destination.setnchannels(1)
+                destination.setsampwidth(2)
+                destination.setframerate(audio.sample_rate)
+                destination.writeframes(audio.pcm_s16le)
+            safe_managed_path(self.models_root, path, label="model-pack smoke sample")
+            temporary.replace(path)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
 
     def unload(self) -> PackOperationReport:
         slot = self._slot_status()
@@ -646,6 +871,32 @@ class ManagedModelPacks:
                 f"Offline directory contains ambiguous copies of {relative_path.name}."
             )
         return matches[0] if matches else None
+
+    @staticmethod
+    def _reuse_with_progress(
+        source: Path,
+        destination: Path,
+        *,
+        expected_size: int,
+        progress: Callable[[int], object],
+        safety_root: Path,
+    ) -> None:
+        """Reuse verified immutable bytes, preferring a space-saving hard link."""
+
+        source = safe_managed_path(safety_root, source, label="reusable managed model file")
+        destination = safe_managed_path(safety_root, destination, label="partial staging file")
+        destination.unlink(missing_ok=True)
+        try:
+            os.link(source, destination, follow_symlinks=False)
+            progress(expected_size)
+        except OSError:
+            ManagedModelPacks._copy_with_progress(
+                source,
+                destination,
+                expected_size=expected_size,
+                progress=progress,
+                safety_root=safety_root,
+            )
 
     @staticmethod
     def _copy_with_progress(

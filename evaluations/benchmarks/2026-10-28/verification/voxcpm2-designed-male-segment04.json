@@ -1,0 +1,535 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-28T23:54:27.803232+00:00",
+  "status": "pass",
+  "failure_reasons": [],
+  "review_reasons": [],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/segment-04.wav",
+  "audio_sha256": "a78305cae63a61e6a6d8fd7a21dae612faab3d424280254b51a28798efcec96d",
+  "expected_transcript": "Before you finish, feel the contact beneath you again. Let your eyes take in the room, and choose one small thing to do next, at your own pace.\n",
+  "expected_text_sha256": "253958f4172bd038cda073c5617d9284300f0e746c917fbd4521fecd4eec7c48",
+  "mode": "speech",
+  "pcm": {
+    "frame_count": 468488,
+    "sample_rate": 48000,
+    "duration_seconds": 9.760166666666667,
+    "nonfinite_samples": 0,
+    "peak": 0.6054450273513794,
+    "rms": 0.05511636839487363,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.22085889570552147,
+    "leading_silence_seconds": 0.02,
+    "trailing_silence_seconds": 0.18,
+    "zero_crossing_fraction": 0.06742769810048091,
+    "difference_to_signal_energy": 0.05834570201668613,
+    "speech_established_by_pcm": false
+  },
+  "asr": {
+    "engine": "mlx-whisper",
+    "model_path": "/Users/jakob/.cache/huggingface/hub/models--mlx-community--whisper-small-mlx/snapshots/45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_revision": "45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_weights_sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
+    "model_config_sha256": "e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e",
+    "audio_sha256": "a78305cae63a61e6a6d8fd7a21dae612faab3d424280254b51a28798efcec96d",
+    "text": " Before you finish, feel the contact beneath you again. Let your eyes take in the room and choose one small thing to do next at your own pace.",
+    "language": "en",
+    "segments": [
+      {
+        "id": 0,
+        "seek": 0,
+        "start": 0.0,
+        "end": 3.16,
+        "text": " Before you finish, feel the contact beneath you again.",
+        "tokens": [
+          50364,
+          4546,
+          291,
+          2413,
+          11,
+          841,
+          264,
+          3385,
+          17149,
+          291,
+          797,
+          13,
+          50568
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.1212007622969778,
+        "compression_ratio": 1.3055555555555556,
+        "no_speech_prob": 0.003412884660065174,
+        "words": [
+          {
+            "word": " Before",
+            "start": 0.0,
+            "end": 0.22,
+            "probability": 0.92822265625
+          },
+          {
+            "word": " you",
+            "start": 0.22,
+            "end": 0.48,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " finish,",
+            "start": 0.48,
+            "end": 0.9,
+            "probability": 0.998046875
+          },
+          {
+            "word": " feel",
+            "start": 1.34,
+            "end": 1.64,
+            "probability": 0.99609375
+          },
+          {
+            "word": " the",
+            "start": 1.64,
+            "end": 1.82,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " contact",
+            "start": 1.82,
+            "end": 2.26,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " beneath",
+            "start": 2.26,
+            "end": 2.62,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " you",
+            "start": 2.62,
+            "end": 2.88,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " again.",
+            "start": 2.88,
+            "end": 3.16,
+            "probability": 0.99658203125
+          }
+        ]
+      },
+      {
+        "id": 1,
+        "seek": 0,
+        "start": 4.04,
+        "end": 5.56,
+        "text": " Let your eyes take in the room",
+        "tokens": [
+          50568,
+          961,
+          428,
+          2575,
+          747,
+          294,
+          264,
+          1808,
+          50666
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.1212007622969778,
+        "compression_ratio": 1.3055555555555556,
+        "no_speech_prob": 0.003412884660065174,
+        "words": [
+          {
+            "word": " Let",
+            "start": 4.04,
+            "end": 4.22,
+            "probability": 0.99462890625
+          },
+          {
+            "word": " your",
+            "start": 4.22,
+            "end": 4.44,
+            "probability": 0.99755859375
+          },
+          {
+            "word": " eyes",
+            "start": 4.44,
+            "end": 4.72,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " take",
+            "start": 4.72,
+            "end": 4.98,
+            "probability": 0.998046875
+          },
+          {
+            "word": " in",
+            "start": 4.98,
+            "end": 5.18,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " the",
+            "start": 5.18,
+            "end": 5.28,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " room",
+            "start": 5.28,
+            "end": 5.56,
+            "probability": 0.99853515625
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "seek": 0,
+        "start": 5.56,
+        "end": 9.36,
+        "text": " and choose one small thing to do next at your own pace.",
+        "tokens": [
+          50666,
+          293,
+          2826,
+          472,
+          1359,
+          551,
+          281,
+          360,
+          958,
+          412,
+          428,
+          1065,
+          11638,
+          13,
+          50854
+        ],
+        "temperature": 0.0,
+        "avg_logprob": -0.1212007622969778,
+        "compression_ratio": 1.3055555555555556,
+        "no_speech_prob": 0.003412884660065174,
+        "words": [
+          {
+            "word": " and",
+            "start": 5.56,
+            "end": 6.14,
+            "probability": 0.79248046875
+          },
+          {
+            "word": " choose",
+            "start": 6.14,
+            "end": 6.42,
+            "probability": 0.9921875
+          },
+          {
+            "word": " one",
+            "start": 6.42,
+            "end": 6.72,
+            "probability": 0.9970703125
+          },
+          {
+            "word": " small",
+            "start": 6.72,
+            "end": 7.12,
+            "probability": 0.998046875
+          },
+          {
+            "word": " thing",
+            "start": 7.12,
+            "end": 7.42,
+            "probability": 0.998046875
+          },
+          {
+            "word": " to",
+            "start": 7.42,
+            "end": 7.6,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " do",
+            "start": 7.6,
+            "end": 7.78,
+            "probability": 0.9990234375
+          },
+          {
+            "word": " next",
+            "start": 7.78,
+            "end": 8.08,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " at",
+            "start": 8.08,
+            "end": 8.68,
+            "probability": 0.84423828125
+          },
+          {
+            "word": " your",
+            "start": 8.68,
+            "end": 8.88,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " own",
+            "start": 8.88,
+            "end": 9.08,
+            "probability": 0.99853515625
+          },
+          {
+            "word": " pace.",
+            "start": 9.08,
+            "end": 9.36,
+            "probability": 0.998046875
+          }
+        ]
+      }
+    ],
+    "inference_seconds": 1.9721324589918368,
+    "versions": {
+      "mlx-whisper": "0.4.3",
+      "mlx": "0.32.4",
+      "mlx-metal": "0.32.4",
+      "numpy": "2.4.6",
+      "soundfile": "0.14.0"
+    },
+    "python": "3.11.16",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "decoding": {
+      "language": "en",
+      "temperature": 0.0,
+      "condition_on_previous_text": false,
+      "expected_text_prompted": false
+    },
+    "gpu_lock": "/tmp/whoopy-benchmark-gpu.lock",
+    "gpu_lock_wait_seconds": 6.591703277081251e-05,
+    "network": "offline; existing local snapshot only"
+  },
+  "content": {
+    "expected_word_count": 28,
+    "observed_word_count": 28,
+    "word_error_rate": 0.0,
+    "ordered_word_coverage": 1.0,
+    "matches": 28,
+    "deletions": 0,
+    "insertions": 0,
+    "substitutions": 0,
+    "missing_words": [],
+    "unexpected_words": [],
+    "excess_repeated_words": {},
+    "missing_tail_words": [],
+    "possible_truncation": false,
+    "alignment": [
+      {
+        "operation": "match",
+        "expected": "before",
+        "observed": "before",
+        "expected_index": 0,
+        "observed_index": 0
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 1,
+        "observed_index": 1
+      },
+      {
+        "operation": "match",
+        "expected": "finish",
+        "observed": "finish",
+        "expected_index": 2,
+        "observed_index": 2
+      },
+      {
+        "operation": "match",
+        "expected": "feel",
+        "observed": "feel",
+        "expected_index": 3,
+        "observed_index": 3
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 4,
+        "observed_index": 4
+      },
+      {
+        "operation": "match",
+        "expected": "contact",
+        "observed": "contact",
+        "expected_index": 5,
+        "observed_index": 5
+      },
+      {
+        "operation": "match",
+        "expected": "beneath",
+        "observed": "beneath",
+        "expected_index": 6,
+        "observed_index": 6
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 7,
+        "observed_index": 7
+      },
+      {
+        "operation": "match",
+        "expected": "again",
+        "observed": "again",
+        "expected_index": 8,
+        "observed_index": 8
+      },
+      {
+        "operation": "match",
+        "expected": "let",
+        "observed": "let",
+        "expected_index": 9,
+        "observed_index": 9
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 10,
+        "observed_index": 10
+      },
+      {
+        "operation": "match",
+        "expected": "eyes",
+        "observed": "eyes",
+        "expected_index": 11,
+        "observed_index": 11
+      },
+      {
+        "operation": "match",
+        "expected": "take",
+        "observed": "take",
+        "expected_index": 12,
+        "observed_index": 12
+      },
+      {
+        "operation": "match",
+        "expected": "in",
+        "observed": "in",
+        "expected_index": 13,
+        "observed_index": 13
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 14,
+        "observed_index": 14
+      },
+      {
+        "operation": "match",
+        "expected": "room",
+        "observed": "room",
+        "expected_index": 15,
+        "observed_index": 15
+      },
+      {
+        "operation": "match",
+        "expected": "and",
+        "observed": "and",
+        "expected_index": 16,
+        "observed_index": 16
+      },
+      {
+        "operation": "match",
+        "expected": "choose",
+        "observed": "choose",
+        "expected_index": 17,
+        "observed_index": 17
+      },
+      {
+        "operation": "match",
+        "expected": "one",
+        "observed": "one",
+        "expected_index": 18,
+        "observed_index": 18
+      },
+      {
+        "operation": "match",
+        "expected": "small",
+        "observed": "small",
+        "expected_index": 19,
+        "observed_index": 19
+      },
+      {
+        "operation": "match",
+        "expected": "thing",
+        "observed": "thing",
+        "expected_index": 20,
+        "observed_index": 20
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 21,
+        "observed_index": 21
+      },
+      {
+        "operation": "match",
+        "expected": "do",
+        "observed": "do",
+        "expected_index": 22,
+        "observed_index": 22
+      },
+      {
+        "operation": "match",
+        "expected": "next",
+        "observed": "next",
+        "expected_index": 23,
+        "observed_index": 23
+      },
+      {
+        "operation": "match",
+        "expected": "at",
+        "observed": "at",
+        "expected_index": 24,
+        "observed_index": 24
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 25,
+        "observed_index": 25
+      },
+      {
+        "operation": "match",
+        "expected": "own",
+        "observed": "own",
+        "expected_index": 26,
+        "observed_index": 26
+      },
+      {
+        "operation": "match",
+        "expected": "pace",
+        "observed": "pace",
+        "expected_index": 27,
+        "observed_index": 27
+      }
+    ]
+  },
+  "limits": [
+    "ASR is independent evidence, not a human transcription or a proof of perfect speech.",
+    "Noise rejection requires content agreement; duration and RMS do not prove speech.",
+    "Warmth, naturalness, voice identity, and quality require listener judgment.",
+    "Narration mode permits intentional silence; expected words still require recognition."
+  ],
+  "thresholds": {
+    "pass_max_wer": 0.15,
+    "pass_min_coverage": 0.85,
+    "fail_wer_above": 0.35,
+    "fail_coverage_below": 0.65
+  },
+  "verifier_source_sha256": "3669cf3793b7200110dab88dd698d4eed1816a291f3f8581de7c6bf7dd83b3d3",
+  "harness_source_sha256": "a35b1cc25f4418de82b402e1ca5bc361ea22c6c6ee13eeee778c84db8854b8b5"
+}

@@ -1,0 +1,13 @@
+{
+  "neon_model": "claude-opus-4-6",
+  "claim": "independent rounding can make final beat negative",
+  "disposition": "not_reproduced_and_bound_rules_it_out_at_supported_durations",
+  "checked_allocations": 20892,
+  "minimum_slot_ms": 6666,
+  "main_confirmed_and_fixed": [
+    "unsupported revising progress stage",
+    "relative recipe path outside source checkout",
+    "insufficient context for full long-session revision"
+  ],
+  "note": "External model review is advisory; fixtures and this arithmetic scan do not establish prose quality."
+}

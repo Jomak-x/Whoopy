@@ -1,0 +1,32 @@
+{
+  "candidate": {
+    "candidate": "mlx-qwen-custom-ryan",
+    "raw_verification": "evaluations/benchmarks/2026-10-28/verification/mlx-qwen-custom-ryan.json",
+    "raw_status": "pass",
+    "input": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-custom-ryan/raw.wav",
+    "input_sha256": "7caa68b5531b5dd560d993ecbfe39f0db7df57bef843a0f43a874afa3755d729",
+    "output": "evaluations/benchmarks/2026-10-28/verification/listening/mlx-qwen-custom-ryan-matched.wav",
+    "output_sha256": "89c6f351aa67b688086d175b164946444411d935de11acf871a5fe38a408d8ea",
+    "input_measurements": {
+      "integrated_lufs": -21.9,
+      "true_peak_dbfs": -2.7
+    },
+    "gain_db": -1.1000000000000014,
+    "output_measurements": {
+      "integrated_lufs": -23.0,
+      "true_peak_dbfs": -3.8
+    },
+    "target_integrated_lufs": -23.0,
+    "max_true_peak_dbfs": -1.0,
+    "transforms": [
+      "constant volume gain",
+      "PCM16 listening copy"
+    ],
+    "raw_preserved": true,
+    "subjective_voice_quality": "requires listener judgment",
+    "normalization_helper_source_sha256": "d851558f160b77f14e416188d178f2f788bc77f105ffbd63e43c103c726cf58f"
+  },
+  "prior_approved_copy_count_preserved": 8,
+  "prior_output_mtimes_unchanged": true,
+  "prior_output_hash_records_unchanged": true
+}
