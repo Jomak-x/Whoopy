@@ -105,3 +105,37 @@ Final repository test/lint/type and GitHub CI gates remain pending with the oute
 executor. No new model or ASR inference was performed.
 R51 speed, REVIEW-10 explicit pause priority, and REVIEW-07 prebuilt-mode behavior
 remain unchanged while awaiting owner decisions.
+
+## Review fixes after 4af8bfb
+
+The owner has now approved explicit speed/pause precedence and removal of the
+unused prebuilt runtime format. The earlier pending-decision statements above
+describe their respective historical review phases.
+
+| Finding | Root cause and fix | Focused verification |
+| --- | --- | --- |
+| REVIEW-13 | Admission relied on volatile web tasks and missed surviving workers after restart. Shared generation/model-operation admission now consults durable run ownership and reconciles stale owners. | Durable ownership, stale-run recovery, and cancellation regressions. |
+| REVIEW-14 | Recovery started a new clock and reported it as the original trial duration. Recovered trials now omit unavailable total elapsed timing while retaining a separate polling timeout. | Completed/live/interrupted recovery and comparison exclusion regressions. |
+| REVIEW-15 | Checkout line endings depended on user Git settings. Restored the global LF rule while retaining byte-preserved license snapshots. | Actual Git checkout with `core.autocrlf=true` verifies Python/YAML bytes and untouched CRLF license snapshots. |
+| OWNER_APPROVED_RUNTIME_AND_PACING | Removed the unused prebuilt runtime bypass, retaining locked-wheelhouse and Kokoro's separate native archive path. Explicit speed applies without an explicit pacing profile; later explicit pause edits preserve their accepted timing and report rendered duration. Fresh generated runs retain fitting. | Runtime schema/materialization, speed precedence, edited-pause rendering, and fresh-generation regressions. |
+
+The focused batch covered **216 cases** in `test_durable_admission.py`,
+`test_lab_recipe_attestation.py`, `test_runtime_packs.py`,
+`test_runtime_release_validation.py`, `test_ci_portability.py`, `test_cli.py`,
+`test_webui.py`, `test_webui_review_boundaries.py`, `test_revisions.py`,
+`test_worker.py`, `test_lab_pacing_provenance.py`, and `test_legacy_api_contract.py`.
+Initially 215 passed; the remaining test correctly observed duplicate-resume
+rejection but expected an older error message. Its assertion was updated and its
+blocked fixture now releases in `finally`; that case passed on focused rerun.
+The first batch also emitted the existing Starlette/httpx deprecation and a
+fixture-thread timeout caused by that assertion failure; the rerun was clean.
+
+The regressions exercise live durable ownership, stale recovery, recovered
+comparison metrics, Git's actual Windows-style checkout conversion, wheelhouse
+installation, API-to-CLI speed precedence, planning resume, pause render/restore,
+selective speech regeneration, WAV/manifest agreement, and fresh duration fitting.
+Changed Python files were formatted, and `git diff --check` passed. No historical
+benchmark receipt or media changed, and no model inference or real-data purge
+was performed. Frontend trees match the original base and source licensing
+remains UNDECIDED. Final repository test/lint/type and GitHub CI gates belong to
+the outer executor.

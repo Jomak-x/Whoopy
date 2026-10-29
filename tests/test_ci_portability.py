@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
@@ -15,6 +16,35 @@ from scripts.localhost_studio_lifecycle import (
     _wait_for_resumable_script_progress,
     validated_base_url,
 )
+
+
+def test_windows_checkout_preserves_wheel_inputs_and_license_snapshot_bytes(tmp_path: Path) -> None:
+    (tmp_path / ".gitattributes").write_bytes(Path(".gitattributes").read_bytes())
+    files = {
+        "src/whoopy/example.py": b"value = 1\nprint(value)\n",
+        "config/example.yaml": b"version: 1\nname: example\n",
+        "evaluations/benchmarks/example/licenses/upstream.txt": b"License\r\nExact snapshot\r\n",
+    }
+    for name, payload in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+
+    def git(*arguments: str) -> None:
+        subprocess.run(
+            ["git", "-c", "core.autocrlf=true", "-c", "core.safecrlf=false", *arguments],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+        )
+
+    git("init", "--quiet")
+    git("add", ".gitattributes", *files)
+    for name in files:
+        (tmp_path / name).unlink()
+    git("checkout-index", "--all", "--force")
+
+    assert {name: (tmp_path / name).read_bytes() for name in files} == files
 
 
 def _receipt(target: str, *, passed: bool = True) -> dict[str, object]:
@@ -184,8 +214,11 @@ def _validate_action_reference(reference: str) -> None:
     if reference.startswith("./"):
         return
     action, separator, revision = reference.rpartition("@")
-    if not action or not separator or len(revision) != 40 or any(
-        character not in "0123456789abcdef" for character in revision
+    if (
+        not action
+        or not separator
+        or len(revision) != 40
+        or any(character not in "0123456789abcdef" for character in revision)
     ):
         raise ValueError(f"Action is not pinned to an immutable commit: {reference}")
 
@@ -236,9 +269,7 @@ def test_ci_action_validation_accepts_pinned_and_local_references(
         ("owner/repo/.github/workflows/quality.yml@v1", True),
     ],
 )
-def test_ci_action_validation_rejects_floating_references(
-    reference: str, job_level: bool
-) -> None:
+def test_ci_action_validation_rejects_floating_references(reference: str, job_level: bool) -> None:
     workflow = (
         {"jobs": {"quality": {"uses": reference}}}
         if job_level

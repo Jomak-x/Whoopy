@@ -568,7 +568,9 @@ class LocalWorker:
             if running.source_kind in {"script_file", "generated_prompt"}:
                 resolved = self.store.load_resolved_config(running.run_id)
                 target_duration_seconds = resolved.requested_duration_seconds
-            if running.source_kind == "generated_prompt":
+            if timeline.preserve_timing:
+                target_duration_seconds = None
+            elif running.source_kind == "generated_prompt":
                 assert resolved is not None
                 if resolved.generation is None:
                     raise WorkerError("Generated run has no durable duration settings.")

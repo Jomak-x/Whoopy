@@ -522,11 +522,6 @@ def validate_runtime_releases(
                 raise ModelPackOperationError(
                     f"Published {pack.runtime_id}/{bundle.target} has no reviewed lock path."
                 )
-            if bundle.install_mode != "locked-wheelhouse":
-                raise ModelPackOperationError(
-                    f"New published runtime {pack.runtime_id}/{bundle.target} must use the clean "
-                    "locked-wheelhouse install mode."
-                )
             expected_filename = f"{recipe.runtime_id}-{recipe.revision[:12]}-{bundle.target}.tar.gz"
             if bundle.archive != "tar.gz" or bundle.filename != expected_filename:
                 raise ModelPackOperationError(

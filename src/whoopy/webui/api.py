@@ -202,9 +202,9 @@ class GenerationRequest(BaseModel):
         "three_candidate_structural_selection",
         "recipe_whole_session",
     ] = "plan_first"
-    pacing_profile_id: str = Field(default="meditative-v2", pattern=r"^[a-z][a-z0-9_-]{1,95}$")
+    pacing_profile_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_-]{1,95}$")
     voice: str = "af_heart"
-    speed: float = Field(default=0.6, ge=0.5, le=1.2)
+    speed: float | None = Field(default=None, ge=0.5, le=1.2)
     meditation_kind: (
         Literal[
             "grounding",

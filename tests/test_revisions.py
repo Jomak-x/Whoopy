@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import threading
+import wave
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -10,6 +12,7 @@ import pytest
 
 from whoopy.artifacts import TargetPlatform
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
+from whoopy.audio.models import PcmAudio
 from whoopy.audio.processing import SpeechProcessingSettings
 from whoopy.cli import main
 from whoopy.meditation import (
@@ -52,6 +55,7 @@ from whoopy.pipeline.runs import (
     RunStatus,
     RunStore,
 )
+from whoopy.pipeline.worker import LocalWorker
 from whoopy.timeline import (
     BreathSegment,
     PronunciationOverride,
@@ -821,3 +825,75 @@ def test_plan_regeneration_cli_rejects_noop_before_loading_a_model(
 
     assert stopped.value.code == 2
     assert "does not change the active plan" in capsys.readouterr().err
+
+
+def test_generated_pause_edit_renders_and_restores_exact_timing(tmp_path: Path) -> None:
+    generated = _generated(
+        _plan(), middle_text="Notice the support beneath you and let attention settle here."
+    )
+    store = _completed_generated_run(tmp_path / "runs", generated)
+    revisions = RevisionStore(store)
+    edited = revisions.create(
+        RUN_ID,
+        RevisionRequest(timeline=TimelineEdit(silence_duration_ms={"silence-0001": 1_000})),
+    )
+    expected = store.load_timeline(RUN_ID)
+    completed = LocalWorker(store).resume(RUN_ID)
+    assert completed.status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == expected
+    assert expected.preserve_timing is True
+    manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    silence_span = next(s for s in manifest["segments"] if s["segment_id"] == "silence-0001")
+    assert silence_span["requested_duration_ms"] == 1_000
+    with wave.open(str(store.audio_path(RUN_ID)), "rb") as audio:
+        assert manifest["duration_ms"] == pytest.approx(
+            audio.getnframes() * 1_000 / audio.getframerate()
+        )
+    assert manifest["duration_ms"] < 300_000
+    quality = json.loads(store.quality_path(RUN_ID).read_text())
+    assert quality["passed"] is True
+    assert all(check["name"] != "requested_duration" for check in quality["checks"])
+    revisions.create(
+        RUN_ID,
+        RevisionRequest(timeline=TimelineEdit(silence_duration_ms={"silence-0001": 2_000})),
+    )
+    revisions.restore(RUN_ID, edited.revision_id)
+    restored = LocalWorker(store).resume(RUN_ID)
+    assert restored.status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == expected
+    restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    assert restored_manifest["duration_ms"] == manifest["duration_ms"]
+    assert restored_manifest["pcm_sha256"] == manifest["pcm_sha256"]
+
+
+def test_pace_edit_resynthesizes_only_changed_speech(tmp_path: Path) -> None:
+    synthesized: list[str] = []
+
+    class CountingSynthesizer(FixtureSpeechSynthesizer):
+        def synthesize(self, segment: SpeechSegment) -> PcmAudio:
+            synthesized.append(segment.id)
+            return super().synthesize(segment)
+
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    revisions.create(
+        RUN_ID,
+        RevisionRequest(timeline=TimelineEdit(silence_duration_ms={"silence-0001": 2_000})),
+    )
+    worker = LocalWorker(store, synthesizer=CountingSynthesizer())
+    worker.resume(RUN_ID)
+    synthesized.clear()
+    edited = revisions.create(
+        RUN_ID,
+        RevisionRequest(timeline=TimelineEdit(pace={"speech-0002": "very_slow"})),
+    )
+    completed = worker.resume(RUN_ID)
+    assert edited.affected_speech_segment_ids == ("speech-0002",)
+    assert synthesized == ["speech-0002"]
+    assert completed.status is RunStatus.COMPLETED
+    assert completed.recovery is not None
+    assert completed.recovery.checkpoint_reuses == 1
+    assert store.load_timeline(RUN_ID).preserve_timing is True
+    manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    silence_span = next(s for s in manifest["segments"] if s["segment_id"] == "silence-0001")
+    assert silence_span["actual_duration_ms"] == 2_000

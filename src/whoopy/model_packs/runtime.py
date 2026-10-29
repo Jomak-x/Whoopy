@@ -77,7 +77,7 @@ class RuntimeBundleSpec(BaseModel):
     size_bytes: int = Field(gt=0)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     archive: Literal["tar.gz", "zip"]
-    install_mode: Literal["prebuilt", "locked-wheelhouse"] = "prebuilt"
+    install_mode: Literal["locked-wheelhouse"] = "locked-wheelhouse"
     url: str | None = None
 
     @field_validator("target")
@@ -173,7 +173,7 @@ class RuntimeInstallReceipt(BaseModel):
     upstream_revision: str
     target: str
     bundle_sha256: str
-    install_mode: Literal["prebuilt", "locked-wheelhouse"] = "prebuilt"
+    install_mode: Literal["locked-wheelhouse"] = "locked-wheelhouse"
     installed_tree_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     installed_at: datetime
 
@@ -471,9 +471,7 @@ class ManagedRuntimePacks:
             if current.state is RuntimePackState.INSTALLED:
                 return current
             if current.state is RuntimePackState.CORRUPT:
-                if bundle.install_mode == "locked-wheelhouse" and self._recoverable_install(
-                    current.directory, spec, bundle, selected_target
-                ):
+                if self._recoverable_install(current.directory, spec, bundle, selected_target):
                     shutil.rmtree(current.directory)
                 else:
                     raise ModelPackOperationError(current.message + " " + str(current.remedy))
@@ -580,7 +578,6 @@ class ManagedRuntimePacks:
             destination.parent / f".{destination.name}.install-{uuid.uuid4().hex}",
         )
         staging.mkdir()
-        install_root = staging
         promoted = False
         completed = False
         try:
@@ -621,39 +618,35 @@ class ManagedRuntimePacks:
                                 shutil.copyfileobj(reader, writer)
                             if member_mode:
                                 output.chmod(member_mode & 0o777)
-            if bundle.install_mode == "locked-wheelhouse":
-                # A venv is not relocatable on all supported platforms. Promote
-                # verified release bytes first so launchers are generated with
-                # their permanent path, then remove the whole destination if
-                # materialization fails before a receipt can be written.
-                if destination.exists():
-                    raise ModelPackOperationError(
-                        "Refusing to overwrite an existing managed runtime."
-                    )
-                intent = RuntimeInstallIntent(
-                    runtime_id=spec.runtime_id,
-                    revision=spec.revision,
-                    upstream_revision=str(spec.upstream_revision),
-                    target=target,
-                    bundle_sha256=bundle.sha256,
-                )
-                with (staging / ".whoopy-installing.json").open("w", encoding="utf-8") as writer:
-                    writer.write(intent.model_dump_json(indent=2) + "\n")
-                    writer.flush()
-                    os.fsync(writer.fileno())
-                staging.replace(destination)
-                install_root = destination
-                promoted = True
-                self._materialize_locked_runtime(
-                    install_root,
-                    spec,
-                    target,
-                    python_executable=python_executable,
-                )
+            # A venv is not relocatable on all supported platforms. Promote
+            # verified release bytes first so launchers are generated with
+            # their permanent path, then remove the whole destination if
+            # materialization fails before a receipt can be written.
+            if destination.exists():
+                raise ModelPackOperationError("Refusing to overwrite an existing managed runtime.")
+            intent = RuntimeInstallIntent(
+                runtime_id=spec.runtime_id,
+                revision=spec.revision,
+                upstream_revision=str(spec.upstream_revision),
+                target=target,
+                bundle_sha256=bundle.sha256,
+            )
+            with (staging / ".whoopy-installing.json").open("w", encoding="utf-8") as writer:
+                writer.write(intent.model_dump_json(indent=2) + "\n")
+                writer.flush()
+                os.fsync(writer.fileno())
+            staging.replace(destination)
+            promoted = True
+            self._materialize_locked_runtime(
+                destination,
+                spec,
+                target,
+                python_executable=python_executable,
+            )
             missing = [
                 str(item)
                 for item in spec.required_markers
-                if item != Path(".whoopy-runtime.json") and not (install_root / item).is_file()
+                if item != Path(".whoopy-runtime.json") and not (destination / item).is_file()
             ]
             if missing:
                 raise ModelPackOperationError(
@@ -666,21 +659,15 @@ class ManagedRuntimePacks:
                 target=target,
                 bundle_sha256=bundle.sha256,
                 install_mode=bundle.install_mode,
-                installed_tree_sha256=_tree_sha256(install_root),
+                installed_tree_sha256=_tree_sha256(destination),
                 installed_at=datetime.now(UTC),
             )
             _atomic_json(
-                install_root / ".whoopy-runtime.json",
+                destination / ".whoopy-runtime.json",
                 receipt.model_dump(mode="json"),
                 safety_root=self.models_root,
             )
-            (install_root / ".whoopy-installing.json").unlink(missing_ok=True)
-            if not promoted:
-                if destination.exists():
-                    raise ModelPackOperationError(
-                        "Refusing to overwrite an existing managed runtime."
-                    )
-                staging.replace(destination)
+            (destination / ".whoopy-installing.json").unlink(missing_ok=True)
             completed = True
         finally:
             if staging.exists():

@@ -1532,7 +1532,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     generate_parser.add_argument(
         "--pacing-profile",
-        default="meditative-v2",
+        default=None,
         help="Reviewed product pacing profile; its exact revision is saved with the run.",
     )
     generate_parser.add_argument("--pacing-profile-version", type=int, help=argparse.SUPPRESS)
@@ -2391,7 +2391,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if pacing_path.is_file()
                 else PacingProfileRegistry.load_bundled()
             )
-            pacing_profile = pacing_registry.get(args.pacing_profile)
+            pacing_profile = pacing_registry.get(args.pacing_profile or "meditative-v2")
             if (
                 args.pacing_profile_version is not None
                 and args.pacing_profile_version != pacing_profile.version
@@ -2402,14 +2402,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 and args.pacing_profile_sha256 != pacing_profile.digest
             ):
                 raise GenerationError("The requested pacing profile content changed before launch.")
-            pacing_run = PacingRunSettings(
-                profile_id=pacing_profile.profile_id,
-                version=pacing_profile.version,
-                sha256=pacing_profile.digest,
+            use_pacing_profile = args.pacing_profile is not None or args.speed is None
+            pacing_run = (
+                PacingRunSettings(
+                    profile_id=pacing_profile.profile_id,
+                    version=pacing_profile.version,
+                    sha256=pacing_profile.digest,
+                )
+                if use_pacing_profile
+                else None
             )
             speed = (
                 pacing_profile.speech_speed
-                if prompt_mode
+                if prompt_mode and use_pacing_profile
                 else args.speed
                 if args.speed is not None
                 else settings.tts.speed

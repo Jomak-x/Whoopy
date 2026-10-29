@@ -390,12 +390,11 @@ class LocalWebApplication:
                     raise ValueError(
                         "Wait for the active model or runtime operation before generating."
                     )
-            with self._task_lock:
-                if any(task.active for task in self._tasks.values()):
-                    raise ValueError(
-                        "One local generation worker is already active. "
-                        "Wait, cancel it, or resume later."
-                    )
+            if self._has_active_generation():
+                raise ValueError(
+                    "One local generation worker is already active. "
+                    "Wait, cancel it, or resume later."
+                )
             yield
 
     @contextmanager
@@ -403,12 +402,33 @@ class LocalWebApplication:
         """Atomically exclude a generation worker while touching model state."""
 
         with self._operation_admission_lock:
-            with self._task_lock:
-                if any(task.active for task in self._tasks.values()):
-                    raise ValueError(
-                        "Finish the active meditation before changing or loading models."
-                    )
+            if self._has_active_generation():
+                raise ValueError("Finish the active meditation before changing or loading models.")
             yield
+
+    def _has_active_generation(self) -> bool:
+        with self._task_lock:
+            if any(task.active for task in self._tasks.values()):
+                return True
+        if not self.runs_directory.is_dir():
+            return False
+        store = RunStore(self.runs_directory)
+        for directory in self.runs_directory.iterdir():
+            if not directory.is_dir():
+                continue
+            try:
+                run_id = store.parse_run_id(directory.name)
+                store.load(run_id)
+            except (ValueError, RunStoreError):
+                continue
+            try:
+                with RunLock(directory):
+                    record = store.reconcile_stale_run_locked(run_id)
+                    if record.status is RunStatus.RUNNING:
+                        return True
+            except RunLockUnavailable:
+                return True
+        return False
 
     def list_voice_references(self) -> dict[str, Any]:
         """Return active consented references without exposing absolute paths."""
@@ -1753,15 +1773,19 @@ class LocalWebApplication:
             raise ValueError("Choose a production-backed writing method.")
         if mode != "prompt" and writing_method != "plan_first":
             raise ValueError("Writing methods apply only to prompt generation.")
-        pacing_profile_id = payload.get("pacing_profile_id", "meditative-v2")
+        pacing_profile_id = payload.get("pacing_profile_id")
+        if pacing_profile_id is None and "speed" not in payload:
+            pacing_profile_id = "meditative-v2"
         pacing_path = self.config_directory / "pacing_profiles.yaml"
         pacing_registry = (
             PacingProfileRegistry.load(pacing_path)
             if pacing_path.is_file()
             else PacingProfileRegistry.load_bundled()
         )
-        pacing_profile = pacing_registry.get(pacing_profile_id)
-        if mode == "prompt":
+        pacing_profile = (
+            pacing_registry.get(pacing_profile_id) if pacing_profile_id is not None else None
+        )
+        if mode == "prompt" and pacing_profile is not None:
             speed = pacing_profile.speech_speed
         self._require_speech_model_ready(tts_model, surface=surface)
         durable_audience = cast(Literal["studio", "lab"], surface)
@@ -1789,9 +1813,11 @@ class LocalWebApplication:
             "voice_reference": voice_reference,
             "profile": profile,
             "writing_method": writing_method,
-            "pacing_profile_id": pacing_profile.profile_id,
-            "pacing_profile_version": pacing_profile.version,
-            "pacing_profile_sha256": pacing_profile.digest,
+            "pacing_profile_id": pacing_profile.profile_id if pacing_profile is not None else None,
+            "pacing_profile_version": pacing_profile.version
+            if pacing_profile is not None
+            else None,
+            "pacing_profile_sha256": pacing_profile.digest if pacing_profile is not None else None,
         }
 
         # Allocating the UUID and record before the child begins means the UI
@@ -1887,9 +1913,9 @@ class LocalWebApplication:
                 voice_reference,
                 profile,
                 writing_method,
-                pacing_profile.profile_id,
-                pacing_profile.version,
-                pacing_profile.digest,
+                pacing_profile.profile_id if pacing_profile is not None else None,
+                pacing_profile.version if pacing_profile is not None else None,
+                pacing_profile.digest if pacing_profile is not None else None,
                 durable_audience,
             ),
             name=f"whoopy-{run_id[:8]}",
@@ -2587,9 +2613,9 @@ class LocalWebApplication:
         voice_reference: str | None,
         profile: str,
         writing_method: str,
-        pacing_profile_id: str,
-        pacing_profile_version: int,
-        pacing_profile_sha256: str,
+        pacing_profile_id: str | None,
+        pacing_profile_version: int | None,
+        pacing_profile_sha256: str | None,
         audience: Literal["studio", "lab"],
     ) -> None:
         input_path: Path | None = None
@@ -2652,16 +2678,18 @@ class LocalWebApplication:
                 if meditation_kind is not None:
                     command.extend(["--meditation-kind", meditation_kind])
                 command.extend(["--writing-method", writing_method])
-                command.extend(
-                    [
-                        "--pacing-profile",
-                        pacing_profile_id,
-                        "--pacing-profile-version",
-                        str(pacing_profile_version),
-                        "--pacing-profile-sha256",
-                        pacing_profile_sha256,
-                    ]
-                )
+                if pacing_profile_id is not None:
+                    assert pacing_profile_sha256 is not None
+                    command.extend(
+                        [
+                            "--pacing-profile",
+                            pacing_profile_id,
+                            "--pacing-profile-version",
+                            str(pacing_profile_version),
+                            "--pacing-profile-sha256",
+                            pacing_profile_sha256,
+                        ]
+                    )
                 command.extend(
                     [
                         text,

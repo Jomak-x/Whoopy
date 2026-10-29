@@ -417,10 +417,25 @@ def test_kokoro_generation_requires_current_ready_smoke_evidence(tmp_path: Path)
     assert application.list_runs() == []
 
 
+@pytest.mark.parametrize(
+    ("timing", "expected_speed", "expected_pacing"),
+    [
+        ({}, "0.6", "meditative-v2"),
+        ({"speed": 0.9}, "0.9", None),
+        ({"speed": 0.9, "pacing_profile_id": "meditative-v2"}, "0.6", "meditative-v2"),
+    ],
+)
 def test_prompt_task_preallocates_a_durable_run_and_uses_the_real_cli_contract(
+    timing: dict[str, Any],
+    expected_speed: str,
+    expected_pacing: str | None,
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
 ) -> None:
+    from fastapi.testclient import TestClient
+
+    from whoopy.webui.api import create_api
+
     captured: dict[str, Any] = {}
 
     class FakeProcess:
@@ -448,18 +463,22 @@ def test_prompt_task_preallocates_a_durable_run_and_uses_the_real_cli_contract(
         model_pack_service_factory=lambda _registry, _models: _ReadyKokoroPacks(),
     )
 
-    created = application.start_generation(
-        {
-            "mode": "prompt",
-            "text": "A gentle grounding pause.",
-            "minutes": 1,
-            "voice": "af_heart",
-            "speed": 0.9,
-        }
-    )
+    with TestClient(create_api(application), base_url="http://127.0.0.1") as client:
+        response = client.post(
+            "/api/generate",
+            json={
+                "mode": "prompt",
+                "text": "A gentle grounding pause.",
+                "minutes": 1,
+                "voice": "af_heart",
+                **timing,
+            },
+        )
+    assert response.status_code == 202
+    created = response.json()
     run_id = created["run_id"]
     assert created["task_id"] == run_id
-    assert RunStore(tmp_path / "runs").load(run_id).status.value == "queued"
+    assert RunStore(tmp_path / "runs").load(run_id).audience == "studio"
     _wait_for_capture(captured)
     command = captured["command"]
     assert command[:4] == [command[0], "-m", "whoopy", "generate"]
@@ -468,8 +487,11 @@ def test_prompt_task_preallocates_a_durable_run_and_uses_the_real_cli_contract(
     assert command[command.index("--profile") + 1] == "standard"
     assert command[command.index("--delivery") + 1] == "calm"
     assert command[command.index("--pace") + 1] == "slow"
-    assert command[command.index("--pacing-profile") + 1] == "meditative-v2"
-    assert command[command.index("--speed") + 1] == "0.6"
+    if expected_pacing is None:
+        assert "--pacing-profile" not in command
+    else:
+        assert command[command.index("--pacing-profile") + 1] == expected_pacing
+    assert command[command.index("--speed") + 1] == expected_speed
     assert command[command.index("--audience") + 1] == "studio"
 
 
@@ -948,10 +970,12 @@ def test_duplicate_resume_is_rejected_during_the_launch_window(tmp_path: Path) -
         command_launcher=BlockingProcess,
     )
     assert application.resume_run(run_id) is not None
-    assert launcher_entered.wait(timeout=2)
-    with pytest.raises(ValueError, match="active local worker"):
-        application.resume_run(run_id)
-    release_launcher.set()
+    try:
+        assert launcher_entered.wait(timeout=2)
+        with pytest.raises(ValueError, match="already active"):
+            application.resume_run(run_id)
+    finally:
+        release_launcher.set()
 
 
 def test_restart_durable_cancel_uses_the_cli(tmp_path: Path) -> None:

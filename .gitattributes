@@ -1,2 +1,3 @@
+* text=auto eol=lf
 # Preserve fetched license snapshots byte-for-byte for their recorded hashes.
 evaluations/benchmarks/**/licenses/** -text

@@ -19,6 +19,13 @@ understand all possible user needs. Exact quiet is bounded in a typed timeline.
 Actual spoken duration depends on the voice: a text estimate is not final-audio
 measurement. The CLI reserves 32K writer context for full-session revision.
 
+For prompt generation, an explicit speech speed remains effective when no pacing
+profile is explicitly selected. Selecting a pacing profile uses its speed. Fresh generated
+runs still fit their bounded silence to the requested duration using actual
+speech. Later explicit pause edits preserve the accepted pause schedule instead
+of fitting it back to the original duration; the rendered audio determines the
+reported actual duration.
+
 ```bash
 uv run --offline python scripts/benchmark_writing_methods.py \
   --profile high --output evaluations/benchmarks/writing-v1

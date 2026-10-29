@@ -236,7 +236,6 @@ class LocalProductionExperimentExecutor:
         """Recover an existing run and preserve its trial identity."""
 
         started_at = datetime.now(UTC)
-        started_clock = time.monotonic()
         pinned_source: CanonicalSourceProvenance | None = None
         try:
             if request.controlled_source_run_id is not None:
@@ -264,7 +263,7 @@ class LocalProductionExperimentExecutor:
             request,
             task,
             started_at=started_at,
-            started_clock=started_clock,
+            started_clock=None,
             pinned_source=pinned_source,
         )
 
@@ -274,9 +273,10 @@ class LocalProductionExperimentExecutor:
         task: dict[str, Any],
         *,
         started_at: datetime,
-        started_clock: float,
+        started_clock: float | None,
         pinned_source: CanonicalSourceProvenance | None,
     ) -> ProductionTrialResult:
+        wait_started_clock = time.monotonic() if started_clock is None else started_clock
         task_id = str(task["task_id"])
         initial_run_id = UUID(str(task["run_id"]))
         if self.active_run_changed is not None:
@@ -295,7 +295,7 @@ class LocalProductionExperimentExecutor:
                 return result
             if state["status"] not in {"queued", "running"}:
                 break
-            if time.monotonic() - started_clock > self.timeout_seconds:
+            if time.monotonic() - wait_started_clock > self.timeout_seconds:
                 self.application.cancel_task(task_id)
                 result = self._failed_result(
                     request,
@@ -319,7 +319,7 @@ class LocalProductionExperimentExecutor:
                 failure=str(state.get("error") or f"Production run ended as {state['status']}"),
             )
         try:
-            evidence_lock = self._acquire_finalized_run_lock(run_id, started_clock)
+            evidence_lock = self._acquire_finalized_run_lock(run_id, wait_started_clock)
         except TimeoutError as error:
             return self._failed_result(
                 request,
@@ -700,7 +700,7 @@ class LocalProductionExperimentExecutor:
         request: ProductionTrialRequest,
         run_id: UUID,
         started_at: datetime,
-        started_clock: float,
+        started_clock: float | None,
         *,
         pinned_source: CanonicalSourceProvenance | None = None,
     ) -> ProductionTrialResult:
@@ -776,12 +776,6 @@ class LocalProductionExperimentExecutor:
             )
         metrics = [
             MetricValue(
-                name="elapsed_seconds",
-                value=time.monotonic() - started_clock,
-                unit="seconds",
-                goal="lower",
-            ),
-            MetricValue(
                 name="duration_error_percent",
                 value=duration_error_percent,
                 unit="percent",
@@ -800,6 +794,16 @@ class LocalProductionExperimentExecutor:
                 goal="higher",
             ),
         ]
+        if started_clock is not None:
+            metrics.insert(
+                0,
+                MetricValue(
+                    name="elapsed_seconds",
+                    value=time.monotonic() - started_clock,
+                    unit="seconds",
+                    goal="lower",
+                ),
+            )
         adapters = {
             name: AdapterMetadata.model_validate(value)
             for name, value in model_metadata.items()

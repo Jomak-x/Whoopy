@@ -15,6 +15,7 @@ from whoopy.evaluation import (
     ExperimentDefinition,
     ProductionTrialRequest,
     VoiceConfiguration,
+    compare_against_baseline,
     load_evaluation_set,
 )
 from whoopy.ports import AdapterMetadata
@@ -215,3 +216,78 @@ def test_moss_instruction_attests_the_submitted_control(
         assert application.payloads[0]["moss_instruction"] == instruction
     if tamper is not None:
         assert result.failure is not None and "tts.instruction" in result.failure
+
+
+@pytest.mark.parametrize("status", ["completed", "running", "interrupted"])
+def test_recovered_trial_omits_unavailable_timing_from_regressions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: str
+) -> None:
+    evaluation = load_evaluation_set(Path("config/evaluation/local-v1.yaml"))
+    condition = _condition()
+    definition = ExperimentDefinition(
+        experiment_id="recovered-timing",
+        version=1,
+        experiment_type="writing_method",
+        evaluation_id=evaluation.evaluation_id,
+        evaluation_version=evaluation.version,
+        seed=42,
+        baseline_candidate_id="candidate",
+        candidates=[
+            ExperimentCandidate(candidate_id="candidate", label="Plan", condition=condition),
+            ExperimentCandidate(
+                candidate_id="recipe",
+                label="Recipe",
+                condition=condition.model_copy(update={"writing_method": "recipe_whole_session"}),
+            ),
+        ],
+    )
+    application = CompletedGenerationApplication(tmp_path)
+    executor = LocalProductionExperimentExecutor(cast(Any, application), poll_seconds=0)
+    baseline = EvaluationLab(evaluation_set=evaluation, platform="fixture").run(
+        definition, executor, case_ids=[evaluation.cases[0].id]
+    )
+    original = baseline.trials[0]
+    assert original.success
+    assert "elapsed_seconds" in {metric.name for metric in original.metrics}
+    run_id = str(original.source_run_id)
+    application.tasks[run_id]["status"] = status
+    original_task = application.task
+    polls = 0
+    resumed: list[str] = []
+
+    def task(task_id: str) -> dict[str, Any]:
+        nonlocal polls
+        state = original_task(task_id).copy()
+        polls += 1
+        if polls >= 2 and state["status"] == "running":
+            application.tasks[task_id]["status"] = "completed"
+        return state
+
+    def resume_run(task_id: str) -> dict[str, Any]:
+        resumed.append(task_id)
+        application.tasks[task_id]["status"] = "completed"
+        return application.tasks[task_id]
+
+    monkeypatch.setattr(application, "task", task)
+    monkeypatch.setattr(application, "resume_run", resume_run, raising=False)
+    recovered = executor.resume(
+        _request(condition).model_copy(update={"trial_id": original.trial_id}),
+        original.source_run_id,
+    )
+
+    assert recovered.success
+    assert recovered.source_run_id == original.source_run_id
+    assert recovered.artifacts == original.artifacts
+    assert recovered.metrics == [
+        metric for metric in original.metrics if metric.name != "elapsed_seconds"
+    ]
+    assert len(application.payloads) == 2
+    assert resumed == ([run_id] if status == "interrupted" else [])
+    report = baseline.model_copy(update={"trials": [recovered, baseline.trials[1]]})
+    comparisons = compare_against_baseline(
+        report, baseline, candidate_id="candidate", baseline_candidate_id="candidate"
+    )
+    assert {comparison.metric_name for comparison in comparisons} == {
+        metric.name for metric in recovered.metrics
+    }
+    assert all(comparison.direction != "improved" for comparison in comparisons)

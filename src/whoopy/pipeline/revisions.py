@@ -609,7 +609,17 @@ class RevisionStore:
                 affected.add(segment.id)
                 changed = True
             segments.append(segment)
-        return timeline.model_copy(update={"segments": segments}), affected, changed
+        return (
+            timeline.model_copy(
+                update={
+                    "segments": segments,
+                    "preserve_timing": timeline.preserve_timing
+                    or bool(edits.silence_duration_ms or edits.pace),
+                }
+            ),
+            affected,
+            changed,
+        )
 
     def _apply_breath_protocol_edit(
         self,

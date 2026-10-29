@@ -119,17 +119,25 @@ def test_published_qwen_runtime_has_actionable_offline_install_state(tmp_path: P
     assert "python-3.12.12" in str(status.remedy)
 
 
-def test_offline_bundle_install_is_pinned_isolated_and_resumable(tmp_path: Path) -> None:
+def test_offline_bundle_install_is_pinned_isolated_and_resumable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     offline = tmp_path / "offline"
     offline.mkdir()
     archive = _archive(
         offline / "runtime.tar.gz",
-        {
-            ".venv/pyvenv.cfg": b"version = 3.12.1\n",
-            ".venv/bin/python": b"runtime-python",
-        },
+        {"runtime.py": b"VALUE = 1\n"},
     )
     service = _service(tmp_path, archive)
+    materialized: list[Path] = []
+
+    def materialize(directory: Path, *_args: object, **_kwargs: object) -> None:
+        materialized.append(directory)
+        (directory / ".venv/bin").mkdir(parents=True)
+        (directory / ".venv/pyvenv.cfg").write_text("version = 3.12.1\n")
+        (directory / ".venv/bin/python").write_bytes(b"runtime-python")
+
+    monkeypatch.setattr(service, "_materialize_locked_runtime", materialize)
     partial = tmp_path / "managed/.downloads/runtimes/test-runtime/runtime.tar.gz.part"
     partial.parent.mkdir(parents=True)
     partial.write_bytes(archive[:23])
@@ -151,8 +159,37 @@ def test_offline_bundle_install_is_pinned_isolated_and_resumable(tmp_path: Path)
         )
         == status
     )
+    assert materialized == [status.directory]
     (status.directory / ".venv/bin/python").write_bytes(b"tampered")
     assert service.inspect("test-runtime", target="darwin-arm64").state is RuntimePackState.CORRUPT
+
+
+def test_runtime_bundle_rejects_prebuilt_install_mode(tmp_path: Path) -> None:
+    document = _service(tmp_path, b"archive").manifest.model_dump(mode="json")
+    document["runtimes"][0]["bundles"][0]["install_mode"] = "prebuilt"
+    manifest = tmp_path / "runtimes.json"
+    manifest.write_text(json.dumps(document))
+
+    with pytest.raises(ModelPackOperationError, match="locked-wheelhouse"):
+        load_runtime_pack_manifest(manifest)
+
+
+def test_default_runtime_install_requires_locked_wheelhouse(tmp_path: Path) -> None:
+    archive = _archive(
+        tmp_path / "runtime.tar.gz",
+        {".venv/pyvenv.cfg": b"config", ".venv/bin/python": b"copied-python"},
+    )
+    service = _service(tmp_path, archive)
+
+    with pytest.raises(ModelPackOperationError, match="no valid build descriptor"):
+        service.install(
+            "test-runtime",
+            offline_directory=tmp_path,
+            allow_network=False,
+            target="darwin-arm64",
+        )
+
+    assert not (tmp_path / "managed/runtimes/test-runtime").exists()
 
 
 def test_runtime_bundle_digest_failure_never_promotes_files(tmp_path: Path) -> None:
@@ -535,9 +572,8 @@ def test_locked_runtime_recovers_interruption_immediately_after_promotion(
         tmp_path / "runtime.tar.gz",
         {".venv/pyvenv.cfg": b"version = 3.12.1\n", ".venv/bin/python": b"runtime"},
     )
-    original = _service(tmp_path, archive).get("test-runtime")
-    bundle = original.bundles[0].model_copy(update={"install_mode": "locked-wheelhouse"})
-    spec = original.model_copy(update={"bundles": (bundle,)})
+    spec = _service(tmp_path, archive).get("test-runtime")
+    bundle = spec.bundles[0]
     service = ManagedRuntimePacks(
         RuntimePackManifest(schema_version=1, runtimes=(spec,)), models_root=tmp_path
     )
@@ -590,9 +626,8 @@ def test_locked_runtime_receipt_publication_survives_process_exit(
         tmp_path / "runtime.tar.gz",
         {".venv/pyvenv.cfg": b"version = 3.12.1\n", ".venv/bin/python": b"runtime"},
     )
-    original = _service(tmp_path, archive).get("test-runtime")
-    bundle = original.bundles[0].model_copy(update={"install_mode": "locked-wheelhouse"})
-    spec = original.model_copy(update={"bundles": (bundle,)})
+    spec = _service(tmp_path, archive).get("test-runtime")
+    bundle = spec.bundles[0]
     manifest = RuntimePackManifest(schema_version=1, runtimes=(spec,))
     service = ManagedRuntimePacks(manifest, models_root=tmp_path)
     destination = tmp_path / spec.managed_directory

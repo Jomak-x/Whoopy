@@ -681,7 +681,18 @@ def test_draft_command_persists_validated_local_generation(
     assert len(list((draft / "sections").glob("*.json"))) == 3
 
 
+@pytest.mark.parametrize(
+    ("timing_args", "expected_speed", "expected_pacing"),
+    [
+        ([], 0.6, "meditative-v2"),
+        (["--speed", "0.9"], 0.9, None),
+        (["--speed", "0.9", "--pacing-profile", "meditative-v2"], 0.6, "meditative-v2"),
+    ],
+)
 def test_generate_prompt_joins_validated_draft_to_real_audio_contract(
+    timing_args: list[str],
+    expected_speed: float,
+    expected_pacing: str | None,
     tmp_path: Path,
     capsys: CaptureFixture[str],
     monkeypatch: MonkeyPatch,
@@ -713,6 +724,7 @@ def test_generate_prompt_joins_validated_draft_to_real_audio_contract(
             [
                 "generate",
                 "A gentle grounding pause.",
+                *timing_args,
                 "--minutes",
                 "1",
                 "--profile",
@@ -731,6 +743,13 @@ def test_generate_prompt_joins_validated_draft_to_real_audio_contract(
     run = runs_dir / completed["run_id"]
     timeline = json.loads((run / "timeline.json").read_text(encoding="utf-8"))
     metadata = json.loads((run / "model-metadata.json").read_text(encoding="utf-8"))
+    resolved = json.loads((run / "resolved-config.json").read_text(encoding="utf-8"))
+    assert resolved["tts"]["speed"] == expected_speed
+    pacing = resolved["generation"]["pacing"]
+    assert (pacing["profile_id"] if pacing is not None else None) == expected_pacing
+    manifest = json.loads((run / "audio-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["duration_ms"] == pytest.approx(60_000, abs=1)
+    assert timeline["preserve_timing"] is False
     assert completed["schema_version"] == 6
     assert completed["source_kind"] == "generated_prompt"
     assert completed["status"] == "completed"
@@ -870,7 +889,9 @@ def test_generate_refuses_to_retag_a_preallocated_run_audience(
     assert not store.generation_request_path(RUN_ID).exists()
 
 
+@pytest.mark.parametrize("explicit_speed", [None, 0.9])
 def test_run_resume_reconciles_an_expired_planning_lease_and_reuses_the_request(
+    explicit_speed: float | None,
     tmp_path: Path,
     capsys: CaptureFixture[str],
     monkeypatch: MonkeyPatch,
@@ -907,6 +928,8 @@ def test_run_resume_reconciles_an_expired_planning_lease_and_reuses_the_request(
         "--json",
     ]
 
+    if explicit_speed is not None:
+        generate_arguments.extend(["--speed", str(explicit_speed)])
     assert main(generate_arguments) == 130
     capsys.readouterr()
     store = RunStore(runs_dir)
@@ -941,6 +964,10 @@ def test_run_resume_reconciles_an_expired_planning_lease_and_reuses_the_request(
     assert completed["status"] == "completed"
     assert completed["recovery"]["resume_count"] == 2
     assert completed["audience"] == "lab"
+    resolved = store.load_resolved_config(RUN_ID)
+    assert resolved.tts.speed == (explicit_speed if explicit_speed is not None else 0.6)
+    assert resolved.generation is not None
+    assert (resolved.generation.pacing is None) is (explicit_speed is not None)
 
 
 def test_run_reconcile_command_marks_an_expired_attempt_interrupted(

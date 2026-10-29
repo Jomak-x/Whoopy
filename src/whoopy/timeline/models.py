@@ -121,6 +121,7 @@ class Timeline(BaseModel):
         "generated_prompt",
     ]
     segments: list[TimelineSegment] = Field(min_length=1)
+    preserve_timing: bool = False
 
     @model_validator(mode="after")
     def validate_version_and_segments(self) -> Timeline:
