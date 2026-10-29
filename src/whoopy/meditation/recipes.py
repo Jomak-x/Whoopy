@@ -230,15 +230,17 @@ def allocate_slots(
             else round(duration_seconds * 1_000 * weight / sum(weights))
         )
         remaining -= beat_ms
-        # A long session increases guided practice cycles, never silent padding.
-        count = max(1, math.ceil(beat_ms / 35_000))
-        slot_ms = [beat_ms // count] * count
-        slot_ms[-1] += beat_ms - sum(slot_ms)
         maximum_quiet = (
             22_000
             if session.recipe.ending == "sleep_taper" and index >= len(weights) - 2
             else 16_000
         )
+        # Keep guidance brief at the selected speech rate; longer beats gain
+        # practice invitations rather than requiring longer paragraphs.
+        cycle_ms = min(35_000, maximum_quiet + 24 * 60_000 / words_per_minute)
+        count = max(1, math.ceil(beat_ms / cycle_ms))
+        slot_ms = [beat_ms // count] * count
+        slot_ms[-1] += beat_ms - sum(slot_ms)
         beats.append(
             [
                 ParagraphSlot(

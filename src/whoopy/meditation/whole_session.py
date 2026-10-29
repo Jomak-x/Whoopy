@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 
 RESPONSE_SCHEMA_ALGORITHM_VERSION = 1
-TIMING_COMPILER_ALGORITHM_VERSION = 2
+TIMING_COMPILER_ALGORITHM_VERSION = 3
 
 
 class WholeSection(BaseModel):
@@ -85,9 +85,16 @@ CONTINUE_CUE = re.compile(
     r"allow\w*|question|support|contact|sound\w*|anchor|sense|sensing)\b",
     re.I,
 )
-WAKING = re.compile(
-    r"\b(?:open (?:your|the) eyes|wake(?: up)?|awaken|become alert|sit up|stand up|"
-    r"return to (?:the|your) (?:day|room|surroundings))\b",
+WAKING_ACTION = (
+    r"open (?:your|the) eyes|wake(?: up)?|awaken|become alert|sit up|stand up|"
+    r"return to (?:the|your) (?:day|room|surroundings)"
+)
+WAKING = re.compile(rf"\b(?:{WAKING_ACTION})\b", re.I)
+NEGATED_WAKING = re.compile(
+    r"\b(?:no need to|do not have to|don't have to|don\u2019t have to|"
+    r"do not|don't|don\u2019t|need not|never|without needing to)\s+"
+    rf"(?:move|{WAKING_ACTION})"
+    rf"(?:\s+(?:or|and)\s+(?:to\s+)?(?:move|{WAKING_ACTION}))*\b",
     re.I,
 )
 LYING_CONTRADICTION = re.compile(
@@ -99,6 +106,16 @@ SITTING_CONTRADICTION = re.compile(
     r"\b(?:lie|lay|lying)\s+(?:down|in bed)|\b(?:bed|mattress|pillow)\b",
     re.I,
 )
+
+
+def _has_waking_instruction(text: str) -> bool:
+    # Ignore only explicit negated action spans. A later positive, contrastive
+    # or separate-clause instruction must still be checked independently.
+    negated = [match.span() for match in NEGATED_WAKING.finditer(text)]
+    return any(
+        not any(start <= match.start() and match.end() <= end for start, end in negated)
+        for match in WAKING.finditer(text)
+    )
 
 
 def _strict_json(text: str) -> object:
@@ -380,7 +397,7 @@ def _validate_session(
         errors.append("orientation: establish bodily support or contact")
     ending = " ".join(draft.sections[-1].paragraphs)
     if session.recipe.ending == "sleep_taper":
-        if WAKING.search(ending):
+        if _has_waking_instruction(ending):
             errors.append("taper: waking reorientation contradicts the sleep ending")
         if not re.search(r"\b(?:rest\w*|sleep\w*|quiet\w*)\b", ending, re.I):
             errors.append("taper: permit quiet rest without a new task")

@@ -5,7 +5,7 @@ from typing import get_args
 import pytest
 
 from whoopy.meditation.models import MeditationKind
-from whoopy.meditation.recipes import route_session
+from whoopy.meditation.recipes import allocate_slots, route_session
 
 
 @pytest.mark.parametrize("kind", get_args(MeditationKind))
@@ -121,3 +121,38 @@ def test_negated_box_breathing_clause_preserves_separate_sleep_request(prompt: s
 def test_negated_sleep_clause_preserves_separate_box_breathing_rejection(prompt: str) -> None:
     with pytest.raises(ValueError, match="Box breathing is not supported"):
         route_session(prompt, 180)
+
+
+@pytest.mark.parametrize("words_per_minute", [80, 133, 220])
+@pytest.mark.parametrize("duration", [60, 180, 300, 1800])
+@pytest.mark.parametrize("need", ["Seated focus with sound", "Good-night reflection in bed"])
+def test_guidance_cadence_preserves_time_and_bounded_quiet(
+    words_per_minute: int, duration: int, need: str
+) -> None:
+    session = route_session(need, duration)
+    beats = allocate_slots(session, duration, words_per_minute)
+
+    assert sum(slot.duration_ms for beat in beats for slot in beat) == duration * 1_000
+    for index, beat in enumerate(beats):
+        expected_quiet = (
+            22_000 if session.recipe.ending == "sleep_taper" and index >= len(beats) - 2 else 16_000
+        )
+        for slot in beat:
+            assert 0 < slot.duration_ms <= 35_000
+            assert slot.maximum_quiet_ms == expected_quiet
+            # Splitting a beat keeps the required guidance near 24 words or
+            # fewer; integer millisecond/word rounding can add one word.
+            assert 4 <= slot.minimum_words <= 25
+            assert slot.minimum_words <= slot.maximum_words
+
+
+def test_faster_speech_adds_brief_practice_cycles_without_extra_quiet_per_cycle() -> None:
+    session = route_session("Good-night reflection in bed", 300)
+    slower = allocate_slots(session, 300, 80)
+    faster = allocate_slots(session, 300, 220)
+
+    assert sum(map(len, faster)) > sum(map(len, slower))
+    assert all(
+        fast[0].maximum_quiet_ms == slow[0].maximum_quiet_ms
+        for fast, slow in zip(faster, slower, strict=True)
+    )

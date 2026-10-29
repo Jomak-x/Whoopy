@@ -661,6 +661,78 @@ def test_external_sound_anchor_rejects_switch_to_breath_attention() -> None:
     assert result.raw_attempts[-1].validation_error is None
 
 
+@pytest.mark.parametrize(
+    "ending",
+    [
+        "Keep returning to that contact whenever your attention shifts. "
+        "Let guidance fade softly, with no need to move or open your eyes.",
+        "There is no need to open your eyes. Allow quiet rest with familiar contact.",
+        "You do not have to wake up. Rest with familiar contact.",
+        "Do not open your eyes or become alert. Allow quiet rest with familiar contact.",
+    ],
+)
+def test_sleep_ending_accepts_explicitly_negated_waking_actions_without_prose_changes(
+    ending: str,
+) -> None:
+    def mutate(output: FixtureDraft) -> None:
+        output["sections"][-1]["paragraphs"][-1] = ending
+
+    adapter = WholeSessionAdapter(mutate, always_mutate=True)
+    result = run(adapter, "Good-night reflection in bed with contact", 300)
+
+    assert len(adapter.requests) == 1
+    assert result.raw_attempts[0].validation_error is None
+    assert result.sections[-1].text.endswith(ending)
+    assert ending in result.script
+
+
+@pytest.mark.parametrize(
+    "ending",
+    [
+        "Open your eyes, and rest with familiar contact.",
+        "There is no need to move, but open your eyes and notice the room.",
+        "Do not open your eyes; wake up and notice the room.",
+        "You do not have to open your eyes. Become alert and notice the room.",
+        "No need to move or open your eyes, then wake up and rest with contact.",
+        "Do not worry and open your eyes to notice the room.",
+    ],
+)
+def test_sleep_ending_still_rejects_positive_and_mixed_waking_clauses(ending: str) -> None:
+    def mutate(output: FixtureDraft) -> None:
+        output["sections"][-1]["paragraphs"][-1] = ending
+
+    adapter = WholeSessionAdapter(mutate, always_mutate=True)
+    with pytest.raises(GenerationError, match="waking reorientation contradicts the sleep ending"):
+        run(adapter, "Good-night reflection in bed with contact", 300)
+    assert len(adapter.requests) == 2
+    assert all(
+        "waking reorientation contradicts the sleep ending" in request.prompt
+        for request in adapter.requests[1:]
+    )
+
+
+@pytest.mark.parametrize(
+    "reflection",
+    [
+        "Recall an ordinary moment when you paused for just a few breaths. "
+        "What did you notice? Rest with that moment.",
+        "There is no need to focus on breathing. "
+        "What mattered in one ordinary moment today? Rest with that moment.",
+    ],
+)
+def test_sleep_breath_mentions_remain_strict_even_when_negated(reflection: str) -> None:
+    def mutate(output: FixtureDraft) -> None:
+        section = next(item for item in output["sections"] if item["section_id"] == "reflection")
+        section["paragraphs"][0] = reflection
+
+    adapter = WholeSessionAdapter(mutate, always_mutate=True)
+    with pytest.raises(
+        GenerationError, match="use the selected sound anchor without breath guidance"
+    ):
+        run(adapter, "Good-night reflection in bed without breathing", 300)
+    assert len(adapter.requests) == 2
+
+
 def test_schema_algorithm_change_invalidates_completed_checkpoint(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -677,10 +749,7 @@ def test_schema_algorithm_change_invalidates_completed_checkpoint(
 
 
 def test_modest_word_underflow_reallocates_quiet_without_prose_changes() -> None:
-    brief = (
-        "Explore the sensations of support beneath your hands and feet. "
-        "Bring attention back to the chosen sound whenever it wanders again."
-    )
+    brief = "Return to the familiar sound."
 
     def mutate(output: FixtureDraft) -> None:
         output["sections"][3]["paragraphs"][1] = brief
@@ -699,7 +768,7 @@ def test_modest_word_underflow_reallocates_quiet_without_prose_changes() -> None
         segment.duration_ms for segment in result.timeline.segments if segment.type == "SILENCE"
     ]
     assert all(1_000 <= pause <= 16_000 for pause in pauses)
-    assert result.plan.timing_compiler_algorithm_version == 2
+    assert result.plan.timing_compiler_algorithm_version == 3
 
 
 def test_extreme_under_speech_fails_global_quiet_capacity() -> None:
@@ -755,7 +824,7 @@ def test_timing_compiler_change_invalidates_completed_checkpoint(
     adapter = WholeSessionAdapter()
     workspace = GenerationWorkspace(tmp_path)
     run(adapter, workspace=workspace)
-    monkeypatch.setattr("whoopy.meditation.whole_session.TIMING_COMPILER_ALGORITHM_VERSION", 3)
+    monkeypatch.setattr("whoopy.meditation.whole_session.TIMING_COMPILER_ALGORITHM_VERSION", 4)
     with pytest.raises(WorkspaceError, match="different inputs or model settings"):
         run(adapter, workspace=workspace)
     assert len(adapter.requests) == 1
@@ -1006,13 +1075,14 @@ def test_short_sleep_revision_explains_expansion_and_retains_exact_attempts() ->
     from whoopy.meditation.pacing import sentence_word_count
 
     def sparse(output: FixtureDraft) -> None:
-        for section in output["sections"]:
+        for section_index, section in enumerate(output["sections"]):
             section["paragraphs"] = [
                 " ".join(word for word in text.split() if word.rstrip(".?") != "gently").rstrip(
                     ".?"
                 )
                 + ("?" if text.endswith("?") else ".")
-                for text in section["paragraphs"]
+                + f" This interval{section_index}part{index} is ordinary."
+                for index, text in enumerate(section["paragraphs"])
             ]
         # This independent failure reduces the actual capacity and should be named.
         output["sections"][3]["paragraphs"][0] = "An ordinary moment is enough."
@@ -1032,10 +1102,12 @@ def test_short_sleep_revision_explains_expansion_and_retains_exact_attempts() ->
     assert "Expand the complete session" in error
     assert "body paragraph 1" in error
     assert "Shorten the complete session" not in error
+    contract = json.JSONDecoder().raw_decode(adapter.requests[0].prompt.split("\n", 1)[1])[0]
     assert (
-        "duration-derived minimum 251; target 422; absolute maximum 590"
-        in adapter.requests[1].prompt
-    )
+        f"duration-derived minimum {contract['total_minimum_words']}; "
+        f"target {contract['total_target_words']}; "
+        f"absolute maximum {contract['total_maximum_words']}"
+    ) in adapter.requests[1].prompt
     assert error in adapter.requests[1].prompt
     assert result.raw_attempts[0].text == json.dumps(adapter.outputs[0])
     assert result.raw_attempts[1].text == json.dumps(adapter.outputs[1])
