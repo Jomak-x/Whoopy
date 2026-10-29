@@ -668,6 +668,11 @@ def test_external_sound_anchor_rejects_switch_to_breath_attention() -> None:
         "Let guidance fade softly, with no need to move or open your eyes.",
         "There is no need to open your eyes. Allow quiet rest with familiar contact.",
         "You do not have to wake up. Rest with familiar contact.",
+        "Sleep may come gently. You don\u2019t need to wake or adjust.",
+        "You don't need to open your eyes. Rest with familiar contact.",
+        "You do not need to wake up. Rest with familiar contact.",
+        "You needn't wake up. Rest with familiar contact.",
+        "You needn\u2019t open your eyes. Rest with familiar contact.",
         "Do not open your eyes or become alert. Allow quiet rest with familiar contact.",
     ],
 )
@@ -695,6 +700,8 @@ def test_sleep_ending_accepts_explicitly_negated_waking_actions_without_prose_ch
         "You do not have to open your eyes. Become alert and notice the room.",
         "No need to move or open your eyes, then wake up and rest with contact.",
         "Do not worry and open your eyes to notice the room.",
+        "You don't need to move; wake up and notice the room.",
+        "You do not need to open your eyes, but become alert and notice the room.",
     ],
 )
 def test_sleep_ending_still_rejects_positive_and_mixed_waking_clauses(ending: str) -> None:

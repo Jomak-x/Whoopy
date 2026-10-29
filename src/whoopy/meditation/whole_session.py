@@ -91,8 +91,8 @@ WAKING_ACTION = (
 )
 WAKING = re.compile(rf"\b(?:{WAKING_ACTION})\b", re.I)
 NEGATED_WAKING = re.compile(
-    r"\b(?:no need to|do not have to|don't have to|don\u2019t have to|"
-    r"do not|don't|don\u2019t|need not|never|without needing to)\s+"
+    r"\b(?:no need to|(?:do not|don't|don\u2019t) (?:need|have) to|"
+    r"do not|don't|don\u2019t|need not|needn't|needn\u2019t|never|without needing to)\s+"
     rf"(?:move|{WAKING_ACTION})"
     rf"(?:\s+(?:or|and)\s+(?:to\s+)?(?:move|{WAKING_ACTION}))*\b",
     re.I,
