@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "tts": {
+    "adapter_id": "whoopy.sherpa_onnx_kokoro",
+    "versioned_model_id": "Kokoro-multilang@v1_0-release-2026-10-26",
+    "runtime_id": "sherpa-onnx",
+    "runtime_version": "1.13.4",
+    "license_id": "Apache-2.0",
+    "device": "cpu",
+    "settings": [
+      "voice=am_michael",
+      "speaker_id=16",
+      "speed=0.6",
+      "threads=2",
+      "language=en-us",
+      "sample_rate=24000"
+    ]
+  },
+  "llm": null,
+  "telemetry": {
+    "captured_at": "2026-10-29T00:02:11.884111Z",
+    "hardware_before": {
+      "snapshot": {
+        "operating_system": "darwin",
+        "architecture": "arm64",
+        "cpu_count": 14,
+        "total_ram_gb": 48.0,
+        "available_ram_gb": 17.8,
+        "free_disk_gb": 413.1,
+        "accelerators": [
+          "cpu",
+          "metal"
+        ]
+      },
+      "unavailable_reason": null
+    },
+    "hardware_after": {
+      "snapshot": {
+        "operating_system": "darwin",
+        "architecture": "arm64",
+        "cpu_count": 14,
+        "total_ram_gb": 48.0,
+        "available_ram_gb": 15.7,
+        "free_disk_gb": 412.8,
+        "accelerators": [
+          "cpu",
+          "metal"
+        ]
+      },
+      "unavailable_reason": null
+    },
+    "tts": {
+      "load_elapsed": {
+        "value": 0.7851832499727607,
+        "unit": "seconds",
+        "unavailable_reason": null
+      },
+      "inference_elapsed": {
+        "value": 44.74642425001366,
+        "unit": "seconds",
+        "unavailable_reason": null
+      },
+      "inference_speed": {
+        "value": 1.7395598561891696,
+        "unit": "audio_seconds_per_second",
+        "unavailable_reason": null
+      },
+      "peak_process_tree_memory": {
+        "value": 1060864000,
+        "unit": "bytes",
+        "unavailable_reason": null
+      },
+      "live_process_tree_memory_after": {
+        "value": 1021444096,
+        "unit": "bytes",
+        "unavailable_reason": null
+      },
+      "inference_calls": {
+        "value": 4,
+        "unit": "calls",
+        "unavailable_reason": null
+      },
+      "runtime_device": "cpu",
+      "runtime_device_unavailable_reason": null
+    },
+    "llm": null
+  }
+}

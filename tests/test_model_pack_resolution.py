@@ -145,11 +145,14 @@ def test_reference_resolution_rejects_changed_bytes_and_symlinks(tmp_path: Path)
         resolution.resolve_voice_reference(manifest, models_root=models)
 
 
+@pytest.mark.parametrize("resolve_reference", [True, False])
 def test_selected_tts_backend_resolves_its_ready_managed_checkpoint(
-    tmp_path: Path, monkeypatch: MonkeyPatch
+    tmp_path: Path, monkeypatch: MonkeyPatch, resolve_reference: bool
 ) -> None:
     models = tmp_path / "models"
     references = _write_reference_manifest(tmp_path / "config", models)
+    if not resolve_reference:
+        references.unlink()
     runtime = models / "runtimes" / "fish"
     runtime.mkdir(parents=True)
     (runtime / "marker").write_text("ready", encoding="utf-8")
@@ -165,7 +168,8 @@ def test_selected_tts_backend_resolves_its_ready_managed_checkpoint(
             assert pack_id == "fish-speech-1.4"
             return pack
 
-        def inspect(self, pack_id: str) -> ModelPackStatus:
+        def inspect(self, pack_id: str, *, check_resources: bool) -> ModelPackStatus:
+            assert not check_resources
             assert pack_id == "fish-speech-1.4"
             return status
 
@@ -180,11 +184,16 @@ def test_selected_tts_backend_resolves_its_ready_managed_checkpoint(
         registry_path=tmp_path / "config" / "model_packs.yaml",
         references_path=references,
         models_root=models,
+        resolve_reference=resolve_reference,
     )
 
     assert selected.checkpoint_directory == checkpoint
     assert selected.runtime_directory == runtime
-    assert selected.reference.reference_id == "reviewed-local-voice"
+    if resolve_reference:
+        assert selected.reference is not None
+        assert selected.reference.reference_id == "reviewed-local-voice"
+    else:
+        assert selected.reference is None
 
 
 def test_artifact_store_root_mapping_preserves_custom_model_roots(tmp_path: Path) -> None:

@@ -11,7 +11,7 @@ import pytest
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.audio.models import PcmAudio
 from whoopy.audio.synthesis import FatalSynthesisError, TransientSynthesisError
-from whoopy.pipeline.cache import SegmentCache
+from whoopy.pipeline.cache import CACHE_AUDIO_FILENAME, SegmentCache
 from whoopy.pipeline.checkpoints import CheckpointStatus, SegmentCheckpointStore
 from whoopy.pipeline.events import RunEventLog
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
@@ -219,6 +219,105 @@ def test_interrupted_running_run_can_resume_from_completed_checkpoint(
     assert completed.recovery is not None
     assert completed.recovery.checkpoint_reuses == 1
     assert synthesizer.calls == ["speech-0001", "speech-0002", "speech-0002"]
+
+
+def test_signal_after_stage_commit_cannot_roll_interrupted_stage_backward(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cover the save/return signal race found by the real PR21 assembly test."""
+
+    store = RunStore(tmp_path / "runs")
+    cache = SegmentCache(tmp_path / "cache")
+    synthesizer = SwitchableSynthesizer(
+        failing_segment="never",
+        failures_remaining=0,
+    )
+    store.create("Breathe slowly.", run_id=RUN_ID, created_at=START)
+    worker = _worker(store, cache, synthesizer)
+    interrupted_once = False
+
+    def interrupt_after_commit(**values: object) -> None:
+        nonlocal interrupted_once
+        if values["stage"] == "assembly" and not interrupted_once:
+            interrupted_once = True
+            raise SimulatedInterruption
+
+    monkeypatch.setattr(
+        "whoopy.pipeline.worker.observe_acceptance_stage",
+        interrupt_after_commit,
+    )
+
+    with pytest.raises(SimulatedInterruption):
+        worker.process(RUN_ID)
+
+    interrupted = store.load(RUN_ID)
+    assert interrupted.status is RunStatus.INTERRUPTED
+    assert interrupted.execution is not None
+    assert interrupted.execution.stage.value == "assembling"
+
+    completed = worker.resume(RUN_ID)
+    assert completed.status is RunStatus.COMPLETED
+    assert completed.recovery is not None
+    assert completed.recovery.checkpoint_reuses == 2
+
+
+def test_resume_rejects_corrupt_checkpoint_and_cache_audio(
+    tmp_path: Path,
+) -> None:
+    """Damaged durable bytes are regenerated; they are never accepted as healthy work."""
+
+    store = RunStore(tmp_path / "runs")
+    cache = SegmentCache(tmp_path / "cache")
+    synthesizer = InterruptOnceSynthesizer(
+        failing_segment="speech-0002",
+        failures_remaining=1,
+    )
+    store.create("Breathe slowly.", run_id=RUN_ID, created_at=START)
+    worker = _worker(store, cache, synthesizer)
+
+    with pytest.raises(SimulatedInterruption):
+        worker.process(RUN_ID)
+
+    checkpoint_store = SegmentCheckpointStore(store)
+    checkpoint = checkpoint_store.load_optional(RUN_ID, "speech-0001")
+    assert checkpoint is not None
+    checkpoint_store.audio_path(RUN_ID, "speech-0001").write_bytes(b"\x00\x00")
+    cache_audio = cache.entry_directory(checkpoint.cache_key) / CACHE_AUDIO_FILENAME
+    cache_audio.write_bytes(b"\x00\x00")
+    assert (
+        checkpoint_store.load_completed(
+            RUN_ID,
+            "speech-0001",
+            cache_key=checkpoint.cache_key,
+        )
+        is None
+    )
+    assert cache.load(checkpoint.cache_key, expected_synthesizer=synthesizer) is None
+
+    completed = worker.resume(RUN_ID)
+
+    assert completed.status is RunStatus.COMPLETED
+    assert completed.recovery is not None
+    assert completed.recovery.checkpoint_reuses == 0
+    assert completed.recovery.cache_hits == 0
+    assert completed.recovery.cache_misses == 4
+    assert synthesizer.calls == [
+        "speech-0001",
+        "speech-0002",
+        "speech-0001",
+        "speech-0002",
+    ]
+    repaired = checkpoint_store.load_optional(RUN_ID, "speech-0001")
+    assert repaired is not None
+    assert (
+        checkpoint_store.load_completed(
+            RUN_ID,
+            "speech-0001",
+            cache_key=repaired.cache_key,
+        )
+        is not None
+    )
 
 
 def test_fatal_segment_failure_is_not_retried(tmp_path: Path) -> None:

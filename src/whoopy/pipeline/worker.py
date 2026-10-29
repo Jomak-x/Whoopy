@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import threading
@@ -15,7 +16,7 @@ from uuid import UUID, uuid4
 
 from whoopy.audio import TimelineWaveRenderer
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
-from whoopy.audio.models import PcmAudio
+from whoopy.audio.models import PcmAudio, QualityCheck, RenderedWave
 from whoopy.audio.quality import pcm_integrity_error
 from whoopy.audio.synthesis import (
     FatalSynthesisError,
@@ -24,6 +25,10 @@ from whoopy.audio.synthesis import (
     cache_key_for,
     synthesis_input_bytes,
 )
+from whoopy.meditation.models import DraftedSection, MeditationPlan
+from whoopy.meditation.pacing import allocate_bounded_quiet
+from whoopy.meditation.whole_session import recipe_quiet_limits
+from whoopy.pipeline.acceptance_stage import observe_acceptance_stage
 from whoopy.pipeline.cache import SegmentCache
 from whoopy.pipeline.checkpoints import (
     CheckpointStatus,
@@ -33,6 +38,12 @@ from whoopy.pipeline.checkpoints import (
     SegmentCheckpointStore,
 )
 from whoopy.pipeline.events import RunEventLog
+from whoopy.pipeline.generation import (
+    AdapterRunTelemetry,
+    HardwareTelemetry,
+    RunTelemetry,
+    resolved_synthesis_digest,
+)
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
 from whoopy.pipeline.logs import WorkerLog
 from whoopy.pipeline.runs import (
@@ -48,7 +59,20 @@ from whoopy.pipeline.runs import (
     RunStore,
     RunStoreError,
 )
-from whoopy.timeline import SpeechSegment, Timeline, build_fixture_timeline
+from whoopy.pipeline.takes import SegmentTakeStore
+from whoopy.pipeline.telemetry import (
+    PeakProcessTreeMemory,
+    hardware_snapshot,
+    measured,
+    unavailable,
+)
+from whoopy.timeline import (
+    BreathSegment,
+    SilenceSegment,
+    SpeechSegment,
+    Timeline,
+    build_fixture_timeline,
+)
 
 Clock = Callable[[], datetime]
 Sleeper = Callable[[float], None]
@@ -151,6 +175,71 @@ def _updated_recovery(recovery: RunRecovery, **changes: object) -> RunRecovery:
     return RunRecovery.model_validate(values)
 
 
+def _acceptance_stage_name(stage: RunStage) -> str:
+    """Map product progress names to the PR21 acceptance vocabulary."""
+
+    return {
+        RunStage.SYNTHESIZING: "synthesis",
+        RunStage.ASSEMBLING: "assembly",
+        RunStage.ENCODING: "encoding",
+        RunStage.QUALITY_CHECK: "qc",
+    }.get(stage, stage.value)
+
+
+def fit_generated_timeline_to_real_speech(
+    timeline: Timeline,
+    *,
+    speech_audio: dict[str, PcmAudio],
+    target_seconds: int,
+    maximum_silence_ms: int | None = None,
+    quiet_limits: dict[str, int] | None = None,
+) -> Timeline:
+    """Fit adjustable quiet to the requested duration after real TTS is known."""
+
+    silences = [segment for segment in timeline.segments if isinstance(segment, SilenceSegment)]
+    if not silences:
+        return timeline
+    speech_ms = round(
+        sum(audio.frame_count / audio.sample_rate * 1_000 for audio in speech_audio.values())
+    )
+    breath_ms = sum(
+        segment.duration_ms for segment in timeline.segments if isinstance(segment, BreathSegment)
+    )
+    silence_budget = target_seconds * 1_000 - speech_ms - breath_ms
+    minimum_ms = 1_000
+    if silence_budget < minimum_ms * len(silences):
+        raise WorkerError(
+            "Real speech is too long for the requested duration while preserving "
+            "one-second minimum quiet periods. Shorten the script or increase the duration."
+        )
+    caps = [
+        min(
+            maximum_silence_ms if maximum_silence_ms is not None else 600_000,
+            quiet_limits[segment.id] if quiet_limits is not None else 600_000,
+        )
+        for segment in silences
+    ]
+    try:
+        allocated = allocate_bounded_quiet(
+            silence_budget,
+            [float(max(1, segment.duration_ms - minimum_ms)) for segment in silences],
+            caps,
+        )
+    except ValueError as error:
+        raise WorkerError(str(error)) from error
+    durations = dict(zip((segment.id for segment in silences), allocated, strict=True))
+    return timeline.model_copy(
+        update={
+            "segments": [
+                segment.model_copy(update={"duration_ms": durations[segment.id]})
+                if isinstance(segment, SilenceSegment)
+                else segment
+                for segment in timeline.segments
+            ]
+        }
+    )
+
+
 class LocalWorker:
     """Process one selected run with verified checkpoints and cache reuse."""
 
@@ -240,6 +329,22 @@ class LocalWorker:
                     # only resume after their 15-second lease expires.
                     self.store.reconcile_stale_run_locked(parsed_run_id, now=self.clock())
                 record = self.store.load(parsed_run_id)
+                pending_take = SegmentTakeStore(self.store).pending(parsed_run_id)
+                if (
+                    pending_take is not None
+                    and pending_take.phase != "assembling"
+                    and (
+                        pending_take.phase != "generating"
+                        or pending_take.segment_id not in self.bypass_cache_segment_ids
+                    )
+                ):
+                    raise WorkerError("Choose a retained take before resuming this meditation.")
+                if (
+                    is_resume
+                    and record.execution is not None
+                    and record.execution.interruption_kind == "take_finalization_failed"
+                ):
+                    raise WorkerError("Choose a retained take before resuming this meditation.")
                 if not is_resume and record.status is not RunStatus.QUEUED:
                     raise WorkerError(
                         f"Run {record.run_id} is {record.status.value}; "
@@ -316,6 +421,19 @@ class LocalWorker:
             lambda: self._heartbeat(running.run_id, execution.attempt_id),
             interval_seconds=self.heartbeat_interval_seconds,
         )
+        hardware_before = hardware_snapshot(self.store.root)
+        memory = PeakProcessTreeMemory()
+        memory.start()
+        load_elapsed_seconds: float | None = None
+        load_unavailable_reason = "all speech segments were restored from cache or checkpoints"
+        model_prepared = False
+        inference_elapsed_seconds = 0.0
+        inference_calls = 0
+        inference_audio_seconds = 0.0
+
+        def record_inference_call() -> None:
+            nonlocal inference_calls
+            inference_calls += 1
 
         try:
             with self._state_lock:
@@ -411,11 +529,42 @@ class LocalWorker:
                             stage=RunStage.SYNTHESIZING,
                             current_segment_id=segment.id,
                         )
-                        audio = self._synthesize_with_retry(
-                            running,
-                            segment,
-                            cache_key,
-                        )
+                        if not model_prepared:
+                            prepare = getattr(self.synthesizer, "prepare", None)
+                            load_unavailable_reason = (
+                                "adapter does not expose a separate load-complete signal"
+                            )
+                            if callable(prepare):
+                                running = self._save_running_progress(
+                                    running,
+                                    recovery,
+                                    stage=RunStage.MODEL_STARTUP,
+                                    current_segment_id=segment.id,
+                                    message="Loading and validating the speech model.",
+                                )
+                                load_unavailable_reason = "model load did not complete successfully"
+                                load_started = time.perf_counter()
+                                prepared = prepare()
+                                if prepared is not False:
+                                    load_elapsed_seconds = time.perf_counter() - load_started
+                            model_prepared = True
+                            running = self._save_running_progress(
+                                running,
+                                recovery,
+                                stage=RunStage.SYNTHESIZING,
+                                current_segment_id=segment.id,
+                            )
+                        inference_started = time.perf_counter()
+                        try:
+                            audio = self._synthesize_with_retry(
+                                running,
+                                segment,
+                                cache_key,
+                                on_inference=record_inference_call,
+                            )
+                        finally:
+                            inference_elapsed_seconds += time.perf_counter() - inference_started
+                        inference_audio_seconds += audio.frame_count / audio.sample_rate
 
                 prepared_audio[segment.id] = audio
                 recovery = _updated_recovery(
@@ -436,11 +585,88 @@ class LocalWorker:
                 stage=RunStage.ASSEMBLING,
                 message="Assembling the canonical audio timeline.",
             )
+            target_duration_seconds: int | None = None
+            resolved = None
+            if running.source_kind in {"script_file", "generated_prompt"}:
+                resolved = self.store.load_resolved_config(running.run_id)
+                target_duration_seconds = resolved.requested_duration_seconds
+            if timeline.preserve_timing:
+                target_duration_seconds = None
+            elif running.source_kind == "generated_prompt":
+                assert resolved is not None
+                if resolved.generation is None:
+                    raise WorkerError("Generated run has no durable duration settings.")
+                target_duration_seconds = resolved.generation.duration_seconds
+                quiet_limits = None
+                if resolved.generation.writing_method == "recipe_whole_session":
+                    plan = MeditationPlan.model_validate_json(
+                        self.store.plan_path(running.run_id).read_text(encoding="utf-8")
+                    )
+                    quiet_limits = recipe_quiet_limits(
+                        timeline,
+                        plan,
+                        [
+                            DraftedSection.model_validate_json(path.read_text(encoding="utf-8"))
+                            for path in self.store.draft_sections_path(running.run_id).glob(
+                                "*.json"
+                            )
+                        ],
+                    )
+                timeline = fit_generated_timeline_to_real_speech(
+                    timeline,
+                    speech_audio=prepared_audio,
+                    target_seconds=target_duration_seconds,
+                    quiet_limits=quiet_limits,
+                )
+                with self._state_lock:
+                    self.store.write_timeline(running.run_id, timeline)
+            running = self._save_running_progress(
+                running,
+                recovery,
+                stage=RunStage.ENCODING,
+                message="Encoding the assembled canonical audio.",
+            )
             rendered = self.renderer.render(
                 timeline,
                 speech_audio=prepared_audio,
                 speech_cache_keys=cache_keys,
             )
+            if target_duration_seconds is not None:
+                target_ms = target_duration_seconds * 1_000
+                error_percent = abs(rendered.manifest.duration_ms - target_ms) / target_ms * 100
+                duration_check = QualityCheck(
+                    name="requested_duration",
+                    passed=error_percent <= 5,
+                    detail=(
+                        f"rendered_ms={rendered.manifest.duration_ms}, target_ms={target_ms}, "
+                        f"error_percent={error_percent:.3f}, limit=5"
+                    ),
+                )
+                quality = rendered.quality.model_copy(
+                    update={
+                        "passed": rendered.quality.passed and duration_check.passed,
+                        "checks": [*rendered.quality.checks, duration_check],
+                    }
+                )
+                if not quality.passed:
+                    raise WorkerError("Rendered audio is outside the requested ±5% duration gate.")
+                rendered = RenderedWave(
+                    wave_bytes=rendered.wave_bytes,
+                    manifest=rendered.manifest,
+                    quality=quality,
+                )
+            if running.source_kind != "fixture_prompt":
+                synthesis_sha256 = resolved_synthesis_digest(
+                    self.store.load_resolved_config(running.run_id),
+                    self.store.load_model_metadata(running.run_id).tts,
+                )
+                rendered = RenderedWave(
+                    wave_bytes=rendered.wave_bytes,
+                    manifest=rendered.manifest.model_copy(
+                        update={"synthesis_sha256": synthesis_sha256}
+                    ),
+                    quality=rendered.quality,
+                )
             running = self._save_running_progress(
                 running,
                 recovery,
@@ -479,23 +705,26 @@ class LocalWorker:
             return completed
         except Exception as error:
             heartbeat.stop()
-            failed_recovery = _updated_recovery(
-                recovery,
-                failed_segment_id=current_segment_id,
-            )
-            failed_execution = self._required_execution(running).finish(
-                current_segment_id=current_segment_id,
-                message=_execution_message(error),
-            )
-            failed = running.transition(
-                RunStatus.FAILED,
-                updated_at=self.clock(),
-                recovery=failed_recovery,
-                execution=failed_execution,
-                error=f"{type(error).__name__}: {error}",
-            )
             try:
                 with self._state_lock:
+                    running = self._load_owned_progress(running)
+                    if running.status is not RunStatus.RUNNING:
+                        raise
+                    failed_recovery = _updated_recovery(
+                        recovery,
+                        failed_segment_id=current_segment_id,
+                    )
+                    failed_execution = self._required_execution(running).finish(
+                        current_segment_id=current_segment_id,
+                        message=_execution_message(error),
+                    )
+                    failed = running.transition(
+                        RunStatus.FAILED,
+                        updated_at=self.clock(),
+                        recovery=failed_recovery,
+                        execution=failed_execution,
+                        error=f"{type(error).__name__}: {error}",
+                    )
                     self.store.save(failed)
                     self._record_event_best_effort(
                         running.run_id,
@@ -514,21 +743,24 @@ class LocalWorker:
             raise WorkerError(f"Run {running.run_id} failed: {error}") from error
         except BaseException as interruption:
             heartbeat.stop()
-            interrupted_execution = self._required_execution(running).finish(
-                current_segment_id=current_segment_id,
-                interruption_kind=self._interruption_kind(interruption),
-                message=(
-                    "Processing stopped unexpectedly. Completed segment checkpoints "
-                    "were kept and this run can be resumed."
-                ),
-            )
-            interrupted = running.transition(
-                RunStatus.INTERRUPTED,
-                updated_at=self.clock(),
-                recovery=recovery,
-                execution=interrupted_execution,
-            )
             with self._state_lock:
+                running = self._load_owned_progress(running)
+                if running.status is not RunStatus.RUNNING:
+                    raise
+                interrupted_execution = self._required_execution(running).finish(
+                    current_segment_id=current_segment_id,
+                    interruption_kind=self._interruption_kind(interruption),
+                    message=(
+                        "Processing stopped unexpectedly. Completed segment checkpoints "
+                        "were kept and this run can be resumed."
+                    ),
+                )
+                interrupted = running.transition(
+                    RunStatus.INTERRUPTED,
+                    updated_at=self.clock(),
+                    recovery=recovery,
+                    execution=interrupted_execution,
+                )
                 self.store.save(interrupted)
                 self._record_event_best_effort(
                     running.run_id,
@@ -543,7 +775,188 @@ class LocalWorker:
         finally:
             heartbeat.stop()
             self._close_synthesizer()
+            memory.stop()
+            self._persist_run_telemetry(
+                running.run_id,
+                hardware_before=hardware_before,
+                memory=memory,
+                load_elapsed_seconds=load_elapsed_seconds,
+                load_unavailable_reason=load_unavailable_reason,
+                inference_elapsed_seconds=inference_elapsed_seconds,
+                inference_calls=inference_calls,
+                inference_audio_seconds=inference_audio_seconds,
+            )
             self._persist_synthesizer_diagnostics(running.run_id)
+
+    def _persist_run_telemetry(
+        self,
+        run_id: UUID,
+        *,
+        hardware_before: HardwareTelemetry,
+        memory: PeakProcessTreeMemory,
+        load_elapsed_seconds: float | None,
+        load_unavailable_reason: str,
+        inference_elapsed_seconds: float,
+        inference_calls: int,
+        inference_audio_seconds: float,
+    ) -> None:
+        """Merge measured runtime evidence without changing immutable controls."""
+
+        if not self.store.model_metadata_path(run_id).is_file():
+            return
+        try:
+            metadata = self.store.load_model_metadata(run_id)
+            if load_elapsed_seconds is None:
+                load = unavailable("seconds", load_unavailable_reason)
+            else:
+                load = measured("seconds", load_elapsed_seconds)
+            if inference_calls:
+                inference_elapsed = measured("seconds", inference_elapsed_seconds)
+                inference_speed = measured(
+                    "audio_seconds_per_second",
+                    inference_audio_seconds / inference_elapsed_seconds
+                    if inference_elapsed_seconds > 0
+                    else 0,
+                )
+            else:
+                reason = "all speech segments were restored from cache or checkpoints"
+                inference_elapsed = unavailable("seconds", reason)
+                inference_speed = unavailable("audio_seconds_per_second", reason)
+            memory_reason = memory.unavailable_reason or "process memory inspection unavailable"
+            peak_memory = (
+                measured("bytes", memory.peak_bytes)
+                if memory.peak_bytes is not None and memory.unavailable_reason is None
+                else unavailable("bytes", memory_reason)
+            )
+            live_memory = (
+                measured("bytes", memory.live_bytes_after)
+                if memory.live_bytes_after is not None and memory.unavailable_reason is None
+                else unavailable("bytes", memory_reason)
+            )
+            tts = AdapterRunTelemetry(
+                load_elapsed=load,
+                inference_elapsed=inference_elapsed,
+                inference_speed=inference_speed,
+                peak_process_tree_memory=peak_memory,
+                live_process_tree_memory_after=live_memory,
+                inference_calls=measured("calls", inference_calls),
+                **self._runtime_device_evidence(self.synthesizer),
+            )
+            llm = self._llm_telemetry(run_id) if metadata.llm is not None else None
+            telemetry = RunTelemetry(
+                captured_at=_utc_now(),
+                hardware_before=hardware_before,
+                hardware_after=hardware_snapshot(self.store.root),
+                tts=tts,
+                llm=llm,
+            )
+            self.store.write_model_metadata(
+                run_id,
+                metadata.model_copy(update={"telemetry": telemetry}),
+            )
+        except Exception as error:
+            with suppress(Exception):
+                self.worker_log.record(
+                    run_id,
+                    occurred_at=_utc_now(),
+                    source="worker",
+                    message=f"telemetry unavailable: {type(error).__name__}: {error}"[:2_000],
+                )
+
+    def _llm_telemetry(self, run_id: UUID) -> AdapterRunTelemetry:
+        elapsed: list[float] = []
+        attempt_telemetry: list[dict[str, object]] = []
+        directory = self.store.raw_model_output_path(run_id)
+        if directory.is_dir():
+            for path in directory.glob("*.json"):
+                with suppress(OSError, ValueError, TypeError):
+                    document = json.loads(path.read_text(encoding="utf-8"))
+                    elapsed.append(float(document["elapsed_seconds"]))
+                    telemetry = document.get("telemetry")
+                    attempt_telemetry.append(telemetry if isinstance(telemetry, dict) else {})
+        if elapsed:
+            inference_elapsed = measured("seconds", sum(elapsed))
+            calls = measured("calls", len(elapsed))
+        else:
+            reason = "no persisted LLM attempt timings were available"
+            inference_elapsed = unavailable("seconds", reason)
+            calls = unavailable("calls", reason)
+
+        def complete_values(name: str) -> list[float | int] | None:
+            values = [attempt.get(name) for attempt in attempt_telemetry]
+            if not values or len(values) != len(elapsed):
+                return None
+            if any(not isinstance(value, (float, int)) for value in values):
+                return None
+            return [value for value in values if isinstance(value, (float, int))]
+
+        load_values = complete_values("load_elapsed_seconds")
+        token_counts = complete_values("output_tokens")
+        token_elapsed = complete_values("output_token_elapsed_seconds")
+        direct_token_speeds = complete_values("output_tokens_per_second")
+        peak_values = complete_values("peak_process_tree_memory_bytes")
+        live_values = complete_values("live_process_tree_memory_after_bytes")
+        devices = [attempt.get("runtime_device") for attempt in attempt_telemetry]
+
+        incomplete = "one or more LLM attempts did not expose this measurement"
+        load = (
+            measured("seconds", sum(load_values))
+            if load_values is not None
+            else unavailable("seconds", incomplete)
+        )
+        if token_counts is not None and token_elapsed is not None and sum(token_elapsed) > 0:
+            inference_speed = measured("tokens_per_second", sum(token_counts) / sum(token_elapsed))
+        elif direct_token_speeds is not None:
+            inference_speed = measured(
+                "tokens_per_second", sum(direct_token_speeds) / len(direct_token_speeds)
+            )
+        else:
+            inference_speed = unavailable(
+                "tokens_per_second",
+                "one or more LLM attempts lacked token counts/timing or direct throughput",
+            )
+        peak_memory = (
+            measured("bytes", max(peak_values))
+            if peak_values is not None
+            else unavailable("bytes", incomplete)
+        )
+        live_memory = (
+            measured("bytes", live_values[-1])
+            if live_values is not None
+            else unavailable(
+                "bytes",
+                "llama.cpp subprocesses exit after each invocation; no live process tree "
+                "remains after completion",
+            )
+        )
+        selected_devices = {value for value in devices if isinstance(value, str) and value}
+        complete_devices = len(devices) == len(elapsed) and len(selected_devices) == 1
+        runtime_device = next(iter(selected_devices)) if complete_devices else None
+        return AdapterRunTelemetry(
+            load_elapsed=load,
+            inference_elapsed=inference_elapsed,
+            inference_speed=inference_speed,
+            peak_process_tree_memory=peak_memory,
+            live_process_tree_memory_after=live_memory,
+            inference_calls=calls,
+            runtime_device=runtime_device,
+            runtime_device_unavailable_reason=(None if runtime_device is not None else incomplete),
+        )
+
+    @staticmethod
+    def _runtime_device_evidence(synthesizer: SpeechSynthesizer) -> dict[str, str | None]:
+        value = getattr(synthesizer, "runtime_device", None)
+        if value is None:
+            return {
+                "runtime_device": None,
+                "runtime_device_unavailable_reason": (
+                    "the speech adapter did not report its selected runtime device"
+                ),
+            }
+        return {
+            "runtime_device": str(value),
+            "runtime_device_unavailable_reason": None,
+        }
 
     def _load_or_build_timeline(self, running: RunRecord) -> Timeline:
         """Reuse the canonical timeline on resume, or create it once."""
@@ -596,7 +1009,28 @@ class LocalWorker:
                     segment_id=current_segment_id,
                     message=message or f"Run entered {stage.value}.",
                 )
+        # For synthesis, wait until at least one completed speech checkpoint is
+        # durable.  That makes the destructive acceptance case prove healthy
+        # work is reused instead of merely proving an early stage transition.
+        if stage is not RunStage.SYNTHESIZING or recovery.speech_segments_completed > 0:
+            observe_acceptance_stage(
+                run_id=updated.run_id,
+                stage=_acceptance_stage_name(stage),
+                durable_run_status=updated.status.value,
+                durable_run_stage=stage.value,
+            )
         return updated
+
+    def _load_owned_progress(self, running: RunRecord) -> RunRecord:
+        durable = self.store.load(running.run_id)
+        if durable.status is RunStatus.QUEUED:
+            return running
+        if (
+            durable.execution is None
+            or durable.execution.attempt_id != self._required_execution(running).attempt_id
+        ):
+            raise WorkerError(f"Run {running.run_id} is no longer owned by this attempt")
+        return durable
 
     def _heartbeat(self, run_id: UUID, attempt_id: UUID | None) -> None:
         if attempt_id is None:
@@ -687,6 +1121,8 @@ class LocalWorker:
         running: RunRecord,
         segment: SpeechSegment,
         cache_key: str,
+        *,
+        on_inference: Callable[[], None],
     ) -> PcmAudio:
         previous = self.checkpoints.load_optional(running.run_id, segment.id)
         if previous is not None and previous.cache_key == cache_key:
@@ -713,6 +1149,7 @@ class LocalWorker:
             self.checkpoints.save(running_checkpoint)
 
             try:
+                on_inference()
                 audio = self.synthesizer.synthesize(segment)
                 integrity_error = pcm_integrity_error(audio)
                 if integrity_error is not None:

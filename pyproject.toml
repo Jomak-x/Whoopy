@@ -4,18 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "whoopy"
-version = "0.0.0"
+version = "0.1.0"
 description = "Local-first, timeline-driven meditation generation"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+  "fastapi>=0.116,<1",
   "psutil>=6.1,<8",
   "pydantic>=2.10,<3",
   "PyYAML>=6,<7",
+  "uvicorn>=0.35,<1",
 ]
 
 [project.optional-dependencies]
 dev = [
+  "httpx>=0.28,<1",
   "mypy>=1.15,<2",
   "pytest>=8.3,<9",
   "ruff>=0.11,<1",
@@ -30,7 +33,46 @@ whoopy = "whoopy.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"whoopy.webui" = ["static/*.html", "static/*.css", "static/*.js"]
+"whoopy.webui" = ["static/*", "static/**/*"]
+"whoopy.resources" = ["*.yaml"]
+
+[tool.setuptools.data-files]
+"share/whoopy/config" = [
+  "config/artifacts.yaml",
+  "config/default.yaml",
+  "config/experimental_tts.yaml",
+  "config/legacy_cleanup.yaml",
+  "config/meditation_blueprints.yaml",
+  "config/model_packs.yaml",
+  "config/models.yaml",
+  "config/pacing_profiles.yaml",
+  "config/runtime_build_recipes.yaml",
+  "config/runtime_packs.yaml",
+  "config/runtime_profiles.yaml",
+  "config/session_recipes.yaml",
+  "config/voice_references.yaml",
+  "config/README.md",
+]
+"share/whoopy/config/acceptance" = ["config/acceptance/*.json"]
+"share/whoopy/config/evaluation" = ["config/evaluation/*.yaml", "config/evaluation/README.md"]
+"share/whoopy/config/prompts" = ["config/prompts/*.md"]
+"share/whoopy/docs" = [
+  "docs/setup.md",
+  "docs/experimental-mlx-qwen.md",
+  "docs/troubleshooting.md",
+  "docs/model-capabilities.md",
+  "docs/privacy.md",
+  "docs/user-guide.md",
+  "docs/native-portability.md",
+  "docs/local-v1-acceptance-status.md",
+  "docs/release-finalization.md",
+]
+"share/whoopy/scripts" = [
+  "scripts/fish_speech_1_4_worker.py",
+  "scripts/moss_tts_worker.py",
+  "scripts/qwen3_tts_worker.py",
+  "scripts/mlx_qwen3_tts_worker.py",
+]
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers --strict-config -ra"

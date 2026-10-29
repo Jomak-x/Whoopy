@@ -91,7 +91,7 @@ def inspect_wave(wave_bytes: bytes, manifest: AudioManifest) -> AudioQualityRepo
         actual_segment_hash = hashlib.sha256(pcm_bytes[start_byte:end_byte]).hexdigest()
         if span.pcm_sha256 is not None:
             segment_hashes_match = segment_hashes_match and actual_segment_hash == span.pcm_sha256
-        if span.segment_type == "SILENCE":
+        if span.segment_type in ("SILENCE", "BREATH"):
             silence_exact = silence_exact and all(sample == 0 for sample in segment_samples)
             if span.requested_duration_ms is not None:
                 expected_frames = (span.requested_duration_ms * sample_rate + 500) // 1_000
@@ -136,9 +136,9 @@ def inspect_wave(wave_bytes: bytes, manifest: AudioManifest) -> AudioQualityRepo
         _check(
             "requested_silence_timing",
             requested_silence_exact,
-            "every requested SILENCE duration maps to its exact frame count",
+            "every requested silence or breath phase maps to its exact frame count",
         ),
-        _check("exact_silence", silence_exact, "all SILENCE samples are zero"),
+        _check("exact_silence", silence_exact, "all SILENCE and BREATH samples are zero"),
         _check("audible_speech", speech_audible, "every SPEECH span contains audible PCM"),
         _check(
             "segment_pcm_hashes",

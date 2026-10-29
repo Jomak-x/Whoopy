@@ -19,12 +19,14 @@ from whoopy.audio.synthesis import (
     InvalidSynthesisOutput,
     TransientSynthesisError,
 )
+from whoopy.hardware import inspect_hardware
+from whoopy.model_packs import HardwareRequirement, hardware_requirement_error
 from whoopy.model_packs.operations import (
     HeavyweightModelSlot,
     HeavyweightModelSlotUnavailable,
     models_root_for_runtime,
 )
-from whoopy.ports import AdapterMetadata
+from whoopy.ports import AdapterMetadata, SpeechCapabilities
 from whoopy.timeline import SpeechSegment
 
 
@@ -42,6 +44,7 @@ class FishSpeechSettings:
     request_timeout_seconds: float = 300
     shutdown_timeout_seconds: float = 5
     models_root: Path | None = None
+    hardware_requirement: HardwareRequirement | None = None
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -57,6 +60,7 @@ class FishSpeech14Adapter:
     """Use Fish 1.4 behind Whoopy's ordinary speech-synthesizer contract."""
 
     sample_rate: int = SAMPLE_RATE
+    capabilities = SpeechCapabilities(voice_modes=("reference",))
 
     def __init__(self, settings: FishSpeechSettings) -> None:
         self.settings = settings
@@ -132,6 +136,16 @@ class FishSpeech14Adapter:
         )
         if error is not None:
             raise FatalSynthesisError(f"Fish Speech 1.4 is not ready: {error}.")
+        if self.settings.hardware_requirement is not None:
+            live_error = hardware_requirement_error(
+                self.settings.hardware_requirement,
+                inspect_hardware(self.settings.runtime_directory),
+            )
+            if live_error is not None:
+                raise TransientSynthesisError(
+                    "Fish Speech 1.4 live resource check failed immediately before load: "
+                    f"{live_error}. Close other applications or use Kokoro."
+                )
         command = [
             str(runtime / ".venv" / "bin" / "python"),
             str(self.settings.worker_script),

@@ -1,0 +1,149 @@
+{
+  "action": "recoverable_clean_slate_for_previous_generations",
+  "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733",
+  "moved": [
+    {
+      "source": "runs",
+      "archive": ".whoopy-recovery/20261028-193733/runs"
+    },
+    {
+      "source": "evaluations/manual",
+      "archive": ".whoopy-recovery/20261028-193733/evaluations/manual"
+    },
+    {
+      "source": "evaluations/local",
+      "archive": ".whoopy-recovery/20261028-193733/evaluations/local"
+    },
+    {
+      "source": "evaluations/audits/2026-10-28/fresh-model-records",
+      "archive": ".whoopy-recovery/20261028-193733/evaluations/audits/2026-10-28/fresh-model-records"
+    },
+    {
+      "source": "evaluations/audits/2026-10-28/fresh-llm-draft",
+      "archive": ".whoopy-recovery/20261028-193733/evaluations/audits/2026-10-28/fresh-llm-draft"
+    },
+    {
+      "source": "acceptance-reports/platform-darwin-arm64-current.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/platform-darwin-arm64-current.json"
+    },
+    {
+      "source": "acceptance-reports/moss-tts-darwin-arm64-2026-08-05.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/moss-tts-darwin-arm64-2026-08-05.json"
+    },
+    {
+      "source": "acceptance-reports/local-v1-status-current.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/local-v1-status-current.json"
+    },
+    {
+      "source": "acceptance-reports/qwen3-tts-base-clone-darwin-arm64-2026-08-05.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/qwen3-tts-base-clone-darwin-arm64-2026-08-05.json"
+    },
+    {
+      "source": "acceptance-reports/offline-app-bundle-darwin-arm64-refresh.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/offline-app-bundle-darwin-arm64-refresh.json"
+    },
+    {
+      "source": "acceptance-reports/offline-app-bundle-darwin-arm64-final.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/offline-app-bundle-darwin-arm64-final.json"
+    },
+    {
+      "source": "acceptance-reports/offline-app-bundle-darwin-arm64-current.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/offline-app-bundle-darwin-arm64-current.json"
+    },
+    {
+      "source": "acceptance-reports/local-v1-current.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/local-v1-current.json"
+    },
+    {
+      "source": "acceptance-reports/meditation-engine-corpus-preflight-failed-2026-08-05.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/meditation-engine-corpus-preflight-failed-2026-08-05.json"
+    },
+    {
+      "source": "acceptance-reports/interruption-assembly-smoke.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/interruption-assembly-smoke.json"
+    },
+    {
+      "source": "acceptance-reports/soak-exports-2026-08-05.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/soak-exports-2026-08-05.json"
+    },
+    {
+      "source": "acceptance-reports/offline-app-bundle-darwin-arm64-packaging.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/offline-app-bundle-darwin-arm64-packaging.json"
+    },
+    {
+      "source": "acceptance-reports/local-v1-status-candidate.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/local-v1-status-candidate.json"
+    },
+    {
+      "source": "acceptance-reports/offline-installed-studio-lifecycle-darwin-arm64-candidate.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/offline-installed-studio-lifecycle-darwin-arm64-candidate.json"
+    },
+    {
+      "source": "acceptance-reports/forced-interruption-local-2026-08-05.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/forced-interruption-local-2026-08-05.json"
+    },
+    {
+      "source": "acceptance-reports/offline-installed-studio-lifecycle-darwin-arm64-refresh.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/offline-installed-studio-lifecycle-darwin-arm64-refresh.json"
+    },
+    {
+      "source": "acceptance-reports/offline-installed-studio-lifecycle-darwin-arm64-current.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/offline-installed-studio-lifecycle-darwin-arm64-current.json"
+    },
+    {
+      "source": "acceptance-reports/interruption-drafting-rerun.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/interruption-drafting-rerun.json"
+    },
+    {
+      "source": "acceptance-reports/offline-app-bundle-darwin-arm64-candidate.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/offline-app-bundle-darwin-arm64-candidate.json"
+    },
+    {
+      "source": "acceptance-reports/local-v1-primary-current-candidate.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/local-v1-primary-current-candidate.json"
+    },
+    {
+      "source": "acceptance-reports/rendered-ui-qa-darwin-arm64-2026-08-05.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/rendered-ui-qa-darwin-arm64-2026-08-05.json"
+    },
+    {
+      "source": "acceptance-reports/meditation-engine-corpus-current.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/meditation-engine-corpus-current.json"
+    },
+    {
+      "source": "acceptance-reports/platform-darwin-arm64-candidate.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/platform-darwin-arm64-candidate.json"
+    },
+    {
+      "source": "acceptance-reports/soak-exports-current-candidate.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/soak-exports-current-candidate.json"
+    },
+    {
+      "source": "acceptance-reports/local-v1-soak.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/local-v1-soak.json"
+    },
+    {
+      "source": "acceptance-reports/qwen3-tts-1.7b-darwin-arm64-2026-08-05.json",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/qwen3-tts-1.7b-darwin-arm64-2026-08-05.json"
+    },
+    {
+      "source": "acceptance-reports/evidence",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/evidence"
+    },
+    {
+      "source": "acceptance-reports/quarantine",
+      "archive": "/Users/jakob/codestuff/Whoopy/.whoopy-recovery/20261028-193733/acceptance-reports/quarantine"
+    }
+  ],
+  "settings_preserved": 0,
+  "new_benchmark_preserved": "evaluations/benchmarks/2026-10-28",
+  "models_and_source_preserved": true,
+  "old_audio_count": 589,
+  "old_run_count": 334,
+  "active_catalog_counts": {
+    "runs": 0,
+    "experiments": 0,
+    "ratings": 0,
+    "decisions": 0
+  }
+}

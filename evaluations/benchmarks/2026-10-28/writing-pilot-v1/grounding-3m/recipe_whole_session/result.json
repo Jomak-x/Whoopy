@@ -1,0 +1,11 @@
+{
+  "case": "grounding-3m",
+  "writing_method": "recipe_whole_session",
+  "prompt": "A seated grounding meditation after an overstimulating workday. Use contact and ordinary sounds, develop one simple practice, and return gently to the rest of the day.",
+  "target_seconds": 180,
+  "seed": 42,
+  "status": "failed",
+  "gpu_lock_wait_seconds": 685.0684000420151,
+  "elapsed_seconds": 76.29558891698252,
+  "error": "GenerationError: whole-session rejected after one holistic revision: comfort paragraph 1: 66 words; requires 9-38; comfort paragraph 1: prose leaves -12.2s quiet outside slot contract; orientation: add no question; orientation paragraph 1: 58 words; requires 9-38; orientation paragraph 1: prose leaves -8.3s quiet outside slot contract; anchor paragraph 1: 58 words; requires 9-38; anchor paragraph 1: prose leaves -8.3s quiet outside slot contract; practice paragraph 1: 65 words; requires 29-59; practice paragraph 1: prose leaves -1.7s quiet outside slot contract; integration paragraph 1: 67 words; requires 9-38; integration paragraph 1: prose leaves -12.7s quiet outside slot contract; integration paragraph 2: 59 words; requires 9-38; integration paragraph 2: prose leaves -8.8s quiet outside slot contract; return paragraph 1: 70 words; requires 9-38; return paragraph 1: prose leaves -14.1s quiet outside slot contract; orientation: establish bodily support or contact; return: include surrounding sound and an optional small movement"
+}

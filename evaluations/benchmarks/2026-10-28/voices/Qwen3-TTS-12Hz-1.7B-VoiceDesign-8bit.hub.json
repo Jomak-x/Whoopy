@@ -1,0 +1,150 @@
+{
+  "_id": "697295f80536cace2fa903e2",
+  "id": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+  "private": false,
+  "pipeline_tag": "text-to-speech",
+  "library_name": "mlx-audio",
+  "tags": [
+    "mlx-audio",
+    "safetensors",
+    "qwen3_tts",
+    "mlx",
+    "text-to-speech",
+    "speech",
+    "speech generation",
+    "voice cloning",
+    "tts",
+    "license:apache-2.0",
+    "8-bit",
+    "region:us"
+  ],
+  "downloads": 7336,
+  "likes": 10,
+  "modelId": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+  "author": "mlx-community",
+  "sha": "f90d617701d9f7f4ca499291e0b57f2b3c2fd2ee",
+  "lastModified": "2026-01-25T22:07:32.000Z",
+  "gated": false,
+  "disabled": false,
+  "model-index": null,
+  "config": {
+    "architectures": [
+      "Qwen3TTSForConditionalGeneration"
+    ],
+    "model_type": "qwen3_tts",
+    "quantization_config": {
+      "bits": 8
+    },
+    "tokenizer_config": {
+      "bos_token": null,
+      "eos_token": "<|im_end|>",
+      "pad_token": "<|endoftext|>",
+      "unk_token": null
+    }
+  },
+  "cardData": {
+    "license": "apache-2.0",
+    "tags": [
+      "mlx",
+      "text-to-speech",
+      "speech",
+      "speech generation",
+      "voice cloning",
+      "tts",
+      "mlx-audio"
+    ],
+    "library_name": "mlx-audio"
+  },
+  "siblings": [
+    {
+      "rfilename": ".gitattributes",
+      "blobId": "a6344aac8c09253b3b630fb776ae94478aa0275b",
+      "size": 1519
+    },
+    {
+      "rfilename": "README.md",
+      "blobId": "69b9442df21004b3e0d4340fa4c7e5dd4f76fcfd",
+      "size": 1068
+    },
+    {
+      "rfilename": "config.json",
+      "blobId": "8e04ff963444df154a83ad767e6bc2b9d0a40c03",
+      "size": 5437
+    },
+    {
+      "rfilename": "generation_config.json",
+      "blobId": "1872b16d4535564abf2db5d6debe6cddd82b7f2e",
+      "size": 245
+    },
+    {
+      "rfilename": "merges.txt",
+      "blobId": "20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0",
+      "size": 1671839
+    },
+    {
+      "rfilename": "model.safetensors",
+      "blobId": "93d001b3e0e3c28ecc92d3fd94302c1512e0d5f7",
+      "size": 2393308931,
+      "lfs": {
+        "sha256": "1a84179d87c972353ccdd9b48f3c4422509b3d1b11030d32358312fb0f3800d7",
+        "size": 2393308931,
+        "pointerSize": 135
+      }
+    },
+    {
+      "rfilename": "model.safetensors.index.json",
+      "blobId": "00d72d3b1f0a86f8f0d2ba37646953f2e6b82691",
+      "size": 71786
+    },
+    {
+      "rfilename": "preprocessor_config.json",
+      "blobId": "0525dd953bb9241912f7147666f0d535165d5d4f",
+      "size": 127
+    },
+    {
+      "rfilename": "speech_tokenizer/config.json",
+      "blobId": "06cc8dc4c5ec8a1929086b71b98c313020d9268b",
+      "size": 2336
+    },
+    {
+      "rfilename": "speech_tokenizer/configuration.json",
+      "blobId": "ab58e2eaf53cd14a1a2a7527d9261ceea93a24cd",
+      "size": 76
+    },
+    {
+      "rfilename": "speech_tokenizer/model.safetensors",
+      "blobId": "026d66bfb5d730dcfd56450c5e9e51b3ef4e0712",
+      "size": 682293092,
+      "lfs": {
+        "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258",
+        "size": 682293092,
+        "pointerSize": 134
+      }
+    },
+    {
+      "rfilename": "speech_tokenizer/preprocessor_config.json",
+      "blobId": "ba40914f4f49ab98a8ca545d4892ef7291a39592",
+      "size": 234
+    },
+    {
+      "rfilename": "tokenizer_config.json",
+      "blobId": "6ff9fd60cc623bb54bbd603cbd418c97a11528d7",
+      "size": 7344
+    },
+    {
+      "rfilename": "vocab.json",
+      "blobId": "4783fe10ac3adce15ac8f358ef5462739852c569",
+      "size": 2776833
+    }
+  ],
+  "spaces": [],
+  "createdAt": "2026-01-22T21:26:16.000Z",
+  "safetensors": {
+    "parameters": {
+      "U32": 1536163840,
+      "BF16": 380512512
+    },
+    "total": 1916676352
+  },
+  "usedStorage": 5112317378
+}

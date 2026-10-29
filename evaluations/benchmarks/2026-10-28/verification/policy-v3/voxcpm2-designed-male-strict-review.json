@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "policy_reassessment_of_existing_verification",
+  "policy_id": "normalized-word-mismatch-review-v3-strict",
+  "created_at": "2026-10-29T02:07:58.275942+00:00",
+  "no_new_asr_inference": true,
+  "no_new_recognition_claim": true,
+  "classification_only": true,
+  "source_code_modified": false,
+  "original_report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male-aggregate.json",
+  "original_report_sha256": "055a6aa5354965c08f8acd0ce1929e9cba486012b30cd158440f75ded2e55b45",
+  "original_verification_created_at": null,
+  "original_status": "pass",
+  "status": "review",
+  "policy_status": "review",
+  "policy_reasons": [
+    "Preserved full-file ASR omitted28expected tail words; listening review is required despite exact paragraph recognition and exact raw assembly evidence."
+  ],
+  "listening_review_required": true,
+  "normalized_word_edit_count": 28,
+  "original_metrics": {
+    "expected_word_count": 123,
+    "observed_word_count": 123,
+    "word_error_rate": 0.0,
+    "ordered_word_coverage": 1.0,
+    "matches": 123,
+    "deletions": 0,
+    "insertions": 0,
+    "substitutions": 0,
+    "possible_truncation": false
+  },
+  "original_failure_reasons": [],
+  "original_review_reasons": [],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/raw.wav",
+  "audio_sha256": "94a65b18158a7ffeb350d8cc4f90374f2e8e5dffef7daeaa448231f7dd54e295",
+  "audio_state_at_reassessment": {
+    "sha256": "94a65b18158a7ffeb350d8cc4f90374f2e8e5dffef7daeaa448231f7dd54e295",
+    "size_bytes": 8171728,
+    "mtime_ns": 1793230817600643871
+  },
+  "expected_text_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "existing_asr_engine": "independent mlx-whisper per paragraph",
+  "existing_pcm_pass": true,
+  "existing_pcm_receipt": {
+    "frame_count": 2042912,
+    "sample_rate": 48000,
+    "duration_seconds": 42.56066666666667,
+    "nonfinite_samples": 0,
+    "peak": 0.751237690448761,
+    "rms": 0.06548600452170598,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.1747299201503053,
+    "leading_silence_seconds": 0.0,
+    "trailing_silence_seconds": 0.18,
+    "zero_crossing_fraction": 0.0708273635023748,
+    "difference_to_signal_energy": 0.040258129648155366,
+    "speech_established_by_pcm": false
+  },
+  "existing_pcm_pass_basis": "Inherited original pass receipt with recorded PCM diagnostics and no failure/review reasons.",
+  "existing_qualification_chain": {
+    "qualification": "complete independent per-paragraph recognition with exact PCM assembly",
+    "verification_method": "full-file ASR + paragraph ASR + exact decoded sample proof",
+    "full_file_asr_status": "fail",
+    "full_file_report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male.json",
+    "full_file_report_sha256": "64deb36b2201ac3246881cf16e526b503ed087c4d9c7b445892ae53aeba7ea21",
+    "assembly_proof": {
+      "comparison": "numpy.array_equal of decoded FLOAT32 samples",
+      "equal": true,
+      "inserted_frames": 0,
+      "sample_rate": 48000,
+      "channels": 1,
+      "frame_count": 2042912,
+      "decoded_pcm_float32le_sha256": "61f29eec5e9848a29044185323bd5f4a7824d06ea80fa603618cc7f5eb31a427",
+      "raw_sha256": "94a65b18158a7ffeb350d8cc4f90374f2e8e5dffef7daeaa448231f7dd54e295"
+    },
+    "segments": [
+      {
+        "segment": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/segment-01.wav",
+        "audio_sha256": "9efae41f839b27215b04f5b5de16087007909a2bd577a85c27e7cee535bfc6a6",
+        "frame_count": 491528,
+        "report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-segment01.json",
+        "report_sha256": "3865d3c5edc925f18a3431d6edd1a5f3e702c11b4fa20e1d227bd1f6fc3eef0e",
+        "status": "pass",
+        "word_error_rate": 0,
+        "ordered_word_coverage": 1
+      },
+      {
+        "segment": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/segment-02.wav",
+        "audio_sha256": "b0996950789ddf82fa92c3ec11139047b3a6ae14775e07dafa7a04bb8340b9d9",
+        "frame_count": 629768,
+        "report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male-segment02.json",
+        "report_sha256": "81b6aa83f9b73d7ad24615cf61984b9b46b42cb12ed024203b57fd129c83dfa7",
+        "status": "pass",
+        "word_error_rate": 0,
+        "ordered_word_coverage": 1
+      },
+      {
+        "segment": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/segment-03.wav",
+        "audio_sha256": "7d15ec234aa047c5a5af3b3d5d5f047bba0ed064c77eaa4b4b2e0a67321457e8",
+        "frame_count": 453128,
+        "report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male-segment03.json",
+        "report_sha256": "5500079767cf663bcd25bf6473ab7a35dd98fe8398f95021d6979ea3bc5c8d27",
+        "status": "pass",
+        "word_error_rate": 0,
+        "ordered_word_coverage": 1
+      },
+      {
+        "segment": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/segment-04.wav",
+        "audio_sha256": "a78305cae63a61e6a6d8fd7a21dae612faab3d424280254b51a28798efcec96d",
+        "frame_count": 468488,
+        "report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male-segment04.json",
+        "report_sha256": "782c18d4a9ba6a0e0b31ac12c7a036fce35a5092ad7ed33a5a43ced9504ceba0",
+        "status": "pass",
+        "word_error_rate": 0,
+        "ordered_word_coverage": 1
+      }
+    ]
+  },
+  "policy": {
+    "any_insertion_deletion_or_substitution": "review",
+    "zero_edits_with_existing_pcm_pass": "pass",
+    "original_fail": "fail",
+    "mismatches_are_not_automatic_rejection": true
+  },
+  "limits": [
+    "Derived classification of existing receipts only; no new ASR or acoustic inspection.",
+    "Word differences may come from recognition or speech; listening must resolve them.",
+    "A zero-edit existing receipt is not a claim of newly established word-perfect audio.",
+    "Original failed receipts, including Vox full-file ASR, remain unchanged.",
+    "The full-file recognizer omitted the final paragraph while isolated paragraph receipts recognized it exactly.",
+    "Review conservatively preserves this disagreement; it does not establish that speech is actually missing.",
+    "No original failure is promoted or overwritten; the full-file failure and aggregate pass remain intact."
+  ],
+  "source_policy_reassessment": "evaluations/benchmarks/2026-10-28/verification/policy-v3/voxcpm2-designed-male-aggregate.json",
+  "source_policy_reassessment_sha256": "35259676df51194efa2432eb634c2fa8e7fd9fdf39536049141bab4789abdea9",
+  "source_policy_status": "pass",
+  "classification_basis": "Every preserved normalized-word discrepancy requires listening review, including full-file ASR disagreement alongside exact paragraph support.",
+  "normalized_word_differences_scope": "Existing full-file ASR receipt, not the exact paragraph aggregate.",
+  "aggregate_normalized_word_edit_count": 0,
+  "preserved_full_file_verification": {
+    "report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male.json",
+    "report_sha256": "64deb36b2201ac3246881cf16e526b503ed087c4d9c7b445892ae53aeba7ea21",
+    "original_status": "fail",
+    "audio_sha256": "94a65b18158a7ffeb350d8cc4f90374f2e8e5dffef7daeaa448231f7dd54e295",
+    "metrics": {
+      "expected_word_count": 123,
+      "observed_word_count": 95,
+      "word_error_rate": 0.22764227642276422,
+      "ordered_word_coverage": 0.7723577235772358,
+      "matches": 95,
+      "deletions": 28,
+      "insertions": 0,
+      "substitutions": 0,
+      "possible_truncation": true
+    },
+    "failure_reasons": [
+      "Expected ending is missing: possible truncated speech."
+    ],
+    "review_reasons": [
+      "ASR transcript needs review for missing, changed, or extra words."
+    ]
+  },
+  "positive_support": {
+    "aggregate_report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male-aggregate.json",
+    "aggregate_report_sha256": "055a6aa5354965c08f8acd0ce1929e9cba486012b30cd158440f75ded2e55b45",
+    "original_status": "pass",
+    "metrics": {
+      "expected_word_count": 123,
+      "observed_word_count": 123,
+      "word_error_rate": 0.0,
+      "ordered_word_coverage": 1.0,
+      "matches": 123,
+      "deletions": 0,
+      "insertions": 0,
+      "substitutions": 0,
+      "possible_truncation": false
+    },
+    "qualification": "complete independent per-paragraph recognition with exact PCM assembly",
+    "assembly_proof": {
+      "comparison": "numpy.array_equal of decoded FLOAT32 samples",
+      "equal": true,
+      "inserted_frames": 0,
+      "sample_rate": 48000,
+      "channels": 1,
+      "frame_count": 2042912,
+      "decoded_pcm_float32le_sha256": "61f29eec5e9848a29044185323bd5f4a7824d06ea80fa603618cc7f5eb31a427",
+      "raw_sha256": "94a65b18158a7ffeb350d8cc4f90374f2e8e5dffef7daeaa448231f7dd54e295"
+    },
+    "paragraph_receipts": [
+      {
+        "segment": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/segment-01.wav",
+        "audio_sha256": "9efae41f839b27215b04f5b5de16087007909a2bd577a85c27e7cee535bfc6a6",
+        "frame_count": 491528,
+        "report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-segment01.json",
+        "report_sha256": "3865d3c5edc925f18a3431d6edd1a5f3e702c11b4fa20e1d227bd1f6fc3eef0e",
+        "status": "pass",
+        "word_error_rate": 0,
+        "ordered_word_coverage": 1
+      },
+      {
+        "segment": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/segment-02.wav",
+        "audio_sha256": "b0996950789ddf82fa92c3ec11139047b3a6ae14775e07dafa7a04bb8340b9d9",
+        "frame_count": 629768,
+        "report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male-segment02.json",
+        "report_sha256": "81b6aa83f9b73d7ad24615cf61984b9b46b42cb12ed024203b57fd129c83dfa7",
+        "status": "pass",
+        "word_error_rate": 0,
+        "ordered_word_coverage": 1
+      },
+      {
+        "segment": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/segment-03.wav",
+        "audio_sha256": "7d15ec234aa047c5a5af3b3d5d5f047bba0ed064c77eaa4b4b2e0a67321457e8",
+        "frame_count": 453128,
+        "report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male-segment03.json",
+        "report_sha256": "5500079767cf663bcd25bf6473ab7a35dd98fe8398f95021d6979ea3bc5c8d27",
+        "status": "pass",
+        "word_error_rate": 0,
+        "ordered_word_coverage": 1
+      },
+      {
+        "segment": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/segment-04.wav",
+        "audio_sha256": "a78305cae63a61e6a6d8fd7a21dae612faab3d424280254b51a28798efcec96d",
+        "frame_count": 468488,
+        "report": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male-segment04.json",
+        "report_sha256": "782c18d4a9ba6a0e0b31ac12c7a036fce35a5092ad7ed33a5a43ced9504ceba0",
+        "status": "pass",
+        "word_error_rate": 0,
+        "ordered_word_coverage": 1
+      }
+    ]
+  },
+  "discrepancy_requires_listening": true,
+  "speech_actually_missing_claim": false,
+  "reassessment_does_not_resolve_asr_disagreement": true,
+  "publication": {
+    "schema_version": 1,
+    "kind": "compact_verification_receipt",
+    "original_receipt_sha256": "ad50d03385f6c68acf4166490851bcb11766429aa189a90dd1748a085f3d7062",
+    "original_status": "review",
+    "full_trace_included": false,
+    "referenced_receipt_hashes": "original_receipt_bytes"
+  }
+}

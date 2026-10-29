@@ -6,7 +6,8 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+from uuid import UUID
 
 import pytest
 
@@ -17,11 +18,18 @@ from tests.adapter_contracts import (
 from whoopy.adapters.llm.llama_cpp import (
     LlamaCppScriptGenerator,
     LlamaCppSettings,
+    LlamaProcessResult,
     _assistant_text,
+    _llama_timing_evidence,
     _run_process,
 )
 from whoopy.adapters.tts.fish_speech import FishSpeech14Adapter
-from whoopy.adapters.tts.moss_tts import MossTTSAdapter, MossTTSSettings
+from whoopy.adapters.tts.moss_tts import (
+    MOSS_DURATION_BUDGET_STRATEGY,
+    MossTTSAdapter,
+    MossTTSSettings,
+    moss_duration_budget,
+)
 from whoopy.adapters.tts.sherpa_onnx import (
     SherpaOnnxKokoroAdapter,
     SherpaOnnxSettings,
@@ -32,13 +40,19 @@ from whoopy.audio.synthesis import (
     InvalidSynthesisOutput,
     TransientSynthesisError,
 )
+from whoopy.meditation import (
+    GenerationWorkspace,
+    LocalMeditationGenerator,
+    load_prompt_bundle,
+    load_recipe_library,
+)
 from whoopy.ports import (
     FatalAdapterError,
     InvalidAdapterOutput,
     ScriptGenerationRequest,
     TransientAdapterError,
 )
-from whoopy.timeline import SpeechSegment
+from whoopy.timeline import PaceIntent, PronunciationOverride, SpeechSegment
 
 
 def _llama_files(tmp_path: Path) -> tuple[Path, Path]:
@@ -123,6 +137,22 @@ def test_default_llama_runner_bounds_and_reaps_a_hung_process() -> None:
         )
 
 
+def test_default_llama_runner_measures_observable_model_ready_signal() -> None:
+    result = _run_process(
+        [
+            sys.executable,
+            "-c",
+            ("import time; print('available commands:', flush=True); time.sleep(0.03)"),
+        ],
+        1,
+    )
+
+    assert result.completed.returncode == 0
+    assert result.load_elapsed_seconds is not None
+    assert result.load_elapsed_seconds >= 0
+    assert result.load_elapsed_unavailable_reason is None
+
+
 def test_llama_adapter_classifies_nonzero_exit_as_fatal(tmp_path: Path) -> None:
     executable, model = _llama_files(tmp_path)
 
@@ -142,11 +172,57 @@ def test_llama_adapter_classifies_nonzero_exit_as_fatal(tmp_path: Path) -> None:
         process_runner=failed_runner,
     )
 
-    with pytest.raises(FatalAdapterError, match="invalid GGUF"):
+    with pytest.raises(FatalAdapterError, match="exited with code 2") as error:
         adapter.generate(ScriptGenerationRequest(prompt="A prompt."))
+    assert "invalid GGUF" not in str(error.value)
 
 
-def test_llama_adapter_rejects_empty_output(tmp_path: Path) -> None:
+def test_llama_adapter_delivers_requested_schema_to_native_process(tmp_path: Path) -> None:
+    executable, model = _llama_files(tmp_path)
+    schema = {
+        "type": "object",
+        "properties": {"message": {"type": "string"}},
+        "required": ["message"],
+        "additionalProperties": False,
+    }
+    consumed: list[dict[str, Any]] = []
+
+    def runner(command: Sequence[str], _timeout: float) -> subprocess.CompletedProcess[str]:
+        argv = list(command)
+        path = Path(argv[argv.index("--json-schema-file") + 1])
+        consumed.append(json.loads(path.read_text()))
+        Path(argv[argv.index("--output-file") + 1]).write_text('{"message":"original prose"}')
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    adapter = LlamaCppScriptGenerator(
+        executable_path=executable,
+        model_path=model,
+        versioned_model_id="test/model@1",
+        runtime_version="1",
+        license_id="Apache-2.0",
+        device="cpu",
+        process_runner=runner,
+    )
+    result = adapter.generate(
+        ScriptGenerationRequest(prompt="Write it.", response_json_schema=schema)
+    )
+    assert consumed == [schema]
+    assert result.text == '{"message":"original prose"}'
+
+
+@pytest.mark.parametrize(
+    ("output_text", "runtime_error"),
+    [
+        (" \n", ""),
+        (
+            "User:\nA prompt.\n\nAssistant:\n\n",
+            "srv send_error: Failed to initialize samplers: std::exception",
+        ),
+    ],
+)
+def test_llama_adapter_rejects_empty_output(
+    tmp_path: Path, output_text: str, runtime_error: str
+) -> None:
     executable, model = _llama_files(tmp_path)
 
     def empty_runner(
@@ -155,8 +231,15 @@ def test_llama_adapter_rejects_empty_output(tmp_path: Path) -> None:
     ) -> subprocess.CompletedProcess[str]:
         command_list = list(command)
         output_path = Path(command_list[command_list.index("--output-file") + 1])
-        output_path.write_text(" \n", encoding="utf-8")
-        return subprocess.CompletedProcess(command_list, 0, stdout="", stderr="")
+        schema_path = Path(command_list[command_list.index("--json-schema-file") + 1])
+        assert json.loads(schema_path.read_text()) == {"type": "object"}
+        output_path.write_text(output_text, encoding="utf-8")
+        return subprocess.CompletedProcess(
+            command_list,
+            0,
+            stdout="[ Prompt: 0.0 t/s | Generation: 0.0 t/s ]",
+            stderr=runtime_error,
+        )
 
     adapter = LlamaCppScriptGenerator(
         executable_path=executable,
@@ -168,14 +251,210 @@ def test_llama_adapter_rejects_empty_output(tmp_path: Path) -> None:
         process_runner=empty_runner,
     )
 
-    with pytest.raises(InvalidAdapterOutput, match="empty text"):
-        adapter.generate(ScriptGenerationRequest(prompt="A prompt."))
+    message = "sampler failure" if runtime_error else "empty text"
+    with pytest.raises(InvalidAdapterOutput, match=message) as error:
+        adapter.generate(
+            ScriptGenerationRequest(prompt="A prompt.", response_json_schema={"type": "object"})
+        )
+    assert "A prompt." not in str(error.value)
+    if runtime_error:
+        assert "Failed to initialize samplers" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "diagnostic",
+    [
+        "common_sampler_init: error initializing grammar sampler",
+        "0.01 E srv send_error: task id = 0, error: Failed to initialize samplers: std::exception",
+    ],
+)
+def test_llama_adapter_rejects_partial_output_after_engine_sampler_failure(
+    tmp_path: Path, diagnostic: str
+) -> None:
+    executable, model = _llama_files(tmp_path)
+
+    def runner(command: Sequence[str], _timeout: float) -> subprocess.CompletedProcess[str]:
+        arguments = list(command)
+        assert "--json-schema-file" in arguments
+        output = Path(arguments[arguments.index("--output-file") + 1])
+        output.write_text('User:\nA prompt.\n\nAssistant:\n{"text":', encoding="utf-8")
+        return subprocess.CompletedProcess(
+            arguments, 0, stdout="Generation: 0.0 t/s", stderr=diagnostic
+        )
+
+    adapter = LlamaCppScriptGenerator(
+        executable_path=executable,
+        model_path=model,
+        versioned_model_id="fixture/model@1",
+        runtime_version="fixture",
+        license_id="Apache-2.0",
+        device="cpu",
+        process_runner=runner,
+    )
+    with pytest.raises(InvalidAdapterOutput, match="runtime sampler failure"):
+        adapter.generate(
+            ScriptGenerationRequest(prompt="A prompt.", response_json_schema={"type": "object"})
+        )
+
+
+@pytest.mark.parametrize("writing_method", ["plan_first", "recipe_whole_session"])
+@pytest.mark.parametrize("failure", ["sampler", "timeout", "exit", "empty"])
+def test_llama_writer_preserves_failed_invocations_before_temporary_cleanup(
+    tmp_path: Path,
+    writing_method: Literal["plan_first", "recipe_whole_session"],
+    failure: str,
+) -> None:
+    executable, model = _llama_files(tmp_path)
+    captured: list[tuple[list[str], dict[str, bytes]]] = []
+    raw_output = b'User:\nPrivate request.\n\nAssistant:\n{"text":'
+    stdout = "Private raw stdout."
+    stderr = "common_sampler_init: error initializing grammar sampler\nPrivate raw stderr."
+
+    def runner(command: Sequence[str], timeout: float) -> subprocess.CompletedProcess[str]:
+        argv = list(command)
+        inputs = {
+            name: Path(argv[argv.index(flag) + 1]).read_bytes()
+            for flag, name in (
+                ("--file", "prompt.txt"),
+                ("--system-prompt-file", "system.txt"),
+                ("--json-schema-file", "response-schema.json"),
+            )
+            if flag in argv
+        }
+        captured.append((argv, inputs))
+        output = b"" if failure == "empty" else raw_output
+        Path(argv[argv.index("--output-file") + 1]).write_bytes(output)
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(argv, timeout, output=stdout, stderr=stderr)
+        return subprocess.CompletedProcess(
+            argv, 2 if failure == "exit" else 0, stdout, "" if failure == "empty" else stderr
+        )
+
+    adapter = LlamaCppScriptGenerator(
+        executable_path=executable,
+        model_path=model,
+        versioned_model_id="fixture/model@1",
+        runtime_version="fixture",
+        license_id="Apache-2.0",
+        device="cpu",
+        process_runner=runner,
+    )
+    workspace = GenerationWorkspace(tmp_path / "workspace")
+    preserved: dict[Path, bytes] = {}
+    for _ in range(2):
+        generator = LocalMeditationGenerator(
+            adapter,
+            load_prompt_bundle(Path("config/prompts")),
+            recipes=load_recipe_library(Path("config/session_recipes.yaml")),
+            workspace=workspace,
+        )
+        with pytest.raises(
+            (InvalidAdapterOutput, TransientAdapterError, FatalAdapterError)
+        ) as error:
+            generator.generate(
+                prompt="A seated grounding meditation after an overstimulating workday.",
+                duration_seconds=180,
+                run_id=UUID("44444444-4444-4444-8444-444444444444"),
+                writing_method=writing_method,
+            )
+        assert "Private" not in str(error.value)
+        assert all(path.read_bytes() == data for path, data in preserved.items())
+        receipts = list((workspace.root / "raw-invocations").glob("*/001/process.json"))
+        assert len(receipts) == len(captured)
+        for receipt_path in receipts:
+            folder = receipt_path.parent
+            argv = json.loads((folder / "command.json").read_text())
+            expected_inputs = next(inputs for command, inputs in captured if command == argv)
+            for name, data in expected_inputs.items():
+                assert (folder / name).read_bytes() == data
+            assert (folder / "output.txt").read_bytes() == (
+                b"" if failure == "empty" else raw_output
+            )
+            assert (folder / "stdout.txt").read_text() == stdout
+            assert (folder / "stderr.txt").read_text() == ("" if failure == "empty" else stderr)
+            receipt = json.loads(receipt_path.read_text())
+            assert receipt["status"] == ("failed" if failure == "timeout" else "completed")
+            assert receipt["returncode"] == (
+                None if failure == "timeout" else 2 if failure == "exit" else 0
+            )
+            assert not Path(argv[argv.index("--file") + 1]).exists()
+            preserved.update({path: path.read_bytes() for path in folder.iterdir()})
 
 
 def test_llama_adapter_removes_single_turn_transcript_wrapper() -> None:
     output = "User:\nWrite one sentence.\n\nAssistant:\nWelcome to this moment.\n"
 
     assert _assistant_text(output) == "Welcome to this moment."
+
+
+@pytest.mark.parametrize("ending", ["", "\n", "\n\n"])
+def test_llama_transcript_parser_recognizes_empty_assistant_turn(ending: str) -> None:
+    assert _assistant_text("User:\nWrite one sentence.\n\nAssistant:" + ending) == ""
+
+
+@pytest.mark.parametrize(
+    "prose",
+    [
+        "Assistant:\nA word in an ordinary passage.",
+        "A short passage.\nAssistant:\nAn attribution in that passage.",
+        "User:\nQuoted dialogue.\nAssistant: an inline attribution.",
+    ],
+)
+def test_llama_transcript_parser_preserves_ordinary_prose(prose: str) -> None:
+    assert _assistant_text(prose) == prose
+
+
+def test_llama_parser_accepts_pinned_cli_generation_summary() -> None:
+    evidence = _llama_timing_evidence("[ Prompt: 246.2 t/s | Generation: 135.6 t/s ]")
+
+    assert evidence["output_tokens_per_second"] == pytest.approx(135.6)
+
+
+def test_llama_adapter_persists_parsed_runtime_and_measured_process_evidence(
+    tmp_path: Path,
+) -> None:
+    executable, model = _llama_files(tmp_path)
+
+    def measured_runner(command: Sequence[str], _timeout: float) -> LlamaProcessResult:
+        command_list = list(command)
+        output_path = Path(command_list[command_list.index("--output-file") + 1])
+        output_path.write_text("Welcome to this moment.", encoding="utf-8")
+        diagnostic = "\n".join(
+            (
+                "llama_model_load: using device Metal0 (Apple M2)",
+                "llama_perf_context_print: load time = 125.50 ms",
+                "llama_perf_context_print: prompt eval time = 40.00 ms / 8 tokens",
+                "llama_perf_context_print: eval time = 500.00 ms / 20 tokens",
+                "[ Prompt: 240.0 t/s | Generation: 40.0 t/s ]",
+            )
+        )
+        return LlamaProcessResult(
+            completed=subprocess.CompletedProcess(command_list, 0, stdout="", stderr=diagnostic),
+            peak_process_tree_memory_bytes=987_654_321,
+        )
+
+    ticks = iter([4.0, 5.0])
+    adapter = LlamaCppScriptGenerator(
+        executable_path=executable,
+        model_path=model,
+        versioned_model_id="test/model@1",
+        runtime_version="b1234",
+        license_id="Apache-2.0",
+        device="metal",
+        process_runner=measured_runner,
+        monotonic=lambda: next(ticks),
+    )
+
+    result = adapter.generate(ScriptGenerationRequest(prompt="A prompt.", seed=91))
+
+    assert result.telemetry.load_elapsed_seconds == pytest.approx(0.1255)
+    assert result.telemetry.output_tokens == 20
+    assert result.telemetry.output_token_elapsed_seconds == pytest.approx(0.5)
+    assert result.telemetry.output_tokens_per_second == pytest.approx(40.0)
+    assert result.telemetry.peak_process_tree_memory_bytes == 987_654_321
+    assert result.telemetry.runtime_device == "Metal0 (Apple M2)"
+    assert result.telemetry.live_process_tree_memory_after_bytes is None
+    assert "exits" in (result.telemetry.live_process_tree_memory_after_unavailable_reason or "")
 
 
 @dataclass
@@ -343,7 +622,87 @@ def test_moss_metadata_records_license_style_and_reference_hash(tmp_path: Path) 
 
     assert adapter.metadata.license_id == "Apache-2.0"
     assert "instruction=Speak gently." in adapter.metadata.settings
+    assert f"duration_budget_strategy={MOSS_DURATION_BUDGET_STRATEGY}" in adapter.metadata.settings
     assert adapter.cache_identity != changed.cache_identity
+
+
+def test_moss_translates_pronunciation_without_changing_spoken_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reference = tmp_path / "reference.wav"
+    reference.write_bytes(b"reference-audio")
+    adapter = MossTTSAdapter(
+        MossTTSSettings(
+            runtime_directory=tmp_path / "runtime",
+            worker_script=tmp_path / "worker.py",
+            model_directory=tmp_path / "model",
+            codec_directory=tmp_path / "codec",
+            variant="moss-local-v1.5",
+            reference_audio=reference,
+        )
+    )
+    requests: list[dict[str, object]] = []
+
+    class Controller:
+        def request(self, payload: dict[str, object]) -> dict[str, object]:
+            requests.append(payload)
+            return {"status": "ok", "pcm_s16le": "AAA="}
+
+    monkeypatch.setattr(adapter, "_start", lambda: Controller())
+    segment = SpeechSegment(
+        id="speech-1",
+        text="Welcome to Whoopy.",
+        target_duration_ms=4_000,
+        pronunciation_overrides=(PronunciationOverride(source="Whoopy", pronunciation="Woo-pee"),),
+    )
+
+    audio = adapter.synthesize(segment)
+
+    assert audio.pcm_s16le == b"\x00\x00"
+    assert requests[0]["text"] == "Welcome to Whoopy."
+    instruction = requests[0]["instruction"]
+    assert isinstance(instruction, str)
+    assert '"source":"Whoopy"' in instruction
+    assert '"pronunciation":"Woo-pee"' in instruction
+    assert "Woo-pee" not in requests[0]["text"]
+    assert requests[0]["duration_tokens"] == 50
+    assert requests[0]["max_new_tokens"] == 127
+    assert requests[0]["duration_budget_source"] == "explicit_target"
+    assert requests[0]["duration_budget_strategy"] == MOSS_DURATION_BUDGET_STRATEGY
+
+
+def test_moss_fallback_duration_budget_is_bounded_and_uses_typed_pace() -> None:
+    text = "Notice the support beneath you."
+    paces: tuple[PaceIntent, ...] = ("natural", "unhurried", "slow", "very_slow")
+    budgets = [
+        moss_duration_budget(SpeechSegment(id=f"speech-{index}", text=text, pace=pace))
+        for index, pace in enumerate(paces, start=1)
+    ]
+
+    assert [budget.duration_tokens for budget in budgets] == [27, 31, 36, 43]
+    assert all(budget.source == "text_pace_fallback" for budget in budgets)
+    assert [budget.max_new_tokens for budget in budgets] == [98, 103, 109, 118]
+    assert all(budget.max_new_tokens < 2_048 for budget in budgets)
+
+
+def test_moss_duration_budget_explicit_target_wins_and_long_text_is_clamped() -> None:
+    explicit = moss_duration_budget(
+        SpeechSegment(
+            id="speech-explicit",
+            text="A deliberately long sentence that must not affect the explicit target.",
+            pace="very_slow",
+            target_duration_ms=4_000,
+        )
+    )
+    long_fallback = moss_duration_budget(
+        SpeechSegment(id="speech-long", text="measured " * 2_000, pace="very_slow")
+    )
+
+    assert explicit.duration_tokens == 50
+    assert explicit.max_new_tokens == 127
+    assert explicit.source == "explicit_target"
+    assert long_fallback.duration_tokens == 1_500
+    assert long_fallback.max_new_tokens == 1_536
 
 
 def test_moss_availability_requires_runtime_checkpoint_and_reference(tmp_path: Path) -> None:
@@ -357,6 +716,42 @@ def test_moss_availability_requires_runtime_checkpoint_and_reference(tmp_path: P
     assert error == (
         "missing isolated Python runtime, model checkpoint, audio tokenizer, reference voice"
     )
+
+
+def test_moss_direct_voice_does_not_require_or_hash_a_reference(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    python = runtime / ".venv/bin/python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    model = tmp_path / "model"
+    codec = tmp_path / "codec"
+    for directory in (model, codec):
+        directory.mkdir()
+        (directory / "config.json").write_text("{}", encoding="utf-8")
+        (directory / "model.safetensors").write_bytes(b"checkpoint")
+
+    assert (
+        MossTTSAdapter.availability_error(
+            runtime,
+            model,
+            codec,
+            None,
+            use_reference=False,
+        )
+        is None
+    )
+    settings = MossTTSSettings(
+        runtime_directory=runtime,
+        worker_script=tmp_path / "worker.py",
+        model_directory=model,
+        codec_directory=codec,
+        variant="moss-local-v1.5",
+        reference_audio=None,
+        use_reference=False,
+    )
+    adapter = MossTTSAdapter(settings)
+
+    assert "reference_sha256=none" in adapter.metadata.settings
 
 
 def test_moss_availability_rejects_incomplete_sharded_checkpoint(

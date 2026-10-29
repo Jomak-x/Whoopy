@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "policy_reassessment_of_existing_verification",
+  "policy_id": "normalized-word-mismatch-review-v3",
+  "created_at": "2026-10-29T01:57:44.349662+00:00",
+  "no_new_asr_inference": true,
+  "no_new_recognition_claim": true,
+  "classification_only": true,
+  "source_code_modified": false,
+  "original_report": "evaluations/benchmarks/2026-10-28/verification/kokoro-af-heart-080.json",
+  "original_report_sha256": "0a0b55bc5287e4fc37e8a22eea363f6aaf579f39191e520840d56df8c5535491",
+  "original_verification_created_at": "2026-10-28T23:56:35.734011+00:00",
+  "original_status": "pass",
+  "status": "pass",
+  "policy_status": "pass",
+  "policy_reasons": [
+    "Existing receipt contains zero normalized word edits and an existing PCM pass."
+  ],
+  "listening_review_required": false,
+  "normalized_word_edit_count": 0,
+  "original_metrics": {
+    "expected_word_count": 123,
+    "observed_word_count": 123,
+    "word_error_rate": 0.0,
+    "ordered_word_coverage": 1.0,
+    "matches": 123,
+    "deletions": 0,
+    "insertions": 0,
+    "substitutions": 0,
+    "possible_truncation": false
+  },
+  "original_failure_reasons": [],
+  "original_review_reasons": [],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/kokoro-af-heart-080/raw.wav",
+  "audio_sha256": "5b60a9636570c8bef5bc06671009f9e94d34bd1fd164c053b0a2dd10e4476964",
+  "audio_state_at_reassessment": {
+    "sha256": "5b60a9636570c8bef5bc06671009f9e94d34bd1fd164c053b0a2dd10e4476964",
+    "size_bytes": 4824080,
+    "mtime_ns": 1793231656479452035
+  },
+  "expected_text_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "existing_asr_engine": "mlx-whisper",
+  "existing_pcm_pass": true,
+  "existing_pcm_receipt": {
+    "frame_count": 1206000,
+    "sample_rate": 24000,
+    "duration_seconds": 50.25,
+    "nonfinite_samples": 0,
+    "peak": 0.49299100041389465,
+    "rms": 0.050809190593703465,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.2184639872662157,
+    "leading_silence_seconds": 0.32,
+    "trailing_silence_seconds": 0.54,
+    "zero_crossing_fraction": 0.17163695823960054,
+    "difference_to_signal_energy": 0.18420774599198186,
+    "speech_established_by_pcm": false
+  },
+  "existing_pcm_pass_basis": "Inherited original pass receipt with recorded PCM diagnostics and no failure/review reasons.",
+  "existing_qualification_chain": {},
+  "policy": {
+    "any_insertion_deletion_or_substitution": "review",
+    "zero_edits_with_existing_pcm_pass": "pass",
+    "original_fail": "fail",
+    "mismatches_are_not_automatic_rejection": true
+  },
+  "limits": [
+    "Derived classification of existing receipts only; no new ASR or acoustic inspection.",
+    "Word differences may come from recognition or speech; listening must resolve them.",
+    "A zero-edit existing receipt is not a claim of newly established word-perfect audio.",
+    "Original failed receipts, including Vox full-file ASR, remain unchanged."
+  ],
+  "publication": {
+    "schema_version": 1,
+    "kind": "compact_verification_receipt",
+    "original_receipt_sha256": "acedc85d1262e919005c8358eba45722fae8297aa1cda24131bf3b896b168aa0",
+    "original_status": "pass",
+    "full_trace_included": false,
+    "referenced_receipt_hashes": "original_receipt_bytes"
+  }
+}

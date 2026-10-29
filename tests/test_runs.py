@@ -31,8 +31,9 @@ from whoopy.pipeline.runs import (
     RunStore,
     RunStoreError,
 )
+from whoopy.pipeline.worker import LocalWorker
 from whoopy.ports import AdapterMetadata
-from whoopy.timeline import SpeechSegment, Timeline
+from whoopy.timeline import SpeechSegment, Timeline, build_script_timeline
 
 RUN_ID = UUID("11111111-1111-4111-8111-111111111111")
 CREATED_AT = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
@@ -97,6 +98,7 @@ def _resolved_generation(
             section_prompt_id=request.section_prompt_id,
             section_prompt_version=request.section_prompt_version,
             max_parallel_sections=request.max_parallel_sections,
+            meditation_kind=request.meditation_kind,
             estimated_duration_seconds=298.0,
         ),
     )
@@ -266,10 +268,12 @@ def test_script_run_atomically_saves_every_immutable_input(tmp_path: Path) -> No
         model_metadata=metadata,
         run_id=RUN_ID,
         created_at=CREATED_AT,
+        audience="system",
     )
 
     assert record.schema_version == 4
     assert record.source_kind == "script_file"
+    assert record.audience == "system"
     assert store.load_script(RUN_ID).startswith("Welcome.")
     assert store.load_resolved_config(RUN_ID) == resolved
     assert store.load_model_metadata(RUN_ID) == metadata
@@ -591,6 +595,38 @@ def test_run_load_retries_a_transient_permission_error(
     assert attempts == 1
 
 
+@pytest.mark.parametrize("persistent", [False, True])
+def test_run_save_handles_windows_reader_conflicts_atomically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, persistent: bool
+) -> None:
+    store = RunStore(tmp_path)
+    original = store.create("Original request.", run_id=RUN_ID)
+    updated = original.model_copy(update={"prompt": "Updated request."})
+    original_replace = os.replace
+    attempts = 0
+
+    def denied_replace(source: Path, destination: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        # Readers must keep seeing the complete old record until replacement succeeds.
+        assert store.load(RUN_ID) == original
+        if persistent or attempts == 1:
+            raise PermissionError("Windows reader still has the record open")
+        original_replace(source, destination)
+
+    monkeypatch.setattr("whoopy.pipeline.runs.os.replace", denied_replace)
+    if persistent:
+        with pytest.raises(RunStoreError, match="reader still has the record open"):
+            store.save(updated)
+        assert attempts == 5
+        assert store.load(RUN_ID) == original
+    else:
+        store.save(updated)
+        assert attempts == 2
+        assert store.load(RUN_ID) == updated
+    assert not list(store.run_directory(RUN_ID).glob(".*.tmp"))
+
+
 def test_pending_generation_run_atomically_saves_every_resume_input(tmp_path: Path) -> None:
     store = RunStore(tmp_path)
     request = _pending_generation()
@@ -612,10 +648,40 @@ def test_pending_generation_run_atomically_saves_every_resume_input(tmp_path: Pa
     assert store.load(RUN_ID) == record
 
 
+def test_explicit_meditation_kind_survives_immutable_promotion_validation(
+    tmp_path: Path,
+) -> None:
+    request = _pending_generation(meditation_kind="grounding")
+    store = RunStore(tmp_path)
+    store.create_pending_generation_run(
+        prompt="A grounding practice.",
+        generation_request=request,
+        run_id=RUN_ID,
+        created_at=CREATED_AT,
+        audience="lab",
+    )
+
+    promoted = store.promote_queued_generated_run(
+        RUN_ID,
+        generated=_generated_result(),
+        resolved_config=_resolved_generation(request),
+        model_metadata=request.model_metadata,
+        promoted_at=CREATED_AT + timedelta(seconds=1),
+    )
+
+    assert promoted.source_kind == "generated_prompt"
+    assert promoted.audience == "lab"
+
+
 def test_generation_request_upgrades_a_legacy_placeholder_idempotently(tmp_path: Path) -> None:
     store = RunStore(tmp_path)
     request = _pending_generation()
-    legacy = store.create("A calm practice.", run_id=RUN_ID, created_at=CREATED_AT)
+    legacy = store.create(
+        "A calm practice.",
+        run_id=RUN_ID,
+        created_at=CREATED_AT,
+        audience="lab",
+    )
 
     first_path = store.write_generation_request(
         RUN_ID,
@@ -628,6 +694,7 @@ def test_generation_request_upgrades_a_legacy_placeholder_idempotently(tmp_path:
     assert first_path == second_path
     assert upgraded.schema_version == 6
     assert upgraded.created_at == legacy.created_at
+    assert upgraded.audience == "lab"
     assert upgraded.generation_request_artifact == "generation-request.json"
 
 
@@ -776,6 +843,7 @@ def test_generated_promotion_keeps_pending_request_as_provenance(tmp_path: Path)
         generation_request=request,
         run_id=RUN_ID,
         created_at=CREATED_AT,
+        audience="lab",
     )
 
     promoted = store.promote_queued_generated_run(
@@ -789,6 +857,7 @@ def test_generated_promotion_keeps_pending_request_as_provenance(tmp_path: Path)
     assert promoted.schema_version == 6
     assert promoted.generation_request_artifact == "generation-request.json"
     assert promoted.script_artifact == "script.md"
+    assert promoted.audience == "lab"
     assert store.load_generation_request(RUN_ID) == request
 
 
@@ -822,6 +891,7 @@ def test_active_generated_promotion_keeps_request_and_generation_lease(tmp_path:
         generation_request=request,
         run_id=RUN_ID,
         created_at=CREATED_AT,
+        audience="lab",
     )
     active = store.start_generation(
         RUN_ID,
@@ -846,6 +916,7 @@ def test_active_generated_promotion_keeps_request_and_generation_lease(tmp_path:
     assert promoted.execution is not None
     assert promoted.execution.stage is RunStage.COMPILING
     assert promoted.execution.is_active
+    assert promoted.audience == "lab"
     assert store.load_generation_request(RUN_ID) == request
 
 
@@ -921,3 +992,81 @@ def test_active_failure_keeps_long_diagnostic_without_breaking_execution_summary
     assert failed.error == diagnostic
     assert failed.execution is not None
     assert failed.execution.message == diagnostic[:2_000]
+
+
+@pytest.mark.parametrize("status", [RunStatus.FAILED, RunStatus.INTERRUPTED])
+@pytest.mark.parametrize("kind", ["script", "prompt"])
+def test_stopped_placeholder_promotion_preserves_attempts_across_store_restart(
+    tmp_path: Path, status: RunStatus, kind: str
+) -> None:
+    store = RunStore(tmp_path)
+    initial = store.create("A retained browser launch.", run_id=RUN_ID)
+    assert initial.recovery is not None
+    stopped = initial.transition(
+        status,
+        updated_at=datetime.now(UTC),
+        recovery=initial.recovery.model_copy(update={"process_attempts": 3, "resume_count": 2}),
+        execution=RunExecution(
+            stage=RunStage.COMPILING,
+            message="Previous launch stopped.",
+            interruption_kind="test" if status is RunStatus.INTERRUPTED else None,
+        ),
+        error="Previous launch failed." if status is RunStatus.FAILED else None,
+    )
+    store.save(stopped)
+    request = _pending_generation()
+    if kind == "script":
+        script = "Notice the room around you."
+        config = ScriptRunConfig(
+            profile=request.profile,
+            target=request.target,
+            tts=request.tts,
+            processing=request.processing,
+        )
+        promoted = store.promote_queued_script_run(
+            RUN_ID,
+            script=script,
+            source_name="retained.md",
+            resolved_config=config,
+            model_metadata=request.model_metadata,
+        )
+        store.write_timeline(
+            RUN_ID,
+            build_script_timeline(
+                run_id=RUN_ID,
+                script=script,
+                created_at=promoted.created_at,
+            ),
+        )
+    else:
+        store.write_generation_request(RUN_ID, request)
+        promoted = store.load(RUN_ID)
+        store.write_generation_request(RUN_ID, request)
+        assert store.load(RUN_ID) == promoted
+    assert promoted.status is status
+    assert promoted.recovery == stopped.recovery
+    assert promoted.created_at == stopped.created_at
+    assert promoted.error == stopped.error
+    restarted_store = RunStore(tmp_path)
+    assert restarted_store.load(RUN_ID) == promoted
+    if kind == "script":
+        finished = LocalWorker(restarted_store).resume(RUN_ID)
+        assert finished.status is RunStatus.COMPLETED
+        assert finished.recovery is not None
+        assert finished.recovery.process_attempts == 4
+        assert finished.recovery.resume_count == 3
+    else:
+        active = restarted_store.restart_generation(RUN_ID, owner_id="new-server", pid=os.getpid())
+        assert active.recovery is not None
+        assert active.recovery.process_attempts == 4
+        assert active.recovery.resume_count == 3
+        assert active.execution is not None and active.execution.attempt_id is not None
+        restarted_store.interrupt_active_run(
+            RUN_ID, attempt_id=active.execution.attempt_id, kind="test", message="Stopped again."
+        )
+        again = RunStore(tmp_path).restart_generation(
+            RUN_ID, owner_id="third-server", pid=os.getpid()
+        )
+        assert again.recovery is not None
+        assert again.recovery.process_attempts == 5
+        assert again.recovery.resume_count == 4

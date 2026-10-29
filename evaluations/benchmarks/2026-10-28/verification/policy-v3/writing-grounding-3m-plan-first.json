@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "policy_reassessment_of_existing_verification",
+  "policy_id": "normalized-word-mismatch-review-v3",
+  "created_at": "2026-10-29T01:57:44.349662+00:00",
+  "no_new_asr_inference": true,
+  "no_new_recognition_claim": true,
+  "classification_only": true,
+  "source_code_modified": false,
+  "original_report": "evaluations/benchmarks/2026-10-28/verification/writing-grounding-3m-plan-first.json",
+  "original_report_sha256": "f5ff9400a6f9cbbf97c80215c4af0b0d397fd8d60f55e9f176bddd71c9f41ffd",
+  "original_verification_created_at": "2026-10-29T00:32:29.774659+00:00",
+  "original_status": "pass",
+  "status": "review",
+  "policy_status": "review",
+  "policy_reasons": [
+    "Existing ASR alignment contains normalized word edits; listening review is required."
+  ],
+  "listening_review_required": true,
+  "normalized_word_edit_count": 4,
+  "original_metrics": {
+    "expected_word_count": 214,
+    "observed_word_count": 216,
+    "word_error_rate": 0.018691588785046728,
+    "ordered_word_coverage": 0.9906542056074766,
+    "matches": 212,
+    "deletions": 0,
+    "insertions": 2,
+    "substitutions": 2,
+    "longest_contiguous_error_span": 2,
+    "possible_truncation": false
+  },
+  "original_failure_reasons": [],
+  "original_review_reasons": [],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/plan_first/production-runs/4f682c67-49d1-4a8e-82e1-ff2419982ad8/narration.wav",
+  "audio_sha256": "663fa7b1da5a2da2b3a3ea9aeccb5fa41bc9df047f7b370efab8d1941fdd6efe",
+  "audio_state_at_reassessment": {
+    "sha256": "663fa7b1da5a2da2b3a3ea9aeccb5fa41bc9df047f7b370efab8d1941fdd6efe",
+    "size_bytes": 8649826,
+    "mtime_ns": 1793233729594716653
+  },
+  "expected_text_sha256": "99da9063ad15ca0cf71cd8ad9111d6c8169bb98d127e3675cf52866b97f4d64f",
+  "existing_asr_engine": "mlx-whisper",
+  "existing_pcm_pass": true,
+  "existing_pcm_receipt": {
+    "frame_count": 4324891,
+    "sample_rate": 24000,
+    "duration_seconds": 180.20379166666666,
+    "nonfinite_samples": 0,
+    "peak": 0.50115966796875,
+    "rms": 0.04870279853913288,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.4402397070247475,
+    "leading_silence_seconds": 0.06,
+    "trailing_silence_seconds": 17.46,
+    "zero_crossing_fraction": 0.05081655255971828,
+    "difference_to_signal_energy": 0.06045572789755233,
+    "speech_established_by_pcm": false,
+    "channel_count": 1
+  },
+  "existing_pcm_pass_basis": "Inherited original pass receipt with recorded PCM diagnostics and no failure/review reasons.",
+  "existing_qualification_chain": {},
+  "policy": {
+    "any_insertion_deletion_or_substitution": "review",
+    "zero_edits_with_existing_pcm_pass": "pass",
+    "original_fail": "fail",
+    "mismatches_are_not_automatic_rejection": true
+  },
+  "limits": [
+    "Derived classification of existing receipts only; no new ASR or acoustic inspection.",
+    "Word differences may come from recognition or speech; listening must resolve them.",
+    "A zero-edit existing receipt is not a claim of newly established word-perfect audio.",
+    "Original failed receipts, including Vox full-file ASR, remain unchanged."
+  ],
+  "publication": {
+    "schema_version": 1,
+    "kind": "compact_verification_receipt",
+    "original_receipt_sha256": "a7595bf68bfa5e8818072a5748abf28534fb49103f00ef876301bd00b7bc4dd8",
+    "original_status": "review",
+    "full_trace_included": false,
+    "referenced_receipt_hashes": "original_receipt_bytes"
+  }
+}

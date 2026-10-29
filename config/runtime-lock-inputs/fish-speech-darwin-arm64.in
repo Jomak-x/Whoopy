@@ -1,0 +1,28 @@
+# Fish Speech v1.4.3 production-inference closure for CPython 3.10.19 on
+# macOS ARM64. Versions reproduce the environment that passed Whoopy's real
+# reference-conditioned synthesis probe on this target.
+#
+# This is intentionally not Fish's full `.[stable]` dependency set. Whoopy's
+# JSON-lines worker performs file-based inference only; it does not import the
+# upstream microphone, training, Web UI, dataset, ASR, or telemetry features.
+# In particular, upstream PyAudio has no macOS ARM64 wheel and is irrelevant to
+# this worker. The exact upstream source is installed separately with
+# `--no-deps`; the release smoke test is authoritative for this curated closure.
+
+click==8.4.2
+einx==0.2.2
+einops==0.8.2
+hydra-core==1.3.4
+lightning==2.6.5
+loguru==0.7.3
+loralib==0.1.2
+natsort==8.4.0
+numpy==1.26.4
+setuptools-scm==10.2.1
+soundfile==0.14.0
+torch==2.4.1
+torchaudio==2.4.1
+tqdm==4.69.1
+transformers==5.14.1
+vector-quantize-pytorch==1.14.24
+wheel==0.47.0

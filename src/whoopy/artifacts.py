@@ -183,9 +183,9 @@ class TargetPlatform(BaseModel):
     def current(cls) -> TargetPlatform:
         operating_system = platform.system().lower()
         architecture = platform.machine().lower()
-        if architecture in {"amd64", "x64"}:
+        if architecture in {"amd64", "x64", "x86-64"}:
             architecture = "x86_64"
-        elif architecture == "aarch64":
+        elif architecture in {"aarch64", "arm64e"}:
             architecture = "arm64"
         return cls(operating_system=operating_system, architecture=architecture)
 
@@ -688,7 +688,7 @@ class ArtifactInstaller:
         reused: list[str] = []
         resolved = list(artifacts)
         for artifact in resolved:
-            state = self.store.inspect(artifact)
+            state = self.store.inspect(artifact, verify_digest=True)
             if state.state is ArtifactState.INSTALLED:
                 self.status_callback(f"Reusing {artifact.display_name}")
                 reused.append(artifact.artifact_id)
@@ -725,8 +725,14 @@ class ArtifactInstaller:
         partial = destination.with_name(f"{destination.name}.part")
 
         if destination.exists():
-            state = self.store.inspect(artifact, verify_digest=True)
-            if state.state is ArtifactState.CORRUPT:
+            # An intact archive with a missing/stale extracted tree is repairable
+            # from this cache. Quarantine only bad download bytes, otherwise an
+            # offline reinstall would discard its own valid recovery source.
+            download_valid = (
+                destination.stat().st_size == artifact.size_bytes
+                and _sha256(destination) == artifact.sha256
+            )
+            if not download_valid:
                 quarantined = self.store.quarantine_file(destination, artifact)
                 self.status_callback(f"Quarantined invalid file at {quarantined}")
 

@@ -15,20 +15,80 @@ import inspect
 import json
 import os
 import sys
+import wave
 from pathlib import Path
+from typing import Any
+
+MOSS_DURATION_BUDGET_STRATEGY = "moss-text-pace-v1"
+MOSS_MAX_DURATION_TOKENS = 1_500
+MOSS_MIN_GENERATION_TOKENS = 96
+MOSS_MAX_GENERATION_TOKENS = 1_536
+
+
+def _validated_generation_budget(request: dict[str, object]) -> tuple[int, int]:
+    """Fail closed unless the caller supplies the reviewed bounded policy."""
+
+    if request.get("duration_budget_strategy") != MOSS_DURATION_BUDGET_STRATEGY:
+        raise ValueError(f"duration_budget_strategy must be {MOSS_DURATION_BUDGET_STRATEGY}")
+    duration_value = request.get("duration_tokens")
+    if not isinstance(duration_value, int) or isinstance(duration_value, bool):
+        raise ValueError("duration_tokens must be an integer")
+    duration_tokens = duration_value
+    if not 1 <= duration_tokens <= MOSS_MAX_DURATION_TOKENS:
+        raise ValueError("duration_tokens must be between 1 and 1500")
+    maximum_value = request.get("max_new_tokens")
+    if not isinstance(maximum_value, int) or isinstance(maximum_value, bool):
+        raise ValueError("max_new_tokens must be an integer")
+    max_new_tokens = maximum_value
+    if not MOSS_MIN_GENERATION_TOKENS <= max_new_tokens <= MOSS_MAX_GENERATION_TOKENS:
+        raise ValueError("max_new_tokens must be between 96 and 1536")
+    maximum_for_duration = min(
+        MOSS_MAX_GENERATION_TOKENS,
+        max(MOSS_MIN_GENERATION_TOKENS, (duration_tokens * 5 + 3) // 4 + 64),
+    )
+    if max_new_tokens > maximum_for_duration:
+        raise ValueError("max_new_tokens exceeds the reviewed duration-derived ceiling")
+    return duration_tokens, max_new_tokens
 
 
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--codec", type=Path, required=True)
-    parser.add_argument("--reference-audio", type=Path, required=True)
+    parser.add_argument("--reference-audio", type=Path)
     return parser.parse_args()
 
 
 def _reply(payload: dict[str, object]) -> None:
     sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
     sys.stdout.flush()
+
+
+def _load_pcm16_wav(path: Path) -> tuple[Any, int]:
+    """Load Whoopy's validated PCM16 reference without TorchCodec/FFmpeg.
+
+    PyTorch 2.9 routes ``torchaudio.load`` through optional TorchCodec. Voice
+    references entering this worker are already bounded PCM16 WAV artifacts,
+    so requiring a system multimedia decoder would add a large, unrelated
+    runtime dependency and weaken offline portability.
+    """
+
+    import numpy as np
+    import torch
+
+    with wave.open(str(path), "rb") as source:
+        channels = source.getnchannels()
+        sample_width = source.getsampwidth()
+        sample_rate = source.getframerate()
+        compression = source.getcomptype()
+        frames = source.readframes(source.getnframes())
+    if channels not in {1, 2} or sample_width != 2 or compression != "NONE":
+        raise ValueError("MOSS reference must be uncompressed mono or stereo PCM16 WAV")
+    pcm = np.frombuffer(frames, dtype="<i2")
+    if pcm.size == 0 or pcm.size % channels:
+        raise ValueError("MOSS reference WAV contains invalid or empty PCM frames")
+    waveform = pcm.reshape(-1, channels).T.copy()
+    return torch.from_numpy(waveform).float().div_(32_768), int(sample_rate)
 
 
 def main() -> int:
@@ -83,37 +143,39 @@ def main() -> int:
     ).to(device)
     model.eval()
 
-    # Encoding the same reference for every sentence is expensive. MOSS v1.5
-    # uses the stereo Audio Tokenizer v2, while the flagship processor's helper
-    # currently downmixes before calling that tokenizer. Prepare the required
-    # channel count explicitly so a normal mono consented reference remains
-    # usable without changing the original recording on disk.
-    reference_waveform, reference_rate = torchaudio.load(str(args.reference_audio.resolve()))
     native_rate = int(processor.model_config.sampling_rate)
-    if int(reference_rate) != native_rate:
-        reference_waveform = torchaudio.functional.resample(
-            reference_waveform,
-            int(reference_rate),
-            native_rate,
+    reference_codes = None
+    if args.reference_audio is not None:
+        # Encoding the same reference for every sentence is expensive. MOSS v1.5
+        # uses the stereo Audio Tokenizer v2, while the flagship processor's helper
+        # currently downmixes before calling that tokenizer. Prepare the required
+        # channel count explicitly so a normal mono consented reference remains
+        # usable without changing the original recording on disk.
+        reference_waveform, reference_rate = _load_pcm16_wav(args.reference_audio.resolve())
+        if int(reference_rate) != native_rate:
+            reference_waveform = torchaudio.functional.resample(
+                reference_waveform,
+                int(reference_rate),
+                native_rate,
+            )
+        required_channels = int(getattr(processor.audio_tokenizer, "number_channels", 1))
+        if reference_waveform.shape[0] == 1 and required_channels == 2:
+            reference_waveform = reference_waveform.repeat(2, 1)
+        elif reference_waveform.shape[0] != required_channels:
+            reference_waveform = reference_waveform[:required_channels]
+        prepared_reference = processor.loudness_normalize(reference_waveform).to(device)
+        encoded_reference = processor.audio_tokenizer.batch_encode(
+            [prepared_reference],
+            num_quantizers=processor.model_config.n_vq,
         )
-    required_channels = int(getattr(processor.audio_tokenizer, "number_channels", 1))
-    if reference_waveform.shape[0] == 1 and required_channels == 2:
-        reference_waveform = reference_waveform.repeat(2, 1)
-    elif reference_waveform.shape[0] != required_channels:
-        reference_waveform = reference_waveform[:required_channels]
-    prepared_reference = processor.loudness_normalize(reference_waveform).to(device)
-    encoded_reference = processor.audio_tokenizer.batch_encode(
-        [prepared_reference],
-        num_quantizers=processor.model_config.n_vq,
-    )
-    reference_length = int(encoded_reference.audio_codes_lengths[0].item())
-    reference_codes = (
-        encoded_reference.audio_codes[:, 0, :reference_length]
-        .transpose(0, 1)
-        .contiguous()
-        .cpu()
-        .long()
-    )
+        reference_length = int(encoded_reference.audio_codes_lengths[0].item())
+        reference_codes = (
+            encoded_reference.audio_codes[:, 0, :reference_length]
+            .transpose(0, 1)
+            .contiguous()
+            .cpu()
+            .long()
+        )
     _reply(
         {
             "status": "ready",
@@ -138,13 +200,19 @@ def main() -> int:
                 raise ValueError("text cannot be empty")
             seed = int(request.get("seed", 42))
             torch.manual_seed(seed)
-            references = [reference_codes] if request.get("use_reference", True) else None
-            user_message = processor.build_user_message(
-                text=text,
-                reference=references,
-                instruction=str(request.get("instruction") or "").strip() or None,
-                language=str(request.get("language") or "English"),
-            )
+            use_reference = bool(request.get("use_reference", True))
+            if use_reference and reference_codes is None:
+                raise ValueError("reference mode requires --reference-audio at worker startup")
+            references = [reference_codes] if use_reference else None
+            duration_tokens, max_new_tokens = _validated_generation_budget(request)
+            message_arguments: dict[str, object] = {
+                "text": text,
+                "reference": references,
+                "instruction": str(request.get("instruction") or "").strip() or None,
+                "language": str(request.get("language") or "English"),
+            }
+            message_arguments["tokens"] = duration_tokens
+            user_message = processor.build_user_message(**message_arguments)
             batch = processor([[user_message]], mode="generation")
             with torch.no_grad():
                 # The 5B Local Transformer follows the broader Transformers
@@ -157,7 +225,7 @@ def main() -> int:
                 generation_options: dict[str, object] = {
                     "input_ids": batch["input_ids"].to(device),
                     "attention_mask": batch["attention_mask"].to(device),
-                    "max_new_tokens": 2_048,
+                    "max_new_tokens": max_new_tokens,
                     "do_sample": True,
                     "audio_temperature": 1.7,
                     "audio_top_p": 0.8,

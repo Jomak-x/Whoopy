@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-29T00:35:53.300453+00:00",
+  "status": "pass",
+  "failure_reasons": [],
+  "review_reasons": [],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/recipe_whole_session/production-runs/ad1a5c6d-8068-4735-adf5-cdf709ee68d4/narration.wav",
+  "audio_sha256": "139ca98bee901ac487f8f626bb0c0bc2f5195bf0066e38351fba1e91cfe92330",
+  "expected_text_sha256": "09b2258d547f5a885bab65d469215cf78f489feae02b9bd505a55e4b60a822a2",
+  "mode": "narration",
+  "pcm": {
+    "frame_count": 4404266,
+    "sample_rate": 24000,
+    "duration_seconds": 183.51108333333335,
+    "nonfinite_samples": 0,
+    "peak": 0.50115966796875,
+    "rms": 0.04261249817262164,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.5879468177855275,
+    "leading_silence_seconds": 0.06,
+    "trailing_silence_seconds": 7.64,
+    "zero_crossing_fraction": 0.0356127526386355,
+    "difference_to_signal_energy": 0.06258946785128902,
+    "speech_established_by_pcm": false,
+    "channel_count": 1
+  },
+  "asr": {
+    "engine": "mlx-whisper",
+    "model_path": "/Users/jakob/.cache/huggingface/hub/models--mlx-community--whisper-small-mlx/snapshots/45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_revision": "45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_weights_sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
+    "model_config_sha256": "e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e",
+    "audio_sha256": "139ca98bee901ac487f8f626bb0c0bc2f5195bf0066e38351fba1e91cfe92330",
+    "language": "en",
+    "inference_seconds": 3.4715437089907937,
+    "versions": {
+      "mlx-whisper": "0.4.3",
+      "mlx": "0.32.4",
+      "mlx-metal": "0.32.4",
+      "numpy": "2.4.6",
+      "soundfile": "0.14.0"
+    },
+    "python": "3.11.16",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "decoding": {
+      "language": "en",
+      "temperature": 0.0,
+      "condition_on_previous_text": false,
+      "expected_text_prompted": false
+    },
+    "gpu_lock": "/tmp/whoopy-benchmark-gpu.lock",
+    "gpu_lock_wait_seconds": 177.30746962496778,
+    "network": "offline; existing local snapshot only"
+  },
+  "content": {
+    "expected_word_count": 157,
+    "observed_word_count": 157,
+    "word_error_rate": 0.006369426751592357,
+    "ordered_word_coverage": 0.9936305732484076,
+    "matches": 156,
+    "deletions": 0,
+    "insertions": 0,
+    "substitutions": 1,
+    "longest_contiguous_error_span": 1,
+    "possible_truncation": false
+  },
+  "limits": [
+    "ASR is independent evidence, not a human transcription or a proof of perfect speech.",
+    "Noise rejection requires content agreement; duration and RMS do not prove speech.",
+    "Warmth, naturalness, voice identity, and quality require listener judgment.",
+    "Narration mode permits intentional silence; expected words still require recognition."
+  ],
+  "thresholds": {
+    "pass_max_wer": 0.15,
+    "pass_min_coverage": 0.85,
+    "fail_wer_above": 0.35,
+    "fail_coverage_below": 0.65,
+    "fail_contiguous_error_span_at_least": 8,
+    "review_contiguous_error_span_at_least": 3
+  },
+  "verifier_source_sha256": "7e5e6f801ba7e7841ef386771ab3298cf841db848e1b16de6db161c7183f6b26",
+  "harness_source_sha256": "a35b1cc25f4418de82b402e1ca5bc361ea22c6c6ee13eeee778c84db8854b8b5",
+  "report_before_narration_provenance_sha256": "b1e7052abb344b9f755b1868f8e434dcdf931b0d2c998ba8c27de38a64fb8215",
+  "narration_provenance": {
+    "audio_manifest": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/recipe_whole_session/production-runs/ad1a5c6d-8068-4735-adf5-cdf709ee68d4/audio-manifest.json",
+    "audio_manifest_sha256": "c98bd8900f89217657c9f5f53165ad1565d41d0f92ec89f175fefab241e72cef",
+    "timeline": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/recipe_whole_session/production-runs/ad1a5c6d-8068-4735-adf5-cdf709ee68d4/timeline.json",
+    "timeline_sha256": "22e981571de96f3de02b2dabb11f4b6b9d40037f6e59fe55c6a1cdd686aa04a5",
+    "expected_spoken_file": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/recipe_whole_session/spoken.txt",
+    "expected_spoken_file_sha256": "09b2258d547f5a885bab65d469215cf78f489feae02b9bd505a55e4b60a822a2",
+    "full_pcm_sha256": "386f12d00a298d9df883ababd3c190d1fb377c3113ca708e855c58a3383a9629",
+    "all_segment_pcm_hashes_match": true,
+    "all_frames_contiguously_covered": true,
+    "spoken_words_match_canonical_timeline": true,
+    "speech_seconds": 81.07208333333334,
+    "intentional_silence_seconds": 102.439,
+    "intentional_silence_segment_count": 8,
+    "intentional_silence_spans": [
+      {
+        "segment_id": "silence-0001",
+        "start_frame": 181845,
+        "end_frame": 516693,
+        "frame_count": 334848,
+        "exact_zero_pcm": true,
+        "pcm_sha256": "5540ea73acf3008242444d369700f37e6ff06ca68fa3b35aabe6bdcd207ee583"
+      },
+      {
+        "segment_id": "silence-0002",
+        "start_frame": 779995,
+        "end_frame": 1044595,
+        "frame_count": 264600,
+        "exact_zero_pcm": true,
+        "pcm_sha256": "a7dd386052b0a3b0245d01a8654e27597601a7fd82556f31b1a5d8f455feff2b"
+      },
+      {
+        "segment_id": "silence-0003",
+        "start_frame": 1343872,
+        "end_frame": 1535848,
+        "frame_count": 191976,
+        "exact_zero_pcm": true,
+        "pcm_sha256": "e3b75b89b20c1e9fad548b49828e02602bc90c817da96bd680b9e2ca823bd1d4"
+      },
+      {
+        "segment_id": "silence-0004",
+        "start_frame": 1835001,
+        "end_frame": 2219001,
+        "frame_count": 384000,
+        "exact_zero_pcm": true,
+        "pcm_sha256": "351a8054b23144894668c6a51d5dbba82f56523ef43cc45b6f4d7060a969c31a"
+      },
+      {
+        "segment_id": "silence-0005",
+        "start_frame": 2480766,
+        "end_frame": 2864766,
+        "frame_count": 384000,
+        "exact_zero_pcm": true,
+        "pcm_sha256": "351a8054b23144894668c6a51d5dbba82f56523ef43cc45b6f4d7060a969c31a"
+      },
+      {
+        "segment_id": "silence-0006",
+        "start_frame": 3048507,
+        "end_frame": 3395067,
+        "frame_count": 346560,
+        "exact_zero_pcm": true,
+        "pcm_sha256": "0cc7c7aff7b3df3f21676fb20275ad314d22abbf34a01af47165ec6203fb044c"
+      },
+      {
+        "segment_id": "silence-0007",
+        "start_frame": 3549251,
+        "end_frame": 3919187,
+        "frame_count": 369936,
+        "exact_zero_pcm": true,
+        "pcm_sha256": "75d74abe31f37e15e2dacfbcd0135e989b96c29a63a5e84a85fe9e95be6ea74a"
+      },
+      {
+        "segment_id": "silence-0008",
+        "start_frame": 4221650,
+        "end_frame": 4404266,
+        "frame_count": 182616,
+        "exact_zero_pcm": true,
+        "pcm_sha256": "8ac229292a3174005c615931064787c907cdd89a3be704e231e9fec2a71a6e3d"
+      }
+    ],
+    "proof_scope": "PCM/timeline intent evidence; ASR content status is independent.",
+    "narration_provenance_helper_source_sha256": "1f41b69259be40eabfd82af7cd642da8ee324ecd498bb01673deeac08f40fb42"
+  },
+  "publication": {
+    "schema_version": 1,
+    "kind": "compact_verification_receipt",
+    "original_receipt_sha256": "cac6117990d9291fdb2fc43137299c74b6dcc4b7e58a9161f446a8b4963ccf6f",
+    "original_status": "pass",
+    "full_trace_included": false,
+    "referenced_receipt_hashes": "original_receipt_bytes"
+  }
+}

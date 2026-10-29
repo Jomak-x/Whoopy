@@ -6,7 +6,7 @@ from array import array
 from sys import byteorder
 
 from whoopy.audio.models import SAMPLE_RATE, PcmAudio
-from whoopy.ports import AdapterMetadata
+from whoopy.ports import AdapterMetadata, SpeechCapabilities
 from whoopy.timeline import SpeechSegment
 
 FIXTURE_AMPLITUDE = 5_000
@@ -47,6 +47,7 @@ class FixtureSpeechSynthesizer:
     # Metadata is the single cache identity source for fixture and real models.
     cache_identity: str = metadata.cache_identity
     sample_rate: int = SAMPLE_RATE
+    capabilities = SpeechCapabilities()
 
     def synthesize(self, segment: SpeechSegment) -> PcmAudio:
         words = max(1, len(segment.text.split()))

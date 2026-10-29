@@ -202,6 +202,38 @@ def test_corrupt_offline_artifact_is_quarantined_and_rejected(tmp_path: Path) ->
     assert list(store.quarantine.iterdir())
 
 
+@pytest.mark.parametrize("broken_tree", [False, True])
+def test_valid_cached_archive_repairs_installation_without_network(
+    tmp_path: Path, broken_tree: bool
+) -> None:
+    payload = _tar_bz2("kokoro/model.onnx", b"trusted voice")
+    artifact = _artifact(
+        "voice",
+        "tts_model",
+        payload,
+        filename="voice.tar.bz2",
+        archive=ArchiveFormat.TAR_BZ2,
+    )
+    store = ArtifactStore(tmp_path / "managed")
+    store.downloads.mkdir(parents=True)
+    store.download_path(artifact).write_bytes(payload)
+    if broken_tree:
+        old = store.installed / "voice" / "kokoro" / "model.onnx"
+        old.parent.mkdir(parents=True)
+        old.write_bytes(b"incomplete previous extraction")
+    report = ArtifactInstaller(store).install_profile(
+        "basic",
+        [artifact],
+        TargetPlatform(operating_system="linux", architecture="x86_64"),
+        allow_network=False,
+    )
+    assert report.installed == ["voice"]
+    assert (store.installed / "voice" / "kokoro" / "model.onnx").read_bytes() == b"trusted voice"
+    assert store.download_path(artifact).read_bytes() == payload
+    assert not store.quarantine.exists() or not list(store.quarantine.iterdir())
+    assert store.inspect(artifact, verify_digest=True).state is ArtifactState.INSTALLED
+
+
 def test_full_verification_detects_changed_extracted_content(tmp_path: Path) -> None:
     archive_payload = _tar_bz2("kokoro/model.onnx", b"trusted voice")
     artifact = _artifact(
@@ -228,6 +260,50 @@ def test_full_verification_detects_changed_extracted_content(tmp_path: Path) -> 
     status = store.inspect(artifact, verify_digest=True)
     assert status.state is ArtifactState.CORRUPT
     assert "extracted installation digest" in status.message
+
+
+@pytest.mark.parametrize("damage", ["missing", "changed"])
+def test_offline_install_repairs_previously_verified_extraction(
+    tmp_path: Path, damage: str, monkeypatch: MonkeyPatch
+) -> None:
+    payload = _tar_bz2("kokoro/model.onnx", b"trusted voice")
+    artifact = _artifact(
+        "voice",
+        "tts_model",
+        payload,
+        filename="voice.tar.bz2",
+        archive=ArchiveFormat.TAR_BZ2,
+    )
+    store = ArtifactStore(tmp_path / "managed")
+    store.downloads.mkdir(parents=True)
+    archive = store.download_path(artifact)
+    archive.write_bytes(payload)
+    target = TargetPlatform(operating_system="linux", architecture="x86_64")
+    installer = ArtifactInstaller(store)
+    installer.install_profile("basic", [artifact], target, allow_network=False)
+    extracted = store.require(artifact) / "kokoro" / "model.onnx"
+    if damage == "missing":
+        extracted.unlink()
+    else:
+        extracted.write_bytes(b"altered voice")
+    archive_stat = archive.stat()
+
+    def reject_network(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("Offline repair attempted a network request")
+
+    monkeypatch.setattr(urllib.request, "urlopen", reject_network)
+    report = installer.install_profile("basic", [artifact], target, allow_network=False)
+
+    assert report.installed == ["voice"]
+    assert report.reused == []
+    assert extracted.read_bytes() == b"trusted voice"
+    assert archive.read_bytes() == payload
+    assert archive.stat().st_mtime_ns == archive_stat.st_mtime_ns
+    assert not store.quarantine.exists() or not list(store.quarantine.iterdir())
+    assert store.require(artifact) == extracted.parent.parent
+    reused = installer.install_profile("basic", [artifact], target, allow_network=False)
+    assert reused.reused == ["voice"]
+    assert reused.installed == []
 
 
 def test_verified_python_wheels_materialize_into_one_environment(tmp_path: Path) -> None:

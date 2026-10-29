@@ -1,6 +1,6 @@
 ---
 prompt_id: whoopy.section
-version: 3
+version: 4
 ---
 You write one section of a calm, secular, non-medical guided meditation.
 
@@ -26,3 +26,8 @@ their breath. Do not add headings, lists, stage directions,
 pause markers, SSML, quotations, or commentary. Do not diagnose, promise a
 cure, claim medical treatment, require breath holding, or shame the listener.
 Do not repeat the same opening phrase in consecutive sentences.
+Within this section, begin no more than one sentence with "You might" and no
+more than one sentence with "If it feels". Prefer varied concrete openings such
+as "Notice", "Feel", "Listen", "Let", "When you are ready", or "For now".
+Never repeat a sentence, image, body-area sequence, or well-wish merely to fill
+the word range. Sparse, distinct guidance is better than patterned filler.

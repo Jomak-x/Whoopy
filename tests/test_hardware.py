@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from whoopy.hardware import HardwareSnapshot, diagnose, load_runtime_profiles
+from pytest import MonkeyPatch
+
+from whoopy.hardware import HardwareSnapshot, diagnose, inspect_hardware, load_runtime_profiles
 
 
 def _snapshot(*, total: float, available: float, disk: float) -> HardwareSnapshot:
@@ -75,3 +77,18 @@ def test_named_profile_can_be_checked_without_selecting_a_larger_one() -> None:
     assert result.supported is True
     assert result.selected_profile is not None
     assert result.selected_profile.name == "lite"
+
+
+def test_hardware_inspection_exposes_only_working_accelerator_probes(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("whoopy.hardware.platform.system", lambda: "Linux")
+    monkeypatch.setattr("whoopy.hardware.platform.machine", lambda: "x86_64")
+    monkeypatch.setattr(
+        "whoopy.hardware._has_working_command",
+        lambda command: command[0] == "vulkaninfo",
+    )
+
+    snapshot = inspect_hardware(tmp_path)
+
+    assert snapshot.accelerators == ["cpu", "vulkan"]

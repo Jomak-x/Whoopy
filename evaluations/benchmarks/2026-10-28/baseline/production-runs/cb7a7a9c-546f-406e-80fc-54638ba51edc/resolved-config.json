@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "mode": "script_file",
+  "profile": "basic",
+  "target": {
+    "operating_system": "darwin",
+    "architecture": "arm64"
+  },
+  "tts": {
+    "backend": "kokoro",
+    "voice_name": "am_michael",
+    "speaker_id": 16,
+    "speed": 0.6,
+    "num_threads": 2,
+    "provider": "cpu",
+    "language": "en-us",
+    "seed": 42,
+    "instruction": "",
+    "delivery_override": null,
+    "intensity_override": null,
+    "pace_override": "slow",
+    "use_reference": true,
+    "voice_mode": "preset",
+    "qwen_model_revision": null,
+    "qwen_runtime_revision": null,
+    "qwen_voice_design_preset": "warm_meditation",
+    "reference_id": null,
+    "reference_revision": null,
+    "reference_revision_id": null,
+    "reference_audio_sha256": null,
+    "reference_transcript_sha256": null,
+    "reference_consent_scope": null
+  },
+  "processing": {
+    "trim_threshold_dbfs": -45.0,
+    "edge_residual_ms": 60,
+    "edge_fade_ms": 40,
+    "target_peak_dbfs": -6.0,
+    "max_gain_db": 3.0
+  },
+  "generation": null,
+  "requested_duration_seconds": null
+}

@@ -95,6 +95,7 @@ class RunStage(StrEnum):
     MODEL_STARTUP = "model_startup"
     SYNTHESIZING = "synthesizing"
     ASSEMBLING = "assembling"
+    ENCODING = "encoding"
     QUALITY_CHECK = "quality_check"
     COMPLETED = "completed"
 
@@ -238,6 +239,7 @@ class RunRecord(BaseModel):
     status: RunStatus
     prompt: PromptText
     source_kind: Literal["fixture_prompt", "script_file", "generated_prompt"] = "fixture_prompt"
+    audience: Literal["studio", "lab", "system"] = "studio"
     created_at: AwareDatetime
     updated_at: AwareDatetime
     script_artifact: Literal["script.md"] | None = None
@@ -437,6 +439,7 @@ class RunStore:
         *,
         run_id: UUID | None = None,
         created_at: datetime | None = None,
+        audience: Literal["studio", "lab", "system"] = "studio",
     ) -> RunRecord:
         """Create a queued run and write its initial record before returning."""
 
@@ -447,6 +450,7 @@ class RunStore:
                 run_id=active_run_id,
                 status=RunStatus.QUEUED,
                 prompt=prompt,
+                audience=audience,
                 created_at=timestamp,
                 updated_at=timestamp,
                 recovery=RunRecovery(
@@ -481,6 +485,7 @@ class RunStore:
         generation_request: PendingGenerationConfig,
         run_id: UUID | None = None,
         created_at: datetime | None = None,
+        audience: Literal["studio", "lab", "system"] = "studio",
     ) -> RunRecord:
         """Atomically save a schema-v6 prompt run before its first LLM call."""
 
@@ -493,6 +498,7 @@ class RunStore:
                 status=RunStatus.QUEUED,
                 prompt=prompt,
                 source_kind="generated_prompt",
+                audience=audience,
                 created_at=timestamp,
                 updated_at=timestamp,
                 generation_request_artifact=GENERATION_REQUEST_FILENAME,
@@ -544,6 +550,7 @@ class RunStore:
         model_metadata: RunModelMetadata,
         run_id: UUID | None = None,
         created_at: datetime | None = None,
+        audience: Literal["studio", "lab", "system"] = "studio",
     ) -> RunRecord:
         """Atomically create a queued schema-v4 run and its immutable inputs."""
 
@@ -556,6 +563,7 @@ class RunStore:
                 status=RunStatus.QUEUED,
                 prompt=f"Render local script: {source_name}",
                 source_kind="script_file",
+                audience=audience,
                 created_at=timestamp,
                 updated_at=timestamp,
                 script_artifact=SCRIPT_FILENAME,
@@ -612,6 +620,7 @@ class RunStore:
         model_metadata: RunModelMetadata,
         run_id: UUID,
         created_at: datetime,
+        audience: Literal["studio", "lab", "system"] = "studio",
     ) -> RunRecord:
         """Atomically promote validated draft artifacts into a queued schema-v5 run."""
 
@@ -624,6 +633,7 @@ class RunStore:
                 status=RunStatus.QUEUED,
                 prompt=prompt,
                 source_kind="generated_prompt",
+                audience=audience,
                 created_at=created_at,
                 updated_at=created_at,
                 script_artifact=SCRIPT_FILENAME,
@@ -731,9 +741,11 @@ class RunStore:
         model_metadata: RunModelMetadata,
         promoted_at: datetime | None = None,
     ) -> RunRecord:
-        """Commit script inputs into a pre-created, never-started run UUID."""
+        """Commit script inputs into an unrendered run UUID."""
 
-        placeholder = self._promotable_placeholder(run_id, allow_partial_artifacts=True)
+        placeholder = self._promotable_placeholder(
+            run_id, allow_partial_artifacts=True, allow_stopped=True
+        )
         if (
             placeholder.generation_request_artifact is not None
             or self.generation_request_path(placeholder.run_id).exists()
@@ -746,16 +758,24 @@ class RunStore:
             promoted = RunRecord(
                 schema_version=6,
                 run_id=placeholder.run_id,
-                status=RunStatus.QUEUED,
+                status=placeholder.status,
                 prompt=f"Render local script: {source_name}",
                 source_kind="script_file",
+                audience=placeholder.audience,
                 created_at=placeholder.created_at,
                 updated_at=timestamp,
                 script_artifact=SCRIPT_FILENAME,
                 resolved_config_artifact=RESOLVED_CONFIG_FILENAME,
                 model_metadata_artifact=MODEL_METADATA_FILENAME,
                 recovery=placeholder.recovery,
-                execution=RunExecution(stage=RunStage.QUEUED),
+                execution=(
+                    RunExecution(stage=RunStage.QUEUED)
+                    if placeholder.status is RunStatus.QUEUED
+                    else (placeholder.execution or RunExecution(stage=RunStage.QUEUED)).model_copy(
+                        update={"stage": RunStage.COMPILING}
+                    )
+                ),
+                error=placeholder.error,
             )
         except ValidationError as error:
             raise RunStoreError(f"Invalid script run promotion:\n{error}") from error
@@ -832,6 +852,7 @@ class RunStore:
                 status=RunStatus.QUEUED,
                 prompt=placeholder.prompt,
                 source_kind="generated_prompt",
+                audience=placeholder.audience,
                 created_at=placeholder.created_at,
                 updated_at=timestamp,
                 script_artifact=SCRIPT_FILENAME,
@@ -1045,6 +1066,7 @@ class RunStore:
                 status=RunStatus.RUNNING,
                 prompt=active.prompt,
                 source_kind="generated_prompt",
+                audience=active.audience,
                 created_at=active.created_at,
                 updated_at=timestamp,
                 script_artifact=SCRIPT_FILENAME,
@@ -1232,6 +1254,9 @@ class RunStore:
             section_prompt_id=generation.section_prompt_id,
             section_prompt_version=generation.section_prompt_version,
             max_parallel_sections=generation.max_parallel_sections,
+            meditation_kind=generation.meditation_kind,
+            writing_method=generation.writing_method,
+            pacing=generation.pacing,
             model_metadata=model_metadata,
         )
         if actual != request:
@@ -1253,16 +1278,18 @@ class RunStore:
         run_id: UUID | str,
         *,
         allow_partial_artifacts: bool = False,
+        allow_stopped: bool = False,
     ) -> RunRecord:
-        """Validate that promotion cannot overwrite started or immutable work."""
+        """Validate that promotion cannot overwrite active or immutable work."""
 
         placeholder = self.load(run_id)
         recovery = placeholder.recovery
-        if placeholder.status is not RunStatus.QUEUED:
+        stopped = allow_stopped and placeholder.status in (RunStatus.FAILED, RunStatus.INTERRUPTED)
+        if placeholder.status is not RunStatus.QUEUED and not stopped:
             raise RunStoreError(
                 f"Run {placeholder.run_id} is {placeholder.status.value}; only queued runs promote"
             )
-        if recovery is None or recovery.process_attempts != 0:
+        if recovery is None or (not stopped and recovery.process_attempts != 0):
             raise RunStoreError(f"Run {placeholder.run_id} has already started and cannot promote")
         self._assert_no_immutable_inputs(
             placeholder,
@@ -1310,21 +1337,12 @@ class RunStore:
         """Load and validate a run record from disk."""
 
         path = self.record_path(run_id)
-        for attempt in range(5):
-            try:
-                return RunRecord.model_validate_json(path.read_text(encoding="utf-8"))
-            except PermissionError as error:
-                # Windows can briefly deny a concurrent reader while another
-                # process replaces run.json. Retrying keeps the atomic record
-                # boundary observable without weakening validation.
-                if attempt == 4:
-                    raise RunStoreError(f"Could not load run record {path}: {error}") from error
-                time.sleep(0.01)
-            except FileNotFoundError as error:
-                raise RunNotFoundError(f"Run record not found: {path}") from error
-            except (OSError, ValidationError) as error:
-                raise RunStoreError(f"Could not load run record {path}: {error}") from error
-        raise AssertionError("run record retry loop did not return or raise")
+        try:
+            return RunRecord.model_validate_json(self._read_text(path))
+        except FileNotFoundError as error:
+            raise RunNotFoundError(f"Run record not found: {path}") from error
+        except (OSError, ValidationError) as error:
+            raise RunStoreError(f"Could not load run record {path}: {error}") from error
 
     def save(self, record: RunRecord) -> None:
         """Atomically replace a run record so readers never see partial JSON."""
@@ -1365,20 +1383,28 @@ class RunStore:
                     raise RunStoreError(
                         f"Run {record.run_id} cannot be initialized as a generation request"
                     )
-                placeholder = self._promotable_placeholder(record.run_id)
+                placeholder = self._promotable_placeholder(record.run_id, allow_stopped=True)
                 timestamp = written_at or _utc_now()
                 try:
                     upgraded = RunRecord(
                         schema_version=6,
                         run_id=placeholder.run_id,
-                        status=RunStatus.QUEUED,
+                        status=placeholder.status,
                         prompt=placeholder.prompt,
                         source_kind="generated_prompt",
+                        audience=placeholder.audience,
                         created_at=placeholder.created_at,
                         updated_at=timestamp,
                         generation_request_artifact=GENERATION_REQUEST_FILENAME,
                         recovery=placeholder.recovery,
-                        execution=RunExecution(stage=RunStage.QUEUED),
+                        execution=(
+                            RunExecution(stage=RunStage.QUEUED)
+                            if placeholder.status is RunStatus.QUEUED
+                            else (
+                                placeholder.execution or RunExecution(stage=RunStage.QUEUED)
+                            ).model_copy(update={"stage": RunStage.PLANNING})
+                        ),
+                        error=placeholder.error,
                     )
                 except ValidationError as error:
                     raise RunStoreError(f"Invalid generation request upgrade:\n{error}") from error
@@ -1639,6 +1665,24 @@ class RunStore:
         except (OSError, ValidationError) as error:
             raise RunStoreError(f"Could not load model metadata {path}: {error}") from error
 
+    def write_model_metadata(
+        self,
+        run_id: UUID | str,
+        metadata: RunModelMetadata,
+    ) -> Path:
+        """Atomically add runtime evidence while preserving adapter provenance."""
+
+        parsed_run_id = self.parse_run_id(run_id)
+        record = self.load(parsed_run_id)
+        if record.model_metadata_artifact != MODEL_METADATA_FILENAME:
+            raise RunStoreError(f"Run {parsed_run_id} has no model metadata artifact")
+        current = self.load_model_metadata(parsed_run_id)
+        if metadata.tts != current.tts or metadata.llm != current.llm:
+            raise RunStoreError("Runtime telemetry cannot change immutable adapter provenance")
+        path = self.model_metadata_path(parsed_run_id)
+        self._write_json(path, metadata.model_dump_json(indent=2) + "\n")
+        return path
+
     def load_generation_request(self, run_id: UUID | str) -> PendingGenerationConfig:
         """Load and validate the immutable inputs for prompt planning."""
 
@@ -1702,6 +1746,32 @@ class RunStore:
             raise InvalidRunIdError(f"Invalid run ID: {value}") from error
 
     @staticmethod
+    def _read_text(path: Path) -> str:
+        """Read an atomic record across brief Windows replacement conflicts."""
+
+        for attempt in range(5):
+            try:
+                return path.read_text(encoding="utf-8")
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.01)
+        raise AssertionError("record read retry loop did not return or raise")
+
+    @staticmethod
+    def _replace(source: Path, destination: Path) -> None:
+        """Allow short-lived Windows readers to close before atomic replacement."""
+
+        for attempt in range(5):
+            try:
+                os.replace(source, destination)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.01)
+
+    @staticmethod
     def _write_json(path: Path, payload: str) -> None:
         """Write beside the destination, then atomically replace it."""
 
@@ -1717,7 +1787,7 @@ class RunStore:
                 temporary_file.write(payload)
                 temporary_file.flush()
                 os.fsync(temporary_file.fileno())
-            os.replace(temporary_path, path)
+            RunStore._replace(temporary_path, path)
             RunStore._fsync_directory(path.parent)
         except OSError as error:
             raise RunStoreError(f"Could not write {path}: {error}") from error

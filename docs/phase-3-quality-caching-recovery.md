@@ -1,5 +1,7 @@
 # Phase 3: Quality, Caching, And Recovery
 
+> **Historical implementation record.** Local V1 retains these mechanisms behind `whoopy app`; use [troubleshooting](troubleshooting.md) for current commands.
+
 Phase 3 changes Whoopy from “a run either finishes or starts over” into a
 pipeline that can preserve verified work.
 

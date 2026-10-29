@@ -1,5 +1,7 @@
 # Phase 3.5 PR 4: Validated Local Meditation Generation
 
+> **Historical implementation record.** Meditation Engine V2 and the permanent app supersede this milestone. See [the architecture guide](architecture.md).
+
 This PR lets Whoopy draft a meditation with a local Qwen model. It deliberately
 stops before speech: its responsibility is to turn unpredictable model text
 into a trusted plan, script, and canonical timeline. PR 5 connects these

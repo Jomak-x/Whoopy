@@ -1,0 +1,31 @@
+{
+  "samples": [
+    {
+      "label": "Old writing \u2014 grounding",
+      "audio": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/plan_first/production-runs/4f682c67-49d1-4a8e-82e1-ff2419982ad8/narration.wav",
+      "script": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/plan_first/script.md",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/writing-grounding-3m-plan-first.json",
+      "status": "pass",
+      "voice": "am_michael",
+      "speed": 0.8
+    },
+    {
+      "label": "New writing \u2014 grounding",
+      "audio": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/recipe_whole_session/production-runs/ad1a5c6d-8068-4735-adf5-cdf709ee68d4/narration.wav",
+      "script": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/recipe_whole_session/script.md",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/writing-grounding-3m-recipe-whole-session.json",
+      "status": "pass",
+      "voice": "am_michael",
+      "speed": 0.8
+    },
+    {
+      "label": "New writer \u2014 full prompt-to-audio production check",
+      "audio": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/production-new-writer/runs/6b9ab4f4-9b08-4c1b-a7cc-98654dbb6aea/narration.wav",
+      "script": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/production-new-writer/runs/6b9ab4f4-9b08-4c1b-a7cc-98654dbb6aea/script.md",
+      "verification": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/verification/production-new-writer-grounding-3m.json",
+      "status": "pass",
+      "voice": "am_michael",
+      "speed": 0.6
+    }
+  ]
+}

@@ -1,0 +1,356 @@
+{
+  "schema_version": 1,
+  "ffmpeg": "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers",
+  "records": [
+    {
+      "candidate": "baseline-production-kokoro",
+      "raw_verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/baseline-production-kokoro.json",
+      "raw_status": "review",
+      "input": "evaluations/benchmarks/2026-10-28/baseline/production-runs/cb7a7a9c-546f-406e-80fc-54638ba51edc/narration.wav",
+      "input_sha256": "52ba3ba8b5a73768ae242805f648e60f293910fbc6e7d7af51d9d475920e3176",
+      "output": "evaluations/benchmarks/2026-10-28/verification/listening/baseline-production-kokoro-matched.wav",
+      "output_sha256": "ce181cd9f1712899ad6f442ab9cccae502439ee2cedf1fb782a35696a11371cc",
+      "input_measurements": {
+        "integrated_lufs": -25.8,
+        "true_peak_dbfs": -5.9
+      },
+      "gain_db": 2.8000000000000007,
+      "output_measurements": {
+        "integrated_lufs": -23.0,
+        "true_peak_dbfs": -3.1
+      },
+      "target_integrated_lufs": -23.0,
+      "max_true_peak_dbfs": -1.0,
+      "transforms": [
+        "constant volume gain",
+        "PCM16 listening copy"
+      ],
+      "raw_preserved": true,
+      "subjective_voice_quality": "requires listener judgment",
+      "normalization_helper_source_sha256": "571e4990cecb716ef5b0ce902e8d4f251786b867771bf4a2f96607b1366bd98b",
+      "original_raw_verification": "evaluations/benchmarks/2026-10-28/verification/baseline-production-kokoro.json",
+      "original_raw_status": "pass",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/baseline-production-kokoro.json",
+      "status": "review",
+      "policy_status": "review",
+      "listening_review_required": true,
+      "normalized_word_edit_count": 1,
+      "input_mtime_ns_preserved": 1793232131822955871,
+      "output_mtime_ns_preserved": 1793232579688041513,
+      "no_new_asr_inference": true
+    },
+    {
+      "candidate": "chatterbox-v3-synthetic-male",
+      "raw_verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/chatterbox-v3-synthetic-male.json",
+      "raw_status": "pass",
+      "input": "evaluations/benchmarks/2026-10-28/voices/chatterbox-v3-synthetic-male/raw.wav",
+      "input_sha256": "f924d5883c46ecc8631313799a53974e0d8b64f124f58e24430be32e99afabaf",
+      "output": "evaluations/benchmarks/2026-10-28/verification/listening/chatterbox-v3-synthetic-male-matched.wav",
+      "output_sha256": "07260106e43734132719b17fc5b0fa94011283376ac8203e9445e59ff18bcc7c",
+      "input_measurements": {
+        "integrated_lufs": -32.5,
+        "true_peak_dbfs": -13.8
+      },
+      "gain_db": 9.5,
+      "output_measurements": {
+        "integrated_lufs": -23.0,
+        "true_peak_dbfs": -4.3
+      },
+      "target_integrated_lufs": -23.0,
+      "max_true_peak_dbfs": -1.0,
+      "transforms": [
+        "constant volume gain",
+        "PCM16 listening copy"
+      ],
+      "raw_preserved": true,
+      "subjective_voice_quality": "requires listener judgment",
+      "normalization_helper_source_sha256": "571e4990cecb716ef5b0ce902e8d4f251786b867771bf4a2f96607b1366bd98b",
+      "original_raw_verification": "evaluations/benchmarks/2026-10-28/verification/chatterbox-v3-synthetic-male.json",
+      "original_raw_status": "pass",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/chatterbox-v3-synthetic-male.json",
+      "status": "pass",
+      "policy_status": "pass",
+      "listening_review_required": false,
+      "normalized_word_edit_count": 0,
+      "input_mtime_ns_preserved": 1793231781560998416,
+      "output_mtime_ns_preserved": 1793232584227622108,
+      "no_new_asr_inference": true
+    },
+    {
+      "candidate": "kokoro-af-heart-080",
+      "raw_verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/kokoro-af-heart-080.json",
+      "raw_status": "pass",
+      "input": "evaluations/benchmarks/2026-10-28/voices/kokoro-af-heart-080/raw.wav",
+      "input_sha256": "5b60a9636570c8bef5bc06671009f9e94d34bd1fd164c053b0a2dd10e4476964",
+      "output": "evaluations/benchmarks/2026-10-28/verification/listening/kokoro-af-heart-080-matched.wav",
+      "output_sha256": "4e571f35e2ed885ce6ded8d6628d7f766adf0069ef19e2f103e4ec52aa60d930",
+      "input_measurements": {
+        "integrated_lufs": -25.4,
+        "true_peak_dbfs": -6.0
+      },
+      "gain_db": 2.3999999999999986,
+      "output_measurements": {
+        "integrated_lufs": -23.0,
+        "true_peak_dbfs": -3.6
+      },
+      "target_integrated_lufs": -23.0,
+      "max_true_peak_dbfs": -1.0,
+      "transforms": [
+        "constant volume gain",
+        "PCM16 listening copy"
+      ],
+      "raw_preserved": true,
+      "subjective_voice_quality": "requires listener judgment",
+      "normalization_helper_source_sha256": "571e4990cecb716ef5b0ce902e8d4f251786b867771bf4a2f96607b1366bd98b",
+      "original_raw_verification": "evaluations/benchmarks/2026-10-28/verification/kokoro-af-heart-080.json",
+      "original_raw_status": "pass",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/kokoro-af-heart-080.json",
+      "status": "pass",
+      "policy_status": "pass",
+      "listening_review_required": false,
+      "normalized_word_edit_count": 0,
+      "input_mtime_ns_preserved": 1793231656479452035,
+      "output_mtime_ns_preserved": 1793232586853987007,
+      "no_new_asr_inference": true
+    },
+    {
+      "candidate": "kokoro-am-michael",
+      "raw_verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/kokoro-am-michael.json",
+      "raw_status": "pass",
+      "input": "evaluations/benchmarks/2026-10-28/voices/kokoro-am-michael/raw.wav",
+      "input_sha256": "ab2de52ae5f95b6ed2c43409d4c31f232b6fb4b2799877b7097939d8d256ed4f",
+      "output": "evaluations/benchmarks/2026-10-28/verification/listening/kokoro-am-michael-matched.wav",
+      "output_sha256": "9f4685ae38e01bfb24538e23d890b09f5bb16106c7fea2a19b317a0fad767710",
+      "input_measurements": {
+        "integrated_lufs": -27.2,
+        "true_peak_dbfs": -5.7
+      },
+      "gain_db": 4.199999999999999,
+      "output_measurements": {
+        "integrated_lufs": -23.0,
+        "true_peak_dbfs": -1.5
+      },
+      "target_integrated_lufs": -23.0,
+      "max_true_peak_dbfs": -1.0,
+      "transforms": [
+        "constant volume gain",
+        "PCM16 listening copy"
+      ],
+      "raw_preserved": true,
+      "subjective_voice_quality": "requires listener judgment",
+      "normalization_helper_source_sha256": "571e4990cecb716ef5b0ce902e8d4f251786b867771bf4a2f96607b1366bd98b",
+      "original_raw_verification": "evaluations/benchmarks/2026-10-28/verification/kokoro-am-michael.json",
+      "original_raw_status": "pass",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/kokoro-am-michael.json",
+      "status": "pass",
+      "policy_status": "pass",
+      "listening_review_required": false,
+      "normalized_word_edit_count": 0,
+      "input_mtime_ns_preserved": 1793230839851992303,
+      "output_mtime_ns_preserved": 1793232589544084953,
+      "no_new_asr_inference": true
+    },
+    {
+      "candidate": "kokoro-bm-george-080",
+      "raw_verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/kokoro-bm-george-080.json",
+      "raw_status": "pass",
+      "input": "evaluations/benchmarks/2026-10-28/voices/kokoro-bm-george-080/raw.wav",
+      "input_sha256": "e5ed6e2cd333140fc4547552b7f19433551837aae0df75653d2bcd6b211482ac",
+      "output": "evaluations/benchmarks/2026-10-28/verification/listening/kokoro-bm-george-080-matched.wav",
+      "output_sha256": "24bc4852e92ef376858a7f8d27267e7b72dec8a9ca131249bc60704bce1804ff",
+      "input_measurements": {
+        "integrated_lufs": -24.9,
+        "true_peak_dbfs": -7.9
+      },
+      "gain_db": 1.8999999999999986,
+      "output_measurements": {
+        "integrated_lufs": -23.0,
+        "true_peak_dbfs": -6.0
+      },
+      "target_integrated_lufs": -23.0,
+      "max_true_peak_dbfs": -1.0,
+      "transforms": [
+        "constant volume gain",
+        "PCM16 listening copy"
+      ],
+      "raw_preserved": true,
+      "subjective_voice_quality": "requires listener judgment",
+      "normalization_helper_source_sha256": "571e4990cecb716ef5b0ce902e8d4f251786b867771bf4a2f96607b1366bd98b",
+      "original_raw_verification": "evaluations/benchmarks/2026-10-28/verification/kokoro-bm-george-080.json",
+      "original_raw_status": "pass",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/kokoro-bm-george-080.json",
+      "status": "pass",
+      "policy_status": "pass",
+      "listening_review_required": false,
+      "normalized_word_edit_count": 0,
+      "input_mtime_ns_preserved": 1793231639926721933,
+      "output_mtime_ns_preserved": 1793232592795396841,
+      "no_new_asr_inference": true
+    },
+    {
+      "candidate": "mlx-qwen-custom-ryan",
+      "raw_verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/mlx-qwen-custom-ryan.json",
+      "raw_status": "pass",
+      "input": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-custom-ryan/raw.wav",
+      "input_sha256": "7caa68b5531b5dd560d993ecbfe39f0db7df57bef843a0f43a874afa3755d729",
+      "output": "evaluations/benchmarks/2026-10-28/verification/listening/mlx-qwen-custom-ryan-matched.wav",
+      "output_sha256": "89c6f351aa67b688086d175b164946444411d935de11acf871a5fe38a408d8ea",
+      "input_measurements": {
+        "integrated_lufs": -21.9,
+        "true_peak_dbfs": -2.7
+      },
+      "gain_db": -1.1000000000000014,
+      "output_measurements": {
+        "integrated_lufs": -23.0,
+        "true_peak_dbfs": -3.8
+      },
+      "target_integrated_lufs": -23.0,
+      "max_true_peak_dbfs": -1.0,
+      "transforms": [
+        "constant volume gain",
+        "PCM16 listening copy"
+      ],
+      "raw_preserved": true,
+      "subjective_voice_quality": "requires listener judgment",
+      "normalization_helper_source_sha256": "d851558f160b77f14e416188d178f2f788bc77f105ffbd63e43c103c726cf58f",
+      "original_raw_verification": "evaluations/benchmarks/2026-10-28/verification/mlx-qwen-custom-ryan.json",
+      "original_raw_status": "pass",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/mlx-qwen-custom-ryan.json",
+      "status": "pass",
+      "policy_status": "pass",
+      "listening_review_required": false,
+      "normalized_word_edit_count": 0,
+      "input_mtime_ns_preserved": 1793233307386990953,
+      "output_mtime_ns_preserved": 1793233567318041823,
+      "no_new_asr_inference": true
+    },
+    {
+      "candidate": "mlx-qwen-designed-male",
+      "raw_verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/mlx-qwen-designed-male.json",
+      "raw_status": "pass",
+      "input": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-designed-male/raw.wav",
+      "input_sha256": "cf901fa2915850c737a0b6a9e33a62d8512878008611bc49ff37a5f4a89ae389",
+      "output": "evaluations/benchmarks/2026-10-28/verification/listening/mlx-qwen-designed-male-matched.wav",
+      "output_sha256": "3b05416eec912e9b6da2d1afae082c12fa52ef64b9a6bc842a63ebe0237dcc11",
+      "input_measurements": {
+        "integrated_lufs": -20.6,
+        "true_peak_dbfs": -3.3
+      },
+      "gain_db": -2.3999999999999986,
+      "output_measurements": {
+        "integrated_lufs": -23.0,
+        "true_peak_dbfs": -5.7
+      },
+      "target_integrated_lufs": -23.0,
+      "max_true_peak_dbfs": -1.0,
+      "transforms": [
+        "constant volume gain",
+        "PCM16 listening copy"
+      ],
+      "raw_preserved": true,
+      "subjective_voice_quality": "requires listener judgment",
+      "normalization_helper_source_sha256": "571e4990cecb716ef5b0ce902e8d4f251786b867771bf4a2f96607b1366bd98b",
+      "original_raw_verification": "evaluations/benchmarks/2026-10-28/verification/mlx-qwen-designed-male.json",
+      "original_raw_status": "pass",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/mlx-qwen-designed-male.json",
+      "status": "pass",
+      "policy_status": "pass",
+      "listening_review_required": false,
+      "normalized_word_edit_count": 0,
+      "input_mtime_ns_preserved": 1793232084629028640,
+      "output_mtime_ns_preserved": 1793232594877214594,
+      "no_new_asr_inference": true
+    },
+    {
+      "candidate": "moss-local-synthetic-male",
+      "raw_verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/moss-local-synthetic-male.json",
+      "raw_status": "pass",
+      "input": "evaluations/benchmarks/2026-10-28/voices/moss-local-synthetic-male/raw.wav",
+      "input_sha256": "f06c913b4bbc3e58d3168dbff4dcdbb1b7abd5b4fcea42c49c60c57a693b508f",
+      "output": "evaluations/benchmarks/2026-10-28/verification/listening/moss-local-synthetic-male-matched.wav",
+      "output_sha256": "c82a5eb0b414256ae3c9458d46bd8f4bc3ff7e93654d65dc3076862ecc043042",
+      "input_measurements": {
+        "integrated_lufs": -30.3,
+        "true_peak_dbfs": -13.2
+      },
+      "gain_db": 7.300000000000001,
+      "output_measurements": {
+        "integrated_lufs": -23.0,
+        "true_peak_dbfs": -5.9
+      },
+      "target_integrated_lufs": -23.0,
+      "max_true_peak_dbfs": -1.0,
+      "transforms": [
+        "constant volume gain",
+        "PCM16 listening copy"
+      ],
+      "raw_preserved": true,
+      "subjective_voice_quality": "requires listener judgment",
+      "normalization_helper_source_sha256": "571e4990cecb716ef5b0ce902e8d4f251786b867771bf4a2f96607b1366bd98b",
+      "original_raw_verification": "evaluations/benchmarks/2026-10-28/verification/moss-local-synthetic-male.json",
+      "original_raw_status": "pass",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/moss-local-synthetic-male.json",
+      "status": "pass",
+      "policy_status": "pass",
+      "listening_review_required": false,
+      "normalized_word_edit_count": 0,
+      "input_mtime_ns_preserved": 1793232401497088280,
+      "output_mtime_ns_preserved": 1793232597111624225,
+      "no_new_asr_inference": true
+    },
+    {
+      "candidate": "voxcpm2-designed-male-aggregate",
+      "raw_verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/voxcpm2-designed-male-strict-review.json",
+      "raw_status": "review",
+      "input": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/raw.wav",
+      "input_sha256": "94a65b18158a7ffeb350d8cc4f90374f2e8e5dffef7daeaa448231f7dd54e295",
+      "output": "evaluations/benchmarks/2026-10-28/verification/listening/voxcpm2-designed-male-aggregate-matched.wav",
+      "output_sha256": "efe0105f2f1946195023dd8b439f0c60cd1cad7467548fcfefbf884c933431bd",
+      "input_measurements": {
+        "integrated_lufs": -23.6,
+        "true_peak_dbfs": -2.4
+      },
+      "gain_db": 0.6000000000000014,
+      "output_measurements": {
+        "integrated_lufs": -23.0,
+        "true_peak_dbfs": -1.8
+      },
+      "target_integrated_lufs": -23.0,
+      "max_true_peak_dbfs": -1.0,
+      "transforms": [
+        "constant volume gain",
+        "PCM16 listening copy"
+      ],
+      "raw_preserved": true,
+      "subjective_voice_quality": "requires listener judgment",
+      "normalization_helper_source_sha256": "571e4990cecb716ef5b0ce902e8d4f251786b867771bf4a2f96607b1366bd98b",
+      "original_raw_verification": "evaluations/benchmarks/2026-10-28/verification/voxcpm2-designed-male-aggregate.json",
+      "original_raw_status": "pass",
+      "verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/voxcpm2-designed-male-strict-review.json",
+      "status": "review",
+      "policy_status": "review",
+      "listening_review_required": true,
+      "normalized_word_edit_count": 28,
+      "input_mtime_ns_preserved": 1793230817600643871,
+      "output_mtime_ns_preserved": 1793232599768585708,
+      "no_new_asr_inference": true,
+      "source_policy_verification": "evaluations/benchmarks/2026-10-28/verification/policy-v3/voxcpm2-designed-male-aggregate.json",
+      "source_policy_status": "pass",
+      "aggregate_normalized_word_edit_count": 0,
+      "full_file_normalized_word_edit_count": 28,
+      "review_basis": "Preserved full-file ASR tail disagreement; exact paragraph+assembly receipts remain positive support.",
+      "speech_actually_missing_claim": false
+    }
+  ],
+  "manifest_writer_source_sha256": "d851558f160b77f14e416188d178f2f788bc77f105ffbd63e43c103c726cf58f",
+  "evidence_kind": "policy_reassessment_of_existing_verification",
+  "policy_id": "normalized-word-mismatch-review-v3-strict",
+  "created_at": "2026-10-29T02:07:58.275942+00:00",
+  "no_new_asr_inference": true,
+  "original_manifest": "evaluations/benchmarks/2026-10-28/verification/listening/manifest.json",
+  "original_manifest_sha256": "5a77f0b3f4dac36adc01b5a923b8dd5f49f11f3959b02a814481a1f8a44cd0e7",
+  "active_manifest_replaced": false,
+  "source_policy_manifest": "evaluations/benchmarks/2026-10-28/verification/listening/manifest-policy-v3.json",
+  "source_policy_manifest_sha256": "b696f1b805e760944a454bface34c2e0d002baf65be16a792fcd98b2452a0d9d",
+  "conservative_full_file_disagreement_review": true
+}

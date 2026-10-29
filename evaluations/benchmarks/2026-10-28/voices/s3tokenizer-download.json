@@ -1,0 +1,26 @@
+{
+  "repo": "mlx-community/S3TokenizerV2",
+  "revision": "e0c9886f0e1c35ae85b1f27277416fb19fc72bec",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 1519,
+      "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361"
+    },
+    {
+      "path": "README.md",
+      "bytes": 459,
+      "sha256": "7114249e13d3487e1b3d7f5f91fefdce746679342dca7afc8e52b1617b66bea5"
+    },
+    {
+      "path": "config.json",
+      "bytes": 126,
+      "sha256": "8591fcc0eaae8c2bbfc69cf9d439933ecdf2d58cb9be63d00ce88736c4f2aa9d"
+    },
+    {
+      "path": "model.safetensors",
+      "bytes": 494868984,
+      "sha256": "928726bc1f206a613d36b8f49e297eae9c5593a21bf9b92ddfe2c23f85eb92cc"
+    }
+  ]
+}

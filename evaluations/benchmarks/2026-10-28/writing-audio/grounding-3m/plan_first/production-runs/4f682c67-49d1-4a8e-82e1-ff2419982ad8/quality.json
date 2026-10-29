@@ -1,0 +1,86 @@
+{
+  "schema_version": 2,
+  "passed": true,
+  "sample_rate": 24000,
+  "channels": 1,
+  "sample_width_bytes": 2,
+  "frame_count": 4324891,
+  "duration_ms": 180203.792,
+  "peak_dbfs": -6.0,
+  "clipped_samples": 0,
+  "pcm_sha256": "dfef84d3e83e01b7faf132bc1863a98d70b395b2dea1e7f395f39378503d17f8",
+  "max_join_delta": 0,
+  "headroom_limit_dbfs": -1.0,
+  "checks": [
+    {
+      "name": "mono",
+      "passed": true,
+      "detail": "channels=1"
+    },
+    {
+      "name": "sample_width",
+      "passed": true,
+      "detail": "sample_width_bytes=2"
+    },
+    {
+      "name": "sample_rate",
+      "passed": true,
+      "detail": "sample_rate=24000"
+    },
+    {
+      "name": "frame_count",
+      "passed": true,
+      "detail": "frames=4324891, expected=4324891"
+    },
+    {
+      "name": "duration",
+      "passed": true,
+      "detail": "duration_ms=180203.792, expected=180203.792"
+    },
+    {
+      "name": "segment_joins",
+      "passed": true,
+      "detail": "segment frame ranges are contiguous"
+    },
+    {
+      "name": "requested_silence_timing",
+      "passed": true,
+      "detail": "every requested silence or breath phase maps to its exact frame count"
+    },
+    {
+      "name": "exact_silence",
+      "passed": true,
+      "detail": "all SILENCE and BREATH samples are zero"
+    },
+    {
+      "name": "audible_speech",
+      "passed": true,
+      "detail": "every SPEECH span contains audible PCM"
+    },
+    {
+      "name": "segment_pcm_hashes",
+      "passed": true,
+      "detail": "every segment PCM payload matches its manifest digest"
+    },
+    {
+      "name": "whole_pcm_hash",
+      "passed": true,
+      "detail": "pcm_sha256=dfef84d3e83e01b7faf132bc1863a98d70b395b2dea1e7f395f39378503d17f8"
+    },
+    {
+      "name": "boundary_continuity",
+      "passed": true,
+      "detail": "max_join_delta=0, limit=1000"
+    },
+    {
+      "name": "peak_headroom",
+      "passed": true,
+      "detail": "peak_dbfs=-6.0, limit=-1.0"
+    },
+    {
+      "name": "no_clipping",
+      "passed": true,
+      "detail": "clipped_samples=0"
+    }
+  ]
+}

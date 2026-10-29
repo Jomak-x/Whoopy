@@ -37,7 +37,7 @@ class SegmentAudioSpan(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     segment_id: str
-    segment_type: Literal["SPEECH", "SILENCE"]
+    segment_type: Literal["SPEECH", "SILENCE", "BREATH"]
     start_frame: int = Field(ge=0)
     end_frame: int = Field(gt=0)
     frame_count: int = Field(gt=0)
@@ -62,6 +62,7 @@ class AudioManifest(BaseModel):
     total_frames: int = Field(gt=0)
     duration_ms: float = Field(gt=0)
     pcm_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    synthesis_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     segments: list[SegmentAudioSpan] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -84,8 +85,8 @@ class AudioManifest(BaseModel):
                 raise ValueError("audio manifest schema v2 requires every segment PCM hash")
             if span.segment_type == "SPEECH" and span.cache_key is None:
                 raise ValueError("audio manifest schema v2 requires speech cache keys")
-            if span.segment_type == "SILENCE" and span.cache_key is not None:
-                raise ValueError("SILENCE segments cannot have synthesis cache keys")
+            if span.segment_type in ("SILENCE", "BREATH") and span.cache_key is not None:
+                raise ValueError("silent timeline segments cannot have synthesis cache keys")
         return self
 
 

@@ -1,5 +1,7 @@
 # Phase 3.5 PR 5: One Offline Command
 
+> **Historical implementation record.** This predates the permanent Studio/Lab product. Use [the setup guide](setup.md) for the current end-to-end path.
+
 Whoopy can now create a real spoken meditation from either a short prompt or an
 authored script. Both paths end at the same saved script, canonical timeline,
 Kokoro speech adapter, cache, checkpoints, deterministic renderer, and quality

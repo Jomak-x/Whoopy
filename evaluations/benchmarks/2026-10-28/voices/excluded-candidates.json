@@ -1,0 +1,28 @@
+{
+  "scope": "preflight exclusions, no model quality conclusion",
+  "fish_drama_3": {
+    "status": "excluded_resource_preflight",
+    "checkpoint_bytes": 23781118723,
+    "model_revision": "1ac1b2108b63c2ef5bade463a121569363e293ce",
+    "reason": "checkpoint alone exceeds initial available memory; runtime exceeds weights; preserve headroom",
+    "downloaded": false,
+    "inference_attempted": false,
+    "available_memory_initial_approx_GiB": 19
+  },
+  "higgs_tts3": {
+    "status": "excluded_license_fit",
+    "reason": "source-available restrictive product/service terms; permissive alternatives prioritized",
+    "downloaded": false,
+    "inference_attempted": false
+  },
+  "dots_soar": {
+    "status": "not_qualified_after_local_resource_failure",
+    "downloaded": true,
+    "inference_attempted": true,
+    "model_revision": "9cfc15b4863f7d01bad348a28fe8d05c40a0e95e",
+    "runtime_revision": "f64479f51a2a9d7093533732cae86e765d8fb96e",
+    "native_complete_speech_output": false,
+    "reason": "System swap grew severely during first-paragraph AudioVAE decode despite finite14.33GB allocator cap. Own process stopped; no quality verdict. No further retry.",
+    "report": "dots-soar-synthetic-male/report.json"
+  }
+}

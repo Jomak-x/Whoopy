@@ -1,0 +1,36 @@
+{
+  "repo": "mlx-community/chatterbox-multilingual-v3",
+  "revision": "03565773edd72e949572557597af8063bb49a18a",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 1519,
+      "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361"
+    },
+    {
+      "path": "Cangjie5_TC.json",
+      "bytes": 1920163,
+      "sha256": "7073fd9de919443ae88e0bd2449917a65fe54898a4413ed1edcc4b67f28bce8c"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1289,
+      "sha256": "46c84fad9fced28abe32cd11a0ed6eb05ca25df722893bf4c3ddc7a03bd94343"
+    },
+    {
+      "path": "config.json",
+      "bytes": 666,
+      "sha256": "b2097a15078624f41fcdaad9fc82f7b91ab0d39771aebc1af1775b0feaafe309"
+    },
+    {
+      "path": "model.safetensors",
+      "bytes": 2711113780,
+      "sha256": "e702f2c441e040bd360e59a86c85d462539759d665e41cfd1938adadd74187a3"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 69989,
+      "sha256": "69632f47220a788a52ce2661d096453c5655e9bf25289d89a8d832c46ee07dbf"
+    }
+  ]
+}

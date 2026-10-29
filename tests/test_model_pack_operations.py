@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
+from whoopy.model_packs import ManagedRuntimePacks, ModelPackManifest, ModelPackRegistry
 from whoopy.model_packs.manager import ManagedModelPacks, SmokeResult
 from whoopy.model_packs.operations import (
     AcceleratorUsage,
@@ -61,6 +62,20 @@ slot.release()
         text=True,
         env=_child_environment(),
     )
+
+
+def _slot_child_result(root: Path) -> tuple[int, str, str]:
+    child = _slot_child(root)
+    try:
+        # This bounds cold interpreter imports and durable owner-record writes,
+        # independently of the child's short 0.25-second lock-acquisition deadline.
+        stdout, stderr = child.communicate(timeout=30)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        stdout, stderr = child.communicate(timeout=5)
+        pytest.fail(f"slot child did not finish: stdout={stdout!r}, stderr={stderr!r}")
+    assert child.returncode is not None
+    return child.returncode, stdout, stderr
 
 
 def _install_lock_child(root: Path, *, hold: bool = False) -> subprocess.Popen[str]:
@@ -189,15 +204,13 @@ def _managed_service(
 
 def test_heavyweight_slot_rejects_real_cross_process_contention(tmp_path: Path) -> None:
     with HeavyweightModelSlot(tmp_path, "fish-speech-1.4"):
-        child = _slot_child(tmp_path)
-        stdout, stderr = child.communicate(timeout=5)
+        returncode, stdout, stderr = _slot_child_result(tmp_path)
 
-    assert child.returncode == 17, stderr
+    assert returncode == 17, stderr
     assert stdout.strip() == "blocked"
 
-    released_child = _slot_child(tmp_path)
-    stdout, stderr = released_child.communicate(timeout=5)
-    assert released_child.returncode == 0, stderr
+    returncode, stdout, stderr = _slot_child_result(tmp_path)
+    assert returncode == 0, stderr
     assert stdout.strip() == "acquired"
 
 
@@ -256,6 +269,47 @@ def test_install_resumes_durable_operation_after_writer_process_is_killed(tmp_pa
     assert (
         service.models_root / "managed" / "model-packs" / "test-pack" / "files" / "model.bin"
     ).read_bytes() == payload
+
+
+def test_install_reuses_identical_verified_bytes_from_another_pack(tmp_path: Path) -> None:
+    payload = b"shared-tokenizer-bytes"
+    service, offline = _managed_service(tmp_path, payload=payload)
+    service.install("test-pack", offline_directory=offline, allow_network=False)
+
+    registry_path = tmp_path / "model_packs.yaml"
+    document = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    second = json.loads(json.dumps(document["packs"][0]))
+    second["pack_id"] = "second-pack"
+    second["display_name"] = "Second Pack"
+    second["managed_directory"] = "managed/model-packs/second-pack/files"
+    document["packs"].append(second)
+    registry_path.write_text(yaml.safe_dump(document), encoding="utf-8")
+
+    reloaded = ManagedModelPacks.from_paths(registry_path, service.models_root)
+    reloaded.smoke_runner = None
+    report = reloaded.install("second-pack", offline_directory=None, allow_network=False)
+
+    first_file = (
+        service.models_root / "managed" / "model-packs" / "test-pack" / "files" / "model.bin"
+    )
+    second_file = (
+        service.models_root / "managed" / "model-packs" / "second-pack" / "files" / "model.bin"
+    )
+    assert report.progress is not None
+    assert report.progress.bytes_downloaded == len(payload)
+    assert second_file.read_bytes() == payload
+    assert first_file.samefile(second_file)
+
+    # A pre-existing verified copy from an older installer is converged on a
+    # later idempotent install without requiring network or offline bytes.
+    second_file.unlink()
+    second_file.write_bytes(payload)
+    assert not first_file.samefile(second_file)
+    reloaded.install("second-pack", offline_directory=None, allow_network=False)
+    assert first_file.samefile(second_file)
+
+    first_file.unlink()
+    assert second_file.read_bytes() == payload
 
 
 def test_slot_status_removes_stale_owner_when_kernel_lock_is_free(tmp_path: Path) -> None:
@@ -516,6 +570,44 @@ def test_same_process_contention_is_also_refused(tmp_path: Path) -> None:
         assert time.monotonic() - started < 1
     finally:
         first.release()
+
+
+@pytest.mark.parametrize(
+    ("runtime_id", "remedy"),
+    [
+        ("sherpa-onnx", "whoopy models install --profile basic"),
+        ("fish-speech", "runtime install fish-speech"),
+    ],
+)
+def test_verify_missing_runtime_preserves_matching_installer_remedy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runtime_id: str, remedy: str
+) -> None:
+    monkeypatch.setattr("whoopy.model_packs.runtime.current_runtime_target", lambda: "darwin-arm64")
+    service, offline = _managed_service(tmp_path)
+    service.install("test-pack", offline_directory=offline, allow_network=False)
+    pack = service.registry.get("test-pack")
+    runtime_directory = service.registry.runtime_directory(pack)
+    assert runtime_directory is not None
+    (runtime_directory / "python").unlink()
+    pack = pack.model_copy(
+        update={"runtime": pack.runtime.model_copy(update={"runtime_id": runtime_id})}
+    )
+    service.registry = ModelPackRegistry(
+        ModelPackManifest(schema_version=1, packs=[pack]), service.models_root
+    )
+    service.runtime_packs = ManagedRuntimePacks.from_path(
+        Path("config/runtime_packs.yaml"), models_root=service.models_root
+    )
+
+    verified = service.verify("test-pack")
+
+    assert verified.state == "installed"
+    assert verified.status is not None
+    assert any(
+        check.check == "isolated_runtime_files" and not check.passed
+        for check in verified.status.checks
+    )
+    assert remedy in verified.message
 
 
 def test_managed_facade_installs_offline_verifies_and_restores(tmp_path: Path) -> None:

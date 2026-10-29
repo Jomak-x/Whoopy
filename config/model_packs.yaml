@@ -4,10 +4,340 @@
 schema_version: 1
 
 packs:
+  - pack_id: qwen3-tts-custom-voice-0.6b
+    display_name: Qwen3-TTS 12Hz 0.6B CustomVoice
+    revision: 85e237c12c027371202489a0ec509ded67b5e4b5
+    source_repository: https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice
+    license_id: Apache-2.0
+    license_url: https://www.apache.org/licenses/LICENSE-2.0
+    commercial_use_allowed: true
+    license_notice: Apache-2.0 permits commercial and non-commercial local use.
+    managed_directory: managed/model-packs/qwen3-tts-custom-voice-0.6b/files
+    supported_platforms: [darwin-arm64]
+    files:
+      - path: config.json
+        size_bytes: 4908
+        digest: {algorithm: git_sha1, value: 5e8d5fc100536984e3a89bd87ef08e59e322b29b}
+        role: config
+      - path: generation_config.json
+        size_bytes: 245
+        digest: {algorithm: git_sha1, value: 1872b16d4535564abf2db5d6debe6cddd82b7f2e}
+        role: config
+      - path: merges.txt
+        size_bytes: 1671839
+        digest: {algorithm: git_sha1, value: 20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0}
+        role: tokenizer
+      - path: model.safetensors
+        size_bytes: 1811626576
+        digest: {algorithm: sha256, value: bc3c7e785eb961179c25450d1acff03f839e0002f2f3a5aeb67b5735c0fa2adb}
+        role: model
+      - path: preprocessor_config.json
+        size_bytes: 127
+        digest: {algorithm: git_sha1, value: 0525dd953bb9241912f7147666f0d535165d5d4f}
+        role: config
+      - path: speech_tokenizer/config.json
+        size_bytes: 2336
+        digest: {algorithm: git_sha1, value: 06cc8dc4c5ec8a1929086b71b98c313020d9268b}
+        role: config
+      - path: speech_tokenizer/configuration.json
+        size_bytes: 76
+        digest: {algorithm: git_sha1, value: ab58e2eaf53cd14a1a2a7527d9261ceea93a24cd}
+        role: config
+      - path: speech_tokenizer/model.safetensors
+        size_bytes: 682293092
+        digest: {algorithm: sha256, value: 836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258}
+        role: model
+      - path: speech_tokenizer/preprocessor_config.json
+        size_bytes: 234
+        digest: {algorithm: git_sha1, value: ba40914f4f49ab98a8ca545d4892ef7291a39592}
+        role: config
+      - path: tokenizer_config.json
+        size_bytes: 7344
+        digest: {algorithm: git_sha1, value: 6ff9fd60cc623bb54bbd603cbd418c97a11528d7}
+        role: tokenizer
+      - path: vocab.json
+        size_bytes: 2776833
+        digest: {algorithm: git_sha1, value: 4783fe10ac3adce15ac8f358ef5462739852c569}
+        role: tokenizer
+    runtime:
+      runtime_id: qwen3-tts
+      revision: 022e286b98fbec7e1e916cb940cdf532cd9f488e
+      candidate_directories: [managed/runtimes/qwen3-tts-022e286]
+      required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, qwen_tts/__init__.py]
+    hardware:
+      min_total_ram_gb: 16
+      min_available_ram_gb: 8
+      min_free_disk_gb: 5
+      accelerator_any_of: [metal]
+
+  - pack_id: qwen3-tts-custom-voice-1.7b
+    display_name: Qwen3-TTS 12Hz 1.7B CustomVoice
+    revision: 0c0e3051f131929182e2c023b9537f8b1c68adfe
+    source_repository: https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice
+    license_id: Apache-2.0
+    license_url: https://www.apache.org/licenses/LICENSE-2.0
+    commercial_use_allowed: true
+    license_notice: Apache-2.0 permits commercial and non-commercial local use.
+    managed_directory: managed/model-packs/qwen3-tts-custom-voice-1.7b/files
+    supported_platforms: [darwin-arm64]
+    files:
+      - path: config.json
+        size_bytes: 4908
+        digest: {algorithm: git_sha1, value: 95d74b20b7485f5dfa09d05988d6c606ec226811}
+        role: config
+      - path: generation_config.json
+        size_bytes: 245
+        digest: {algorithm: git_sha1, value: 1872b16d4535564abf2db5d6debe6cddd82b7f2e}
+        role: config
+      - path: merges.txt
+        size_bytes: 1671839
+        digest: {algorithm: git_sha1, value: 20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0}
+        role: tokenizer
+      - path: model.safetensors
+        size_bytes: 3833402552
+        digest: {algorithm: sha256, value: 38b1d5971bdbd982b561cccec982669a53b0537c3cf5e9bd4778ed07bb2f5137}
+        role: model
+      - path: preprocessor_config.json
+        size_bytes: 127
+        digest: {algorithm: git_sha1, value: 0525dd953bb9241912f7147666f0d535165d5d4f}
+        role: config
+      - path: speech_tokenizer/config.json
+        size_bytes: 2336
+        digest: {algorithm: git_sha1, value: 06cc8dc4c5ec8a1929086b71b98c313020d9268b}
+        role: config
+      - path: speech_tokenizer/configuration.json
+        size_bytes: 76
+        digest: {algorithm: git_sha1, value: ab58e2eaf53cd14a1a2a7527d9261ceea93a24cd}
+        role: config
+      - path: speech_tokenizer/model.safetensors
+        size_bytes: 682293092
+        digest: {algorithm: sha256, value: 836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258}
+        role: model
+      - path: speech_tokenizer/preprocessor_config.json
+        size_bytes: 234
+        digest: {algorithm: git_sha1, value: ba40914f4f49ab98a8ca545d4892ef7291a39592}
+        role: config
+      - path: tokenizer_config.json
+        size_bytes: 7344
+        digest: {algorithm: git_sha1, value: 6ff9fd60cc623bb54bbd603cbd418c97a11528d7}
+        role: tokenizer
+      - path: vocab.json
+        size_bytes: 2776833
+        digest: {algorithm: git_sha1, value: 4783fe10ac3adce15ac8f358ef5462739852c569}
+        role: tokenizer
+    runtime:
+      runtime_id: qwen3-tts
+      revision: 022e286b98fbec7e1e916cb940cdf532cd9f488e
+      candidate_directories: [managed/runtimes/qwen3-tts-022e286]
+      required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, qwen_tts/__init__.py]
+    hardware:
+      min_total_ram_gb: 24
+      min_available_ram_gb: 12
+      min_free_disk_gb: 7
+      accelerator_any_of: [metal]
+
+  - pack_id: qwen3-tts-voice-design-1.7b
+    display_name: Qwen3-TTS 12Hz 1.7B VoiceDesign
+    revision: 5ecdb67327fd37bb2e042aab12ff7391903235d3
+    source_repository: https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign
+    license_id: Apache-2.0
+    license_url: https://www.apache.org/licenses/LICENSE-2.0
+    commercial_use_allowed: true
+    license_notice: Apache-2.0 permits commercial and non-commercial local use.
+    managed_directory: managed/model-packs/qwen3-tts-voice-design-1.7b/files
+    supported_platforms: [darwin-arm64]
+    files:
+      - path: config.json
+        size_bytes: 4421
+        digest: {algorithm: git_sha1, value: 2c2c027c574a85c0d5a5d48e3cfed1a8a051ff9d}
+        role: config
+      - path: generation_config.json
+        size_bytes: 245
+        digest: {algorithm: git_sha1, value: 1872b16d4535564abf2db5d6debe6cddd82b7f2e}
+        role: config
+      - path: merges.txt
+        size_bytes: 1671839
+        digest: {algorithm: git_sha1, value: 20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0}
+        role: tokenizer
+      - path: model.safetensors
+        size_bytes: 3833402552
+        digest: {algorithm: sha256, value: 391e8db219f292c515297cdceeb43e4eae67cdde35fa57e79a6a8a532fca0522}
+        role: model
+      - path: preprocessor_config.json
+        size_bytes: 127
+        digest: {algorithm: git_sha1, value: 0525dd953bb9241912f7147666f0d535165d5d4f}
+        role: config
+      - path: speech_tokenizer/config.json
+        size_bytes: 2336
+        digest: {algorithm: git_sha1, value: 06cc8dc4c5ec8a1929086b71b98c313020d9268b}
+        role: config
+      - path: speech_tokenizer/configuration.json
+        size_bytes: 76
+        digest: {algorithm: git_sha1, value: ab58e2eaf53cd14a1a2a7527d9261ceea93a24cd}
+        role: config
+      - path: speech_tokenizer/model.safetensors
+        size_bytes: 682293092
+        digest: {algorithm: sha256, value: 836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258}
+        role: model
+      - path: speech_tokenizer/preprocessor_config.json
+        size_bytes: 234
+        digest: {algorithm: git_sha1, value: ba40914f4f49ab98a8ca545d4892ef7291a39592}
+        role: config
+      - path: tokenizer_config.json
+        size_bytes: 7344
+        digest: {algorithm: git_sha1, value: 6ff9fd60cc623bb54bbd603cbd418c97a11528d7}
+        role: tokenizer
+      - path: vocab.json
+        size_bytes: 2776833
+        digest: {algorithm: git_sha1, value: 4783fe10ac3adce15ac8f358ef5462739852c569}
+        role: tokenizer
+    runtime:
+      runtime_id: qwen3-tts
+      revision: 022e286b98fbec7e1e916cb940cdf532cd9f488e
+      candidate_directories: [managed/runtimes/qwen3-tts-022e286]
+      required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, qwen_tts/__init__.py]
+    hardware:
+      min_total_ram_gb: 24
+      min_available_ram_gb: 12
+      min_free_disk_gb: 7
+      accelerator_any_of: [metal]
+
+  - pack_id: qwen3-tts-base-clone-0.6b
+    display_name: Qwen3-TTS 12Hz 0.6B Base Clone
+    revision: 5d83992436eae1d760afd27aff78a71d676296fc
+    source_repository: https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base
+    license_id: Apache-2.0
+    license_url: https://www.apache.org/licenses/LICENSE-2.0
+    commercial_use_allowed: true
+    license_notice: Apache-2.0 permits commercial and non-commercial local use.
+    managed_directory: managed/model-packs/qwen3-tts-base-clone-0.6b/files
+    supported_platforms: [darwin-arm64]
+    files:
+      - path: config.json
+        size_bytes: 4494
+        digest: {algorithm: git_sha1, value: 4e923f500f5c3eeb78d44072e7049b28817c2e04}
+        role: config
+      - path: generation_config.json
+        size_bytes: 245
+        digest: {algorithm: git_sha1, value: 1872b16d4535564abf2db5d6debe6cddd82b7f2e}
+        role: config
+      - path: merges.txt
+        size_bytes: 1671839
+        digest: {algorithm: git_sha1, value: 20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0}
+        role: tokenizer
+      - path: model.safetensors
+        size_bytes: 1829344272
+        digest: {algorithm: sha256, value: 180b3b10eb1c9f1b4db7806d5475bae3071c0243c299d49926bab1da3b6946f6}
+        role: model
+      - path: preprocessor_config.json
+        size_bytes: 127
+        digest: {algorithm: git_sha1, value: 0525dd953bb9241912f7147666f0d535165d5d4f}
+        role: config
+      - path: speech_tokenizer/config.json
+        size_bytes: 2336
+        digest: {algorithm: git_sha1, value: 06cc8dc4c5ec8a1929086b71b98c313020d9268b}
+        role: config
+      - path: speech_tokenizer/configuration.json
+        size_bytes: 76
+        digest: {algorithm: git_sha1, value: ab58e2eaf53cd14a1a2a7527d9261ceea93a24cd}
+        role: config
+      - path: speech_tokenizer/model.safetensors
+        size_bytes: 682293092
+        digest: {algorithm: sha256, value: 836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258}
+        role: model
+      - path: speech_tokenizer/preprocessor_config.json
+        size_bytes: 234
+        digest: {algorithm: git_sha1, value: ba40914f4f49ab98a8ca545d4892ef7291a39592}
+        role: config
+      - path: tokenizer_config.json
+        size_bytes: 7344
+        digest: {algorithm: git_sha1, value: 6ff9fd60cc623bb54bbd603cbd418c97a11528d7}
+        role: tokenizer
+      - path: vocab.json
+        size_bytes: 2776833
+        digest: {algorithm: git_sha1, value: 4783fe10ac3adce15ac8f358ef5462739852c569}
+        role: tokenizer
+    runtime:
+      runtime_id: qwen3-tts
+      revision: 022e286b98fbec7e1e916cb940cdf532cd9f488e
+      candidate_directories: [managed/runtimes/qwen3-tts-022e286]
+      required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, qwen_tts/__init__.py]
+    hardware:
+      min_total_ram_gb: 16
+      min_available_ram_gb: 8
+      min_free_disk_gb: 5
+      accelerator_any_of: [metal]
+
+  - pack_id: qwen3-tts-base-clone-1.7b
+    display_name: Qwen3-TTS 12Hz 1.7B Base Clone
+    revision: fd4b254389122332181a7c3db7f27e918eec64e3
+    source_repository: https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base
+    license_id: Apache-2.0
+    license_url: https://www.apache.org/licenses/LICENSE-2.0
+    commercial_use_allowed: true
+    license_notice: Apache-2.0 permits commercial and non-commercial local use.
+    managed_directory: managed/model-packs/qwen3-tts-base-clone-1.7b/files
+    supported_platforms: [darwin-arm64]
+    files:
+      - path: config.json
+        size_bytes: 4494
+        digest: {algorithm: git_sha1, value: 81b57e8e790c07e8fa7f82d8bdfd7574d485c396}
+        role: config
+      - path: generation_config.json
+        size_bytes: 245
+        digest: {algorithm: git_sha1, value: 1872b16d4535564abf2db5d6debe6cddd82b7f2e}
+        role: config
+      - path: merges.txt
+        size_bytes: 1671839
+        digest: {algorithm: git_sha1, value: 20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0}
+        role: tokenizer
+      - path: model.safetensors
+        size_bytes: 3857413744
+        digest: {algorithm: sha256, value: 38fc7fc51c5e776e840414b6fd443962e9411b9654888fd7913e4da643cb857c}
+        role: model
+      - path: preprocessor_config.json
+        size_bytes: 127
+        digest: {algorithm: git_sha1, value: 0525dd953bb9241912f7147666f0d535165d5d4f}
+        role: config
+      - path: speech_tokenizer/config.json
+        size_bytes: 2336
+        digest: {algorithm: git_sha1, value: 06cc8dc4c5ec8a1929086b71b98c313020d9268b}
+        role: config
+      - path: speech_tokenizer/configuration.json
+        size_bytes: 76
+        digest: {algorithm: git_sha1, value: ab58e2eaf53cd14a1a2a7527d9261ceea93a24cd}
+        role: config
+      - path: speech_tokenizer/model.safetensors
+        size_bytes: 682293092
+        digest: {algorithm: sha256, value: 836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258}
+        role: model
+      - path: speech_tokenizer/preprocessor_config.json
+        size_bytes: 234
+        digest: {algorithm: git_sha1, value: ba40914f4f49ab98a8ca545d4892ef7291a39592}
+        role: config
+      - path: tokenizer_config.json
+        size_bytes: 7344
+        digest: {algorithm: git_sha1, value: 6ff9fd60cc623bb54bbd603cbd418c97a11528d7}
+        role: tokenizer
+      - path: vocab.json
+        size_bytes: 2776833
+        digest: {algorithm: git_sha1, value: 4783fe10ac3adce15ac8f358ef5462739852c569}
+        role: tokenizer
+    runtime:
+      runtime_id: qwen3-tts
+      revision: 022e286b98fbec7e1e916cb940cdf532cd9f488e
+      candidate_directories: [managed/runtimes/qwen3-tts-022e286]
+      required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, qwen_tts/__init__.py]
+    hardware:
+      min_total_ram_gb: 24
+      min_available_ram_gb: 12
+      min_free_disk_gb: 7
+      accelerator_any_of: [metal]
+
   - pack_id: kokoro
     display_name: Kokoro multilingual v1.0
-    revision: v1_0
-    installed_tree_sha256: 9bc58f2791c964568c1f9105a7272e4b73e7db113b141d204c8846e6796ed0af
+    revision: v1_0-release-2026-10-26
+    installed_tree_sha256: 6fd6cf8d05e69409c49f70595c9ed8d074e2474b1a05c9d9b3cfa8dd54a6bdd9
     # The immutable artifact record hashes the extraction root. The adapter's
     # selected directory is the child containing model.onnx.
     installed_tree_directory: managed/installed/kokoro_multilang_v1_0
@@ -22,12 +352,12 @@ packs:
     supported_platforms: [darwin-arm64, darwin-x86_64, linux-arm64, linux-x86_64, windows-x86_64]
     files:
       - path: model.onnx
-        size_bytes: 325630829
-        digest: {algorithm: sha256, value: c436dc6a842b62aba06af67e40bafcfb9c60ac3af895358f1974ad9a7f7c026b}
+        size_bytes: 325560556
+        digest: {algorithm: sha256, value: b40f62b166ac8164b0627ef48a0b358eda0985e272fb03ef5252e7206305da11}
         role: model
       - path: voices.bin
-        size_bytes: 27678720
-        digest: {algorithm: sha256, value: 8a77c0d397026208d22211f37670b5b3b11e03f190756b25a1d24041fced82a9}
+        size_bytes: 28200960
+        digest: {algorithm: sha256, value: 1c5a5b983d3d50d8586d437a51f3faa2da7919ce76a013c081e65671a3447c29}
         role: model
       - path: tokens.txt
         size_bytes: 687
@@ -92,8 +422,8 @@ packs:
     runtime:
       runtime_id: fish-speech
       revision: 1359896b0648c688dee901794969d976a06c86be
-      candidate_directories: [experimental/fish-speech-1.4-runtime]
-      required_markers: [.venv/pyvenv.cfg, fish_speech/models/vqgan/__init__.py]
+      candidate_directories: [managed/runtimes/fish-speech-1359896]
+      required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, fish_speech/models/vqgan/__init__.py]
     hardware:
       min_total_ram_gb: 12
       min_available_ram_gb: 6
@@ -150,8 +480,8 @@ packs:
     runtime:
       runtime_id: moss-tts
       revision: 58b20a0d5fcc6766658d50967a90a9d890009a46
-      candidate_directories: [experimental/moss-tts-runtime]
-      required_markers: [.venv/pyvenv.cfg, moss_tts_local_v1.5/__init__.py]
+      candidate_directories: [managed/runtimes/moss-tts-58b20a0]
+      required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, moss_tts_local_v1.5/__init__.py]
     hardware:
       min_total_ram_gb: 16
       min_available_ram_gb: 8
@@ -234,8 +564,8 @@ packs:
     runtime:
       runtime_id: moss-tts
       revision: 58b20a0d5fcc6766658d50967a90a9d890009a46
-      candidate_directories: [experimental/moss-tts-runtime]
-      required_markers: [.venv/pyvenv.cfg, moss_tts_local_v1.5/__init__.py]
+      candidate_directories: [managed/runtimes/moss-tts-58b20a0]
+      required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, moss_tts_local_v1.5/__init__.py]
     hardware:
       min_total_ram_gb: 24
       min_available_ram_gb: 14
@@ -342,8 +672,8 @@ packs:
     runtime:
       runtime_id: moss-tts
       revision: 58b20a0d5fcc6766658d50967a90a9d890009a46
-      candidate_directories: [experimental/moss-tts-runtime]
-      required_markers: [.venv/pyvenv.cfg, moss_tts_delay/modeling_moss_tts.py]
+      candidate_directories: [managed/runtimes/moss-tts-58b20a0]
+      required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, moss_tts_delay/modeling_moss_tts.py]
     hardware:
       min_total_ram_gb: 40
       # The real 8B smoke passed on this 48 GB Apple-Silicon machine with a

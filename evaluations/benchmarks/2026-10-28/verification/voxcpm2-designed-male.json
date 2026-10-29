@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-28T23:53:12.674611+00:00",
+  "status": "fail",
+  "failure_reasons": [
+    "Expected ending is missing: possible truncated speech."
+  ],
+  "review_reasons": [
+    "ASR transcript needs review for missing, changed, or extra words."
+  ],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male/raw.wav",
+  "audio_sha256": "94a65b18158a7ffeb350d8cc4f90374f2e8e5dffef7daeaa448231f7dd54e295",
+  "expected_text_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "mode": "speech",
+  "pcm": {
+    "frame_count": 2042912,
+    "sample_rate": 48000,
+    "duration_seconds": 42.56066666666667,
+    "nonfinite_samples": 0,
+    "peak": 0.751237690448761,
+    "rms": 0.06548600452170598,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.1747299201503053,
+    "leading_silence_seconds": 0.0,
+    "trailing_silence_seconds": 0.18,
+    "zero_crossing_fraction": 0.0708273635023748,
+    "difference_to_signal_energy": 0.040258129648155366,
+    "speech_established_by_pcm": false
+  },
+  "asr": {
+    "engine": "mlx-whisper",
+    "model_path": "/Users/jakob/.cache/huggingface/hub/models--mlx-community--whisper-small-mlx/snapshots/45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_revision": "45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_weights_sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
+    "model_config_sha256": "e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e",
+    "audio_sha256": "94a65b18158a7ffeb350d8cc4f90374f2e8e5dffef7daeaa448231f7dd54e295",
+    "language": "en",
+    "inference_seconds": 4.338761917024385,
+    "versions": {
+      "mlx-whisper": "0.4.3",
+      "mlx": "0.32.4",
+      "mlx-metal": "0.32.4",
+      "numpy": "2.4.6",
+      "soundfile": "0.14.0"
+    },
+    "python": "3.11.16",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "decoding": {
+      "language": "en",
+      "temperature": 0.0,
+      "condition_on_previous_text": false,
+      "expected_text_prompted": false
+    },
+    "gpu_lock": "/tmp/whoopy-benchmark-gpu.lock",
+    "gpu_lock_wait_seconds": 658.6940264169825,
+    "network": "offline; existing local snapshot only"
+  },
+  "content": {
+    "expected_word_count": 123,
+    "observed_word_count": 95,
+    "word_error_rate": 0.22764227642276422,
+    "ordered_word_coverage": 0.7723577235772358,
+    "matches": 95,
+    "deletions": 28,
+    "insertions": 0,
+    "substitutions": 0,
+    "possible_truncation": true
+  },
+  "limits": [
+    "ASR is independent evidence, not a human transcription or a proof of perfect speech.",
+    "Noise rejection requires content agreement; duration and RMS do not prove speech.",
+    "Warmth, naturalness, voice identity, and quality require listener judgment.",
+    "Narration mode permits intentional silence; expected words still require recognition."
+  ],
+  "thresholds": {
+    "pass_max_wer": 0.15,
+    "pass_min_coverage": 0.85,
+    "fail_wer_above": 0.35,
+    "fail_coverage_below": 0.65
+  },
+  "verifier_source_sha256": "3669cf3793b7200110dab88dd698d4eed1816a291f3f8581de7c6bf7dd83b3d3",
+  "harness_source_sha256": "a35b1cc25f4418de82b402e1ca5bc361ea22c6c6ee13eeee778c84db8854b8b5",
+  "publication": {
+    "schema_version": 1,
+    "kind": "compact_verification_receipt",
+    "original_receipt_sha256": "64deb36b2201ac3246881cf16e526b503ed087c4d9c7b445892ae53aeba7ea21",
+    "original_status": "fail",
+    "full_trace_included": false,
+    "referenced_receipt_hashes": "original_receipt_bytes"
+  }
+}

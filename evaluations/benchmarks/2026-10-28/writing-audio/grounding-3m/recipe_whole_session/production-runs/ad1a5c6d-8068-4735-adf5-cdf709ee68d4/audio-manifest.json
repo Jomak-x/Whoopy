@@ -1,0 +1,190 @@
+{
+  "schema_version": 2,
+  "run_id": "ad1a5c6d-8068-4735-adf5-cdf709ee68d4",
+  "timeline_schema_version": 3,
+  "format": "pcm_s16le_wav",
+  "sample_rate": 24000,
+  "channels": 1,
+  "sample_width_bytes": 2,
+  "total_frames": 4404266,
+  "duration_ms": 183511.083,
+  "pcm_sha256": "386f12d00a298d9df883ababd3c190d1fb377c3113ca708e855c58a3383a9629",
+  "segments": [
+    {
+      "segment_id": "speech-0001",
+      "segment_type": "SPEECH",
+      "start_frame": 0,
+      "end_frame": 181845,
+      "frame_count": 181845,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 7576.875,
+      "cache_key": "d4acb2edffb5a14eb0888e8c969ca681f5be91ba0b45ef4bcbaa505a11900034",
+      "pcm_sha256": "1277cf49874440879a2eb74d8fa4a8b42b8ff458868becea88a179a61e41d62c"
+    },
+    {
+      "segment_id": "silence-0001",
+      "segment_type": "SILENCE",
+      "start_frame": 181845,
+      "end_frame": 516693,
+      "frame_count": 334848,
+      "requested_duration_ms": 13952,
+      "actual_duration_ms": 13952.0,
+      "cache_key": null,
+      "pcm_sha256": "5540ea73acf3008242444d369700f37e6ff06ca68fa3b35aabe6bdcd207ee583"
+    },
+    {
+      "segment_id": "speech-0002",
+      "segment_type": "SPEECH",
+      "start_frame": 516693,
+      "end_frame": 779995,
+      "frame_count": 263302,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 10970.917,
+      "cache_key": "fd901be3264a98eae4c4258cb46476be1df9c464ac7c8b71bfb19ef01a99345e",
+      "pcm_sha256": "5c0caa45c7b67cfbe553aef4d126a131dc76ac286ff27c545a00cafa29aed911"
+    },
+    {
+      "segment_id": "silence-0002",
+      "segment_type": "SILENCE",
+      "start_frame": 779995,
+      "end_frame": 1044595,
+      "frame_count": 264600,
+      "requested_duration_ms": 11025,
+      "actual_duration_ms": 11025.0,
+      "cache_key": null,
+      "pcm_sha256": "a7dd386052b0a3b0245d01a8654e27597601a7fd82556f31b1a5d8f455feff2b"
+    },
+    {
+      "segment_id": "speech-0003",
+      "segment_type": "SPEECH",
+      "start_frame": 1044595,
+      "end_frame": 1343872,
+      "frame_count": 299277,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 12469.875,
+      "cache_key": "9985ebbed273c8ea92b4497ad37e40635375fb112cecd4c4c517d6736fc50230",
+      "pcm_sha256": "8451a8d84ee396f13b90f8dd56bc46aa81ad08e0b4b3d2e8c3bff1de87d4e4d3"
+    },
+    {
+      "segment_id": "silence-0003",
+      "segment_type": "SILENCE",
+      "start_frame": 1343872,
+      "end_frame": 1535848,
+      "frame_count": 191976,
+      "requested_duration_ms": 7999,
+      "actual_duration_ms": 7999.0,
+      "cache_key": null,
+      "pcm_sha256": "e3b75b89b20c1e9fad548b49828e02602bc90c817da96bd680b9e2ca823bd1d4"
+    },
+    {
+      "segment_id": "speech-0004",
+      "segment_type": "SPEECH",
+      "start_frame": 1535848,
+      "end_frame": 1835001,
+      "frame_count": 299153,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 12464.708,
+      "cache_key": "ed1ca80ffe21005f22f744f75692c3f729f48b0d92bf27b2bd47f9a0fe6e8c65",
+      "pcm_sha256": "833b5bd9f0025606d49f4d68af64b8fa85439a6be1a61c7e51acb7e9ec2c7ac8"
+    },
+    {
+      "segment_id": "silence-0004",
+      "segment_type": "SILENCE",
+      "start_frame": 1835001,
+      "end_frame": 2219001,
+      "frame_count": 384000,
+      "requested_duration_ms": 16000,
+      "actual_duration_ms": 16000.0,
+      "cache_key": null,
+      "pcm_sha256": "351a8054b23144894668c6a51d5dbba82f56523ef43cc45b6f4d7060a969c31a"
+    },
+    {
+      "segment_id": "speech-0005",
+      "segment_type": "SPEECH",
+      "start_frame": 2219001,
+      "end_frame": 2480766,
+      "frame_count": 261765,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 10906.875,
+      "cache_key": "606d46122bf263a9cc52bfe3220d9c4da58bf4088dbc42d958e29a53fe64fad6",
+      "pcm_sha256": "d36e2c0c29cd79b3e1b8ba651ce9f6481fe0c33f83430cb4076d7c59cb4fe717"
+    },
+    {
+      "segment_id": "silence-0005",
+      "segment_type": "SILENCE",
+      "start_frame": 2480766,
+      "end_frame": 2864766,
+      "frame_count": 384000,
+      "requested_duration_ms": 16000,
+      "actual_duration_ms": 16000.0,
+      "cache_key": null,
+      "pcm_sha256": "351a8054b23144894668c6a51d5dbba82f56523ef43cc45b6f4d7060a969c31a"
+    },
+    {
+      "segment_id": "speech-0006",
+      "segment_type": "SPEECH",
+      "start_frame": 2864766,
+      "end_frame": 3048507,
+      "frame_count": 183741,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 7655.875,
+      "cache_key": "e61e2c6cff0d771e1def0b755baa1e6f31636cd47cc3ed62bfbb1293cfb1ff63",
+      "pcm_sha256": "2161b892a410816e0146d4fa99ef919785f22218d778b21f52d5fc0cfcc4711b"
+    },
+    {
+      "segment_id": "silence-0006",
+      "segment_type": "SILENCE",
+      "start_frame": 3048507,
+      "end_frame": 3395067,
+      "frame_count": 346560,
+      "requested_duration_ms": 14440,
+      "actual_duration_ms": 14440.0,
+      "cache_key": null,
+      "pcm_sha256": "0cc7c7aff7b3df3f21676fb20275ad314d22abbf34a01af47165ec6203fb044c"
+    },
+    {
+      "segment_id": "speech-0007",
+      "segment_type": "SPEECH",
+      "start_frame": 3395067,
+      "end_frame": 3549251,
+      "frame_count": 154184,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 6424.333,
+      "cache_key": "cba6b2c524840b65ce1a10c79b38c5548efe281cef1d3febf98a9f1a7303b992",
+      "pcm_sha256": "442e57294d24002bba76fb0aac8b25c5c8113703b4b9aab1f4ba2ac4c3c62491"
+    },
+    {
+      "segment_id": "silence-0007",
+      "segment_type": "SILENCE",
+      "start_frame": 3549251,
+      "end_frame": 3919187,
+      "frame_count": 369936,
+      "requested_duration_ms": 15414,
+      "actual_duration_ms": 15414.0,
+      "cache_key": null,
+      "pcm_sha256": "75d74abe31f37e15e2dacfbcd0135e989b96c29a63a5e84a85fe9e95be6ea74a"
+    },
+    {
+      "segment_id": "speech-0008",
+      "segment_type": "SPEECH",
+      "start_frame": 3919187,
+      "end_frame": 4221650,
+      "frame_count": 302463,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 12602.625,
+      "cache_key": "94cec4dedd270e3b3fd36bbb40a0d1bf864d23ea5a50caae03f02e5557d3ad9e",
+      "pcm_sha256": "41e8e4843222aea6de4e89abfc1b77f98b7c18710af7dc129d943ddf232c4035"
+    },
+    {
+      "segment_id": "silence-0008",
+      "segment_type": "SILENCE",
+      "start_frame": 4221650,
+      "end_frame": 4404266,
+      "frame_count": 182616,
+      "requested_duration_ms": 7609,
+      "actual_duration_ms": 7609.0,
+      "cache_key": null,
+      "pcm_sha256": "8ac229292a3174005c615931064787c907cdd89a3be704e231e9fec2a71a6e3d"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import textwrap
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -15,7 +16,9 @@ from whoopy.adapters.tts._json_process import (
 )
 from whoopy.adapters.tts.fish_speech import FishSpeech14Adapter, FishSpeechSettings
 from whoopy.adapters.tts.moss_tts import MossTTSAdapter, MossTTSSettings
-from whoopy.audio.synthesis import TransientSynthesisError
+from whoopy.audio.synthesis import InvalidSynthesisOutput, TransientSynthesisError
+from whoopy.hardware import HardwareSnapshot
+from whoopy.model_packs import HardwareRequirement
 from whoopy.timeline import SpeechSegment
 
 
@@ -220,6 +223,99 @@ def _fish_runtime(tmp_path: Path, worker_source: str) -> FishSpeechSettings:
     )
 
 
+def _moss_runtime(
+    tmp_path: Path,
+    worker_source: str,
+    *,
+    variant: str,
+) -> MossTTSSettings:
+    runtime = tmp_path / "runtime"
+    python = runtime / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.symlink_to(sys.executable)
+    model = tmp_path / "model"
+    codec = tmp_path / "codec"
+    for directory in (model, codec):
+        directory.mkdir()
+        (directory / "config.json").write_text("{}", encoding="utf-8")
+        (directory / "model.safetensors").write_bytes(b"checkpoint")
+    reference = tmp_path / "reference.wav"
+    reference.write_bytes(b"reference")
+    worker = tmp_path / "worker.py"
+    worker.write_text(textwrap.dedent(worker_source), encoding="utf-8")
+    return MossTTSSettings(
+        runtime_directory=runtime,
+        worker_script=worker,
+        model_directory=model,
+        codec_directory=codec,
+        variant=variant,  # type: ignore[arg-type]
+        reference_audio=reference,
+        startup_timeout_seconds=1,
+        request_timeout_seconds=0.05,
+        shutdown_timeout_seconds=0.05,
+    )
+
+
+def _blocked_hardware() -> HardwareSnapshot:
+    return HardwareSnapshot(
+        operating_system="darwin",
+        architecture="arm64",
+        cpu_count=8,
+        total_ram_gb=16,
+        available_ram_gb=1,
+        free_disk_gb=100,
+        accelerators=["cpu", "metal"],
+    )
+
+
+def _heavy_requirement() -> HardwareRequirement:
+    return HardwareRequirement(
+        min_total_ram_gb=12,
+        min_available_ram_gb=6,
+        min_free_disk_gb=3,
+        accelerator_any_of=["metal"],
+    )
+
+
+def test_fish_rechecks_live_ram_immediately_before_worker_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = _fish_runtime(
+        tmp_path,
+        'print("worker must not start", flush=True)',
+    )
+    settings = replace(settings, hardware_requirement=_heavy_requirement())
+    monkeypatch.setattr(
+        "whoopy.adapters.tts.fish_speech.inspect_hardware", lambda _path: _blocked_hardware()
+    )
+    adapter = FishSpeech14Adapter(settings)
+
+    with pytest.raises(TransientSynthesisError, match=r"immediately before load.*6 GB"):
+        adapter.prepare()
+
+    assert adapter.runtime_process_id is None
+
+
+def test_moss_rechecks_live_ram_immediately_before_worker_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = _moss_runtime(
+        tmp_path,
+        'print("worker must not start", flush=True)',
+        variant="moss-local-v1.5",
+    )
+    settings = replace(settings, hardware_requirement=_heavy_requirement())
+    monkeypatch.setattr(
+        "whoopy.adapters.tts.moss_tts.inspect_hardware", lambda _path: _blocked_hardware()
+    )
+    adapter = MossTTSAdapter(settings)
+
+    with pytest.raises(TransientSynthesisError, match=r"immediately before load.*6 GB"):
+        adapter.prepare()
+
+    assert adapter.runtime_process_id is None
+
+
 @pytest.mark.skipif(os.name != "posix", reason="fixture uses POSIX process termination")
 def test_fish_adapter_restarts_cleanly_after_request_timeout(tmp_path: Path) -> None:
     settings = _fish_runtime(
@@ -260,6 +356,94 @@ def test_fish_adapter_restarts_cleanly_after_request_timeout(tmp_path: Path) -> 
     adapter.close()
     assert any("first process stalled" in line for line in adapter.diagnostics())
     assert any("timed out" in line for line in adapter.diagnostics())
+
+
+@pytest.mark.skipif(os.name != "posix", reason="fixture uses POSIX process termination")
+@pytest.mark.parametrize("variant", ["moss-local-v1.5", "moss-v1.5"])
+def test_each_moss_adapter_restarts_and_releases_its_slot_after_request_timeout(
+    tmp_path: Path,
+    variant: str,
+) -> None:
+    settings = _moss_runtime(
+        tmp_path,
+        """
+        import base64
+        import json
+        import sys
+        import time
+        from pathlib import Path
+
+        marker = Path(__file__).with_suffix(".started")
+        first_process = not marker.exists()
+        marker.touch()
+        print(json.dumps({"status": "ready", "sample_rate": 24000, "device": "cpu"}), flush=True)
+        for line in sys.stdin:
+            request = json.loads(line)
+            if request.get("action") == "close":
+                break
+            if first_process:
+                print("moss request stalled", file=sys.stderr, flush=True)
+                time.sleep(10)
+                continue
+            print(json.dumps({
+                "status": "ok",
+                "request_id": request["request_id"],
+                "pcm_s16le": base64.b64encode(b"\\x01\\x00").decode("ascii"),
+            }), flush=True)
+        """,
+        variant=variant,
+    )
+    adapter = MossTTSAdapter(settings)
+    segment = SpeechSegment(id="speech-1", text="Welcome.")
+
+    with pytest.raises(TransientSynthesisError, match="timed out"):
+        adapter.synthesize(segment)
+
+    assert adapter.synthesize(segment).pcm_s16le == b"\x01\x00"
+    adapter.close()
+    assert any("moss request stalled" in line for line in adapter.diagnostics())
+    assert any("timed out" in line for line in adapter.diagnostics())
+
+
+@pytest.mark.skipif(os.name != "posix", reason="fixture uses POSIX process termination")
+@pytest.mark.parametrize("variant", ["moss-local-v1.5", "moss-v1.5"])
+def test_each_moss_adapter_restarts_after_empty_audio(
+    tmp_path: Path,
+    variant: str,
+) -> None:
+    settings = _moss_runtime(
+        tmp_path,
+        """
+        import base64
+        import json
+        import sys
+        from pathlib import Path
+
+        marker = Path(__file__).with_suffix(".started")
+        first_process = not marker.exists()
+        marker.touch()
+        print(json.dumps({"status": "ready", "sample_rate": 24000, "device": "cpu"}), flush=True)
+        for line in sys.stdin:
+            request = json.loads(line)
+            if request.get("action") == "close":
+                break
+            pcm = b"" if first_process else b"\\x01\\x00"
+            print(json.dumps({
+                "status": "ok",
+                "request_id": request["request_id"],
+                "pcm_s16le": base64.b64encode(pcm).decode("ascii"),
+            }), flush=True)
+        """,
+        variant=variant,
+    )
+    adapter = MossTTSAdapter(settings)
+    segment = SpeechSegment(id="speech-1", text="Welcome.")
+
+    with pytest.raises(InvalidSynthesisOutput, match="empty audio"):
+        adapter.synthesize(segment)
+
+    assert adapter.synthesize(segment).pcm_s16le == b"\x01\x00"
+    adapter.close()
 
 
 class _DeadController:
@@ -357,4 +541,38 @@ def test_moss_dead_controller_releases_slot_before_restart(
     adapter.prepare()
 
     assert events[:4] == ["close-dead", "release-slot", "acquire-slot", "start-new"]
+    adapter.close()
+
+
+def test_moss_direct_voice_worker_starts_without_reference_argument(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = replace(
+        _moss_runtime(
+            tmp_path,
+            "# worker is replaced by the test controller",
+            variant="moss-local-v1.5",
+        ),
+        reference_audio=None,
+        use_reference=False,
+    )
+    captured: dict[str, object] = {}
+    events: list[str] = []
+
+    def controller(**arguments: object) -> _ReadyController:
+        captured.update(arguments)
+        return _ReadyController(events, **arguments)
+
+    monkeypatch.setattr(
+        "whoopy.adapters.tts.moss_tts.JsonLineProcessController",
+        controller,
+    )
+    adapter = MossTTSAdapter(settings)
+    adapter._runtime_slot = _RecordingSlot(events)  # type: ignore[assignment]
+
+    adapter.prepare()
+
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert "--reference-audio" not in command
     adapter.close()

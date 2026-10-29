@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "experiment_id": "local-v1-voice-kokoro-grounding-3m",
+  "version": 1,
+  "experiment_type": "voice",
+  "evaluation_id": "local-v1-meditation-corpus",
+  "evaluation_version": 1,
+  "seed": 42,
+  "candidates": [
+    {
+      "candidate_id": "kokoro-af-heart",
+      "label": "Kokoro · af_heart",
+      "condition": {
+        "llm_model_id": "qwen3-4b-standard",
+        "writing_method": "blueprint_first_sparse",
+        "voice": {
+          "configuration_id": "kokoro-af-heart-calm",
+          "model_id": "kokoro",
+          "voice_id": "af_heart",
+          "voice_mode": "preset",
+          "delivery": "calm",
+          "intensity": "subtle",
+          "language": "English",
+          "instruction": null
+        },
+        "pacing_profile_id": "meditative-v2"
+      }
+    },
+    {
+      "candidate_id": "kokoro-af-nicole",
+      "label": "Kokoro · af_nicole",
+      "condition": {
+        "llm_model_id": "qwen3-4b-standard",
+        "writing_method": "blueprint_first_sparse",
+        "voice": {
+          "configuration_id": "kokoro-af-nicole-calm",
+          "model_id": "kokoro",
+          "voice_id": "af_nicole",
+          "voice_mode": "preset",
+          "delivery": "calm",
+          "intensity": "subtle",
+          "language": "English",
+          "instruction": null
+        },
+        "pacing_profile_id": "meditative-v2"
+      }
+    }
+  ],
+  "baseline_candidate_id": "kokoro-af-heart"
+}

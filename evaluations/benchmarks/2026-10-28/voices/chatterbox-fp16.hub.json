@@ -1,0 +1,154 @@
+{
+  "_id": "6942d0eba6c6a264bcdad852",
+  "id": "mlx-community/chatterbox-fp16",
+  "private": false,
+  "pipeline_tag": "text-to-speech",
+  "library_name": "mlx-audio",
+  "tags": [
+    "mlx-audio",
+    "safetensors",
+    "chatterbox",
+    "text-to-speech",
+    "speech",
+    "speech generation",
+    "voice cloning",
+    "mlx",
+    "tts",
+    "ar",
+    "da",
+    "de",
+    "el",
+    "en",
+    "es",
+    "fi",
+    "fr",
+    "he",
+    "hi",
+    "it",
+    "ja",
+    "ko",
+    "ms",
+    "nl",
+    "no",
+    "pl",
+    "pt",
+    "ru",
+    "sv",
+    "sw",
+    "tr",
+    "zh",
+    "base_model:ResembleAI/chatterbox",
+    "base_model:finetune:ResembleAI/chatterbox",
+    "license:apache-2.0",
+    "region:us"
+  ],
+  "downloads": 2610,
+  "likes": 5,
+  "modelId": "mlx-community/chatterbox-fp16",
+  "author": "mlx-community",
+  "sha": "4923fcca09086356aeab5191a2348c5a17a23694",
+  "lastModified": "2026-01-05T19:30:17.000Z",
+  "gated": false,
+  "disabled": false,
+  "model-index": null,
+  "config": {
+    "model_type": "chatterbox"
+  },
+  "cardData": {
+    "license": "apache-2.0",
+    "language": [
+      "ar",
+      "da",
+      "de",
+      "el",
+      "en",
+      "es",
+      "fi",
+      "fr",
+      "he",
+      "hi",
+      "it",
+      "ja",
+      "ko",
+      "ms",
+      "nl",
+      "no",
+      "pl",
+      "pt",
+      "ru",
+      "sv",
+      "sw",
+      "tr",
+      "zh"
+    ],
+    "base_model": [
+      "ResembleAI/chatterbox"
+    ],
+    "pipeline_tag": "text-to-speech",
+    "library_name": "mlx-audio",
+    "tags": [
+      "text-to-speech",
+      "speech",
+      "speech generation",
+      "voice cloning",
+      "mlx",
+      "tts"
+    ]
+  },
+  "siblings": [
+    {
+      "rfilename": ".gitattributes",
+      "blobId": "a6344aac8c09253b3b630fb776ae94478aa0275b",
+      "size": 1519
+    },
+    {
+      "rfilename": "Cangjie5_TC.json",
+      "blobId": "d77891f84ca1db0d6f7058a4ee081d4bb0bfe88e",
+      "size": 1920163
+    },
+    {
+      "rfilename": "README.md",
+      "blobId": "50d6ef67b4f668223af9d09558b4f58a35ed852d",
+      "size": 2486
+    },
+    {
+      "rfilename": "conds.safetensors",
+      "blobId": "21e97e2841634d567f2ec81ef41701be2f1c4c3c",
+      "size": 105316,
+      "lfs": {
+        "sha256": "709e5a7fa80e010a011c8244f553853aed7a49c106fff54008fbd89a0f5a6148",
+        "size": 105316,
+        "pointerSize": 131
+      }
+    },
+    {
+      "rfilename": "config.json",
+      "blobId": "ad73745b009d2e3677ddc00648a88836595f645f",
+      "size": 121
+    },
+    {
+      "rfilename": "model.safetensors",
+      "blobId": "9f35bccaed8244c61eb4d7e83638c38413c05aac",
+      "size": 2574468060,
+      "lfs": {
+        "sha256": "8455018319208ce1dc9098536187e6439b735fb8f2939709efee2af250689c38",
+        "size": 2574468060,
+        "pointerSize": 135
+      }
+    },
+    {
+      "rfilename": "tokenizer.json",
+      "blobId": "4b0e4650ba0f98a561ed384dd9043d15046cab4c",
+      "size": 70011
+    }
+  ],
+  "spaces": [],
+  "createdAt": "2025-12-17T15:48:59.000Z",
+  "safetensors": {
+    "parameters": {
+      "F32": 643540911
+    },
+    "total": 643540911
+  },
+  "usedStorage": 5271389956
+}

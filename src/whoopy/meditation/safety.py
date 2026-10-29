@@ -41,7 +41,10 @@ UNSAFE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     (re.compile(r"\byou (?:should|must) (?:not )?feel\b", re.I), "prescriptive emotional claim"),
 )
-CONTROL_SYNTAX = re.compile(r"(?:\[pause\s*:|<speak>|</?[a-z]+>|^#{1,6}\s|```)", re.I | re.M)
+CONTROL_SYNTAX = re.compile(
+    r"(?:\[[^\]\r\n]*\]|<[^>\r\n]*>|^#{1,6}\s|```)",
+    re.I | re.M,
+)
 
 
 class ContentSafetyError(ValueError):

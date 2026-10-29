@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "suite_id": "local-v1-platform-v1",
+  "suite_scope": "independent_platform",
+  "description": "One real Standard/Kokoro prompt-to-audio smoke for each independently operated release target; primary-machine soak and interruption evidence remain separate gates.",
+  "cases": [
+    {
+      "case_id": "platform-prompt-to-audio-1-minute",
+      "kind": "soak",
+      "command": ["{python}", "scripts/acceptance_production_case.py", "--minutes", "1", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}", "--evidence-dir", "evaluations/local/platform-production-case"],
+      "duration_minutes": 1,
+      "evidence_contract": "production_receipt_v2",
+      "repetitions": 1,
+      "timeout_seconds": 1800
+    }
+  ]
+}

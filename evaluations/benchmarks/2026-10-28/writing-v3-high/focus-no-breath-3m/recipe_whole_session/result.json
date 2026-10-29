@@ -1,0 +1,10 @@
+{
+  "case": "focus-no-breath-3m",
+  "writing_method": "recipe_whole_session",
+  "prompt": "I have an important meeting soon and feel distracted. I am seated. Give me a steadying practice with sound as the anchor. I do not want to focus on breathing. Finish ready to continue my day, without promising how I will feel.",
+  "target_seconds": 180,
+  "seed": 42,
+  "status": "interrupted_for_structured_output",
+  "gpu_lock_wait_seconds": 9.62408704200061,
+  "reason": "New method now uses native dynamic JSON schema; preserve prior raw attempts rather than infer success."
+}

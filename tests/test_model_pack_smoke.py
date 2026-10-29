@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import threading
+import wave
 from pathlib import Path
 
 import pytest
@@ -10,10 +11,17 @@ import yaml
 
 from whoopy.audio.models import PcmAudio
 from whoopy.audio.synthesis import FatalSynthesisError, TransientSynthesisError
-from whoopy.model_packs.manager import ManagedModelPacks, SmokeResult
+from whoopy.hardware import HardwareSnapshot
+from whoopy.model_packs.manager import ManagedModelPacks, SmokeProbeFailure, SmokeResult
 from whoopy.model_packs.operations import PerformanceRecordStore
-from whoopy.model_packs.registry import ModelPackRegistry, load_model_pack_registry
+from whoopy.model_packs.registry import (
+    ModelPackRegistry,
+    RuntimeEvidence,
+    SmokeTestEvidence,
+    load_model_pack_registry,
+)
 from whoopy.model_packs.smoke import OfflineModelPackSmokeRunner, _offline_environment
+from whoopy.timeline import SpeechSegment
 
 
 class _FakeAdapter:
@@ -35,6 +43,23 @@ class _FakeAdapter:
         self.events.append("close")
         if self.close_fails:
             raise RuntimeError("could not release runtime")
+
+
+class _SynthesisFailureAdapter(_FakeAdapter):
+    def synthesize(self, _segment: object) -> PcmAudio:
+        self.events.append("synthesize")
+        raise FatalSynthesisError("model returned empty audio")
+
+
+class _SegmentCaptureAdapter(_FakeAdapter):
+    def __init__(self, events: list[str]) -> None:
+        super().__init__(events)
+        self.segment: SpeechSegment | None = None
+
+    def synthesize(self, segment: object) -> PcmAudio:
+        assert isinstance(segment, SpeechSegment)
+        self.segment = segment
+        return super().synthesize(segment)
 
 
 def _registry(
@@ -152,6 +177,34 @@ def test_offline_runner_dispatches_every_exact_pack_and_records_performance(
     assert records[0].unload_succeeded
 
 
+@pytest.mark.parametrize(
+    ("pack_id", "expected_mode"),
+    [
+        ("qwen3-tts-custom-voice-1.7b", "preset"),
+        ("qwen3-tts-voice-design-1.7b", "designed"),
+        ("qwen3-tts-base-clone-1.7b", "reference"),
+    ],
+)
+def test_qwen_smoke_uses_each_adapter_task_voice_mode(
+    tmp_path: Path,
+    pack_id: str,
+    expected_mode: str,
+) -> None:
+    registry = _registry(tmp_path, [pack_id])
+    events: list[str] = []
+    adapter = _SegmentCaptureAdapter(events)
+    runner = OfflineModelPackSmokeRunner(
+        registry,
+        adapter_factories={pack_id: lambda _pack, _path: adapter},
+    )
+
+    runner(registry.get(pack_id), tmp_path / "selected")
+
+    assert adapter.segment is not None
+    assert adapter.segment.voice_mode == expected_mode
+    assert events == ["prepare", "synthesize", "close"]
+
+
 def test_offline_runner_records_failed_unload_and_refuses_success(tmp_path: Path) -> None:
     registry = _registry(tmp_path, ["moss-8b"])
     events: list[str] = []
@@ -166,6 +219,35 @@ def test_offline_runner_records_failed_unload_and_refuses_success(tmp_path: Path
     records = PerformanceRecordStore(registry.records_directory("moss-8b")).list()
     assert len(records) == 1
     assert not records[0].unload_succeeded
+
+
+def test_synthesis_failure_preserves_passed_runtime_probe_as_distinct_evidence(
+    tmp_path: Path,
+) -> None:
+    registry = _registry(tmp_path, ["moss-local-5b"])
+    files = registry.models_root / "managed/model-packs/moss-local-5b/files"
+    files.mkdir(parents=True)
+    (files / "model.bin").write_bytes(b"model")
+    runtime = registry.models_root / "runtime/moss-local-5b"
+    runtime.mkdir(parents=True)
+    (runtime / "python").write_text("runtime", encoding="utf-8")
+    events: list[str] = []
+    runner = OfflineModelPackSmokeRunner(
+        registry,
+        adapter_factories={"moss-local-5b": lambda _pack, _path: _SynthesisFailureAdapter(events)},
+    )
+    service = ManagedModelPacks(registry, smoke_runner=runner)
+
+    with pytest.raises(ValueError, match="empty audio"):
+        service.smoke_test("moss-local-5b")
+
+    status = registry.inspect("moss-local-5b")
+    runtime_check = next(check for check in status.checks if check.check == "runtime_probe")
+    smoke_check = next(check for check in status.checks if check.check == "offline_smoke_test")
+    assert runtime_check.passed
+    assert not smoke_check.passed
+    assert status.state == "incompatible"
+    assert events == ["prepare", "synthesize", "close"]
 
 
 def test_production_facade_installs_real_offline_runner_by_default(tmp_path: Path) -> None:
@@ -261,8 +343,16 @@ def test_smoke_rejects_silent_clipped_or_invalid_pcm(
     with pytest.raises(ValueError, match=message):
         service.smoke_test("kokoro")
 
-    assert service.registry.inspect("kokoro").state == "incompatible"
-    assert not (service.registry.records_directory("kokoro") / "smoke.json").exists()
+    status = service.registry.inspect("kokoro")
+    assert status.state == "incompatible"
+    assert next(check for check in status.checks if check.check == "runtime_probe").passed
+    assert not next(check for check in status.checks if check.check == "offline_smoke_test").passed
+    records = service.registry.records_directory("kokoro")
+    runtime = RuntimeEvidence.model_validate_json((records / "runtime.json").read_text("utf-8"))
+    smoke = SmokeTestEvidence.model_validate_json((records / "smoke.json").read_text("utf-8"))
+    assert runtime.success
+    assert not smoke.success
+    assert smoke.offline
 
 
 def test_parent_synthesis_can_record_dependency_paths_it_really_exercised(
@@ -294,3 +384,71 @@ def test_parent_synthesis_can_record_dependency_paths_it_really_exercised(
 
     assert report.state == "ready"
     assert registry.inspect("codec").state == "ready"
+
+
+def test_successful_smoke_retains_a_hash_verified_playable_wave(tmp_path: Path) -> None:
+    service = _installed_service(
+        tmp_path,
+        lambda _pack, _path: SmokeResult(
+            pcm_s16le=b"\xe8\x03" * 2_400,
+            sample_rate=24_000,
+            message="Playable sample rendered.",
+        ),
+    )
+
+    service.smoke_test("kokoro")
+    sample = service.smoke_sample_path("kokoro")
+
+    with wave.open(str(sample), "rb") as source:
+        assert source.getframerate() == 24_000
+        assert source.getnchannels() == 1
+        assert source.getsampwidth() == 2
+        assert source.readframes(source.getnframes()) == b"\xe8\x03" * 2_400
+
+    sample.write_bytes(b"not a wave")
+    with pytest.raises(ValueError, match="missing or corrupt"):
+        service.smoke_sample_path("kokoro")
+
+
+@pytest.mark.parametrize("pack_id", ["qwen3-tts-custom-voice-0.6b", "qwen3-tts-voice-design-1.7b"])
+def test_qwen_smoke_refuses_low_memory_before_starting_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pack_id: str
+) -> None:
+    from whoopy.adapters.tts import qwen3_tts
+
+    registry = _registry(tmp_path, [pack_id])
+    runtime = registry.models_root / "runtime" / pack_id
+    runtime.mkdir(parents=True)
+    (runtime / "python").write_text("runtime", encoding="utf-8")
+    monkeypatch.setattr(
+        qwen3_tts.Qwen3TTSAdapter, "availability_error", staticmethod(lambda _settings: None)
+    )
+    monkeypatch.setattr(
+        qwen3_tts,
+        "inspect_hardware",
+        lambda _path: HardwareSnapshot(
+            operating_system="darwin",
+            architecture="arm64",
+            cpu_count=8,
+            total_ram_gb=48,
+            available_ram_gb=0,
+            free_disk_gb=100,
+            accelerators=["cpu"],
+        ),
+    )
+    started: list[dict[str, object]] = []
+
+    def reject_start(**kwargs: object) -> None:
+        started.append(kwargs)
+        raise AssertionError("runtime must not start with insufficient memory")
+
+    monkeypatch.setattr(qwen3_tts, "JsonLineProcessController", reject_start)
+    runner = OfflineModelPackSmokeRunner(registry)
+
+    with pytest.raises(SmokeProbeFailure, match="live resource check") as failure:
+        runner(registry.get(pack_id), tmp_path / "selected")
+
+    assert not failure.value.runtime_probe_passed
+    assert isinstance(failure.value.__cause__, TransientSynthesisError)
+    assert started == []
+    assert PerformanceRecordStore(registry.records_directory(pack_id)).list() == ()

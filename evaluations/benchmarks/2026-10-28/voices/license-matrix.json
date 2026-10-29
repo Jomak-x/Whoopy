@@ -1,0 +1,152 @@
+{
+  "checked_at": "2026-10-28",
+  "caution": "Source audit, not a legal opinion or third-party rights clearance. Exact source snapshots and failures in licenses/sources.json.",
+  "runtime": {
+    "mlx-audio": {
+      "license": "MIT",
+      "revision": "8c244a1faff44cfa69e3151c195f52a4c1c90be5",
+      "kokoro_dependencies": [
+        {
+          "name": "Misaki",
+          "version": "0.9.4",
+          "license_evidence": "Apache terms observed in owner dependency inspection"
+        },
+        {
+          "name": "phonemizer-fork",
+          "version": "3.3.2",
+          "license_evidence": "GPLv3 LICENSE observed in owner dependency inspection"
+        },
+        {
+          "name": "espeakng-loader",
+          "version": "0.2.4",
+          "bundled_component": "eSpeak NG 1.52.0 and language data",
+          "bundled_component_license": "GPL-3.0-or-later",
+          "license_evidence": "Pinned upstream eSpeak README and COPYING; owner inspection found no license-named file in loader package",
+          "sources": [
+            "https://raw.githubusercontent.com/espeak-ng/espeak-ng/1.52.0/README.md",
+            "https://raw.githubusercontent.com/espeak-ng/espeak-ng/1.52.0/COPYING"
+          ]
+        }
+      ]
+    },
+    "dots-tts-mlx": {
+      "license": "Apache-2.0",
+      "revision": "f64479f51a2a9d7093533732cae86e765d8fb96e"
+    },
+    "managed-sherpa-kokoro": {
+      "sherpa_version": "1.13.4",
+      "piper_phonemize_revision": "f3ff95afc03640bc1399e113e83361192a2fafb4",
+      "espeak_source_revision_in_build": "7251208ee427ef87e94f39d0e99b15d287224ed6",
+      "dependency_evidence": "Pinned Sherpa build disables shared piper-phonemize libraries; pinned piper build links espeak-ng. Owner inspection found eSpeak strings in the C API dylib and no separate eSpeak dylib, supporting embedded linkage.",
+      "archive_evidence": "Owner inspection of managed Kokoro 20261026 archive found 391 espeak-ng-data entries and only a top-level Apache LICENSE; this does not clear the bundle.",
+      "installed_wheel_source_closure": "unverified",
+      "sources": [
+        "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.4/cmake/piper-phonemize.cmake",
+        "https://raw.githubusercontent.com/csukuangfj/piper-phonemize/f3ff95afc03640bc1399e113e83361192a2fafb4/CMakeLists.txt"
+      ]
+    }
+  },
+  "candidates": [
+    {
+      "name": "Kokoro82M",
+      "code_license": "Apache-2.0",
+      "model_license_evidence": "Apache-2.0 model-card declaration",
+      "conversion_license_declaration": "Apache-2.0",
+      "commercial_use": "Declared Apache model/primary-code terms permit commercial use subject to their conditions; this is not complete runtime-bundle clearance.",
+      "hosting": "GPL alone does not prohibit commercial or paid server/API use; network interaction without transfer of a copy is not conveying under GPLv3. Actual delivery, linked-work and third-party rights still require review.",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain Apache/license/NOTICE obligations and original model-card dataset credits. Actual Sherpa and MLX Kokoro paths include eSpeak/GPL dependencies; covered binary distribution can require notices, license terms and corresponding source. Desktop runtime redistribution and exact source/build closure review remain incomplete.",
+      "runtime_review": {
+        "status": "incomplete",
+        "desktop_redistribution_cleared": false,
+        "source_closure_verified": false,
+        "dependency_scope": [
+          "Misaki",
+          "phonemizer-fork",
+          "espeakng-loader",
+          "eSpeak NG and language data",
+          "Sherpa/piper linked runtime"
+        ],
+        "evidence": [
+          "LICENSE-AUDIT.txt",
+          "../../../../docs/kokoro-license-audit.md",
+          "https://raw.githubusercontent.com/espeak-ng/espeak-ng/1.52.0/README.md",
+          "https://raw.githubusercontent.com/espeak-ng/espeak-ng/1.52.0/COPYING"
+        ],
+        "whoopy_source_license": "UNDECIDED",
+        "limits": "Dependency obligations do not automatically license Whoopy source. Model, runtime, reference and output rights remain separate; no legal clearance is claimed."
+      }
+    },
+    {
+      "name": "Qwen3-TTS1.7B CustomVoice/VoiceDesign",
+      "code_license": "Apache-2.0",
+      "model_license_evidence": "Apache-2.0 model-card declaration",
+      "conversion_license_declaration": "Apache-2.0 for pinned MLX8bit CustomVoice/VoiceDesign cards; separate MLXruntime MIT",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain Apache/license/NOTICE obligations."
+    },
+    {
+      "name": "VoxCPM2",
+      "code_license": "Apache-2.0",
+      "model_license_evidence": "Apache-2.0 model-card declaration",
+      "conversion_license_declaration": "Apache-2.0",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain Apache/license/NOTICE obligations."
+    },
+    {
+      "name": "ChatterboxMultilingualv3",
+      "code_license": "MIT",
+      "model_license_evidence": "MIT model-card declaration",
+      "conversion_license_declaration": "MIT",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain MIT copyright/license notices. S3Tokenizer conversion has no independent license declaration; upstream code Apache and model-card Apache declaration recorded."
+    },
+    {
+      "name": "MOSSLocalv1.5",
+      "code_license": "Apache-2.0",
+      "model_license_evidence": "Apache-2.0 model-card declaration",
+      "conversion_license_declaration": "Apache-2.0",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain Apache obligations and separate MOSS tokenizerv2 terms; model LICENSE404 recorded."
+    },
+    {
+      "name": "DotsSOAR",
+      "code_license": "Apache-2.0",
+      "model_license_evidence": "Apache-2.0 model-card declaration",
+      "conversion_license_declaration": "Apache-2.0",
+      "commercial_use": "permitted subject to license",
+      "hosting": "no separately restrictive hosting term in inspected Apache/MIT license",
+      "output": "no separate output-copyleft restriction identified; not voice/text/recording/third-party rights clearance",
+      "redistribution": "Retain Apache/license/NOTICE obligations; standalone model LICENSE404 recorded."
+    },
+    {
+      "name": "FishAudioDrama3",
+      "code_license": "separate code not fully audited; model controls this exclusion",
+      "model_license": "Fish Audio Community License1.0",
+      "open_source": false,
+      "commercial_use": "community license while aggregate annual revenue <USD500000, conditions/transitions apply",
+      "hosting": "defined self-serve Hosted Service requires separate license; explicit exceptions include product-generated/controlled narration and finished-output production services; exactIII(c) retained",
+      "output": "as between user/Fish owned by user to extent permitted by law, subject to terms",
+      "redistribution": "license+notice, Built with Fish Audio attribution, use/consent/provenance restrictions",
+      "decision": "resource-preflight exclusion; no download/inference"
+    },
+    {
+      "name": "HiggsTTS3",
+      "model_license": "Boson Higgs TTS3 Research and Non-Commercial License",
+      "open_source": false,
+      "commercial_use": "separate license generally; limited Creator Use Grant for qualifying content/channels with attribution",
+      "hosting": "product/app/service embedding excluded from Creator Use Grant",
+      "output": "conditional ownership and significant output/use restrictions; not automatically reusable in a product",
+      "redistribution": "limited research/noncommercial terms; creator exception excludes distribution of materials/derivatives",
+      "decision": "license-fit exclusion; no download/inference"
+    }
+  ]
+}

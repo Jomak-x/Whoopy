@@ -1,0 +1,349 @@
+"""Versioned structural recipes and deterministic routing, never canned prose."""
+
+from __future__ import annotations
+
+import math
+import re
+from pathlib import Path
+from typing import Literal
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from whoopy.locations import default_config_directory
+from whoopy.meditation.models import EndingBehavior, MeditationKind, MeditationTechnique
+
+Posture = Literal["sitting", "lying_down"]
+Anchor = Literal["natural_breath", "sound", "contact"]
+
+
+class RecipeBeat(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,47}$")
+    technique: MeditationTechnique
+    weight: int = Field(ge=1, le=4)
+    purpose: str = Field(min_length=10, max_length=240)
+
+
+class SessionRecipe(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str = Field(pattern=r"^[a-z][a-z0-9-]{1,63}$")
+    version: int = Field(ge=1)
+    ending: EndingBehavior
+    beats: list[RecipeBeat] = Field(min_length=3, max_length=12)
+
+    @model_validator(mode="after")
+    def coherent_beats(self) -> SessionRecipe:
+        if len({beat.id for beat in self.beats}) != len(self.beats):
+            raise ValueError("recipe beat IDs must be unique")
+        if self.beats[0].technique != "arrival":
+            raise ValueError("recipe must begin with arrival")
+        expected = "sleep_transition" if self.ending == "sleep_taper" else "return"
+        if self.beats[-1].technique != expected:
+            raise ValueError("recipe ending technique contradicts its ending contract")
+        return self
+
+    @property
+    def versioned_id(self) -> str:
+        return f"{self.id}@{self.version}"
+
+
+class RecipeLibrary(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1]
+    recipes: list[SessionRecipe] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_recipes(self) -> RecipeLibrary:
+        if len({recipe.id for recipe in self.recipes}) != len(self.recipes):
+            raise ValueError("recipe IDs must be unique")
+        return self
+
+
+def load_recipe_library(path: Path | None = None) -> RecipeLibrary:
+    active_path = path if path is not None else default_config_directory() / "session_recipes.yaml"
+    return RecipeLibrary.model_validate(yaml.safe_load(active_path.read_text(encoding="utf-8")))
+
+
+class RoutedSession(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    recipe: SessionRecipe
+    posture: Posture
+    anchor: Anchor
+    kind: MeditationKind
+    main_practice: str
+    breath_excluded: bool
+
+
+NO_BREATH = re.compile(
+    r"\b(?:no|without|avoid|skip)\b[^.!?\n]{0,35}\b(?:breath|breathing)\b|"
+    r"\b(?:don['\u2019]t|do not|rather not)\b[^.!?\n]{0,35}\b(?:breath|breathing)\b|"
+    r"\b(?:breath|breathing)\b[^.!?\n]{0,30}\b(?:uncomfortable|panic|trigger|worse)\w*\b",
+    re.I,
+)
+SLEEP = re.compile(
+    r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|drift(?:ing)? off|insomnia)\b",
+    re.I,
+)
+INTENT_NEGATION = (
+    r"\b(?:no|not|without|avoid|skip|(?:do|is|are|should|must)n['\u2019]t|"
+    r"(?:do|is|are|should|must) not|rather not)\b"
+    r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?;\n])*"
+)
+NEGATED_SLEEP = re.compile(rf"{INTENT_NEGATION}{SLEEP.pattern}", re.I)
+SLEEP_DIFFICULTY = re.compile(
+    r"^\s*not\s+(?:sleeping\b|"
+    r"getting(?:\s+[\w'\u2019-]+){0,4}\s+sleep\b)|"
+    r"\b(?:could|can|did|was|were)\s+not\b|"
+    r"\b(?:(?:am|is|are)\s+not|(?:is|are)n['\u2019]t|"
+    r"(?:i['\u2019]m|(?:we|they|you)['\u2019]re|(?:he|she)['\u2019]s)\s+not)\s+"
+    r"(?:sleeping|getting(?:\s+[\w'\u2019-]+){0,4}\s+sleep)\b",
+    re.I,
+)
+SLEEP_INTENT_SCOPE = re.compile(
+    r"\b(?:during|throughout|for|in)\s+(?:(?:this|the|my|our|a)\s+)?"
+    r"(?:(?!(?:and|or|but|however|yet|instead)\b)[\w'\u2019-]+\s+){0,4}"
+    r"(?:meditation|session|meeting)\b|"
+    r"\b(?:goal|aim|intention|preference)\s+(?:is|are|isn['\u2019]t|aren['\u2019]t)\b|"
+    r"\b(?:is|are)\s+(?:(?:my|our|the)\s+)?(?:goal|aim|intention|preference)\b",
+    re.I,
+)
+AWAKE = re.compile(r"\b(?:(?:stay|remain)|keep\s+(?:me|us))\s+awake\b", re.I)
+NEGATED_AWAKE = re.compile(rf"{INTENT_NEGATION}{AWAKE.pattern}", re.I)
+BOX_BREATHING = re.compile(r"\b(?:box|square)\s+breathing\b", re.I)
+NEGATED_BOX_BREATHING = re.compile(
+    r"\b(?:no|without|avoid|skip|don['\u2019]t|do not|rather not)\b"
+    r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?;\n]){0,35}"
+    r"\b(?:box|square)\s+breathing\b",
+    re.I,
+)
+REQUEST_SUBJECT_CLAUSE = (
+    r"(?:"
+    r"(?:i|you|we|he|she|they|it)\b|"
+    r"(?:(?!(?:and|or|but|however|yet|instead)\b)[a-z][\w'\u2019-]*\s+){1,6}"
+    r"(?:am|is|are|was|were|can|could|will|would|shall|should|must|may|might|"
+    r"has|have|does|do|wants?|needs?|aims?|seeks?|prefers?|includes?)\b)"
+)
+REQUEST_CLAUSE_BOUNDARY = re.compile(
+    rf",(?=\s*{REQUEST_SUBJECT_CLAUSE})|"
+    rf"[.!?;\n]+|,(?!\s*(?:(?:and|or|breath|breathing|box|square)\b|{SLEEP.pattern}))|"
+    r"\b(?:but|however|yet|instead)\b|"
+    rf"\b(?:and|or)\s+(?=(?:please\s+)?{REQUEST_SUBJECT_CLAUSE})|"
+    r"\band\s+(?=(?:please\s+)?(?:use|try|include|allow|focus|concentrate|guide|help)\b)",
+    re.I,
+)
+REFLECTION = re.compile(r"\b(?:reflect\w*|review the day|busy day|good[ -]?night)\b", re.I)
+POSTURE_CUES: dict[Posture, re.Pattern[str]] = {
+    "lying_down": re.compile(
+        r"\b(?:(?:lying|lie|lay)(?:\s+(?:down|(?:in|on)\s+(?:(?:my|a|the)\s+)?"
+        r"(?:bed|mattress|floor|mat)))?|reclining)\b",
+        re.I,
+    ),
+    "sitting": re.compile(
+        r"\b(?:(?:sitting|seated|sit)(?:\s+(?:in|on)\s+(?:(?:my|a|the)\s+)?"
+        r"(?:chair|seat|floor))?)\b",
+        re.I,
+    ),
+}
+POSTURE_ACTION = "(?:" + "|".join(cue.pattern for cue in POSTURE_CUES.values()) + ")"
+NEGATED_POSTURE = re.compile(
+    r"\b(?:no|not|without|avoid|skip|never|don['\u2019]t|do not|cannot|can['\u2019]t)\s+"
+    r"(?:while\s+)?(?:(?:(?:want|need|have)\s+)?to\s+)?(?:be\s+)?"
+    rf"{POSTURE_ACTION}(?:\s+(?:or|and)\s+(?:to\s+)?{POSTURE_ACTION})*",
+    re.I,
+)
+
+
+def _requests_sleep(clauses: list[str]) -> bool:
+    affirmative_sleep = any(
+        SLEEP.search(clause) and not NEGATED_SLEEP.search(clause) for clause in clauses
+    )
+    sleep = False
+    for clause in clauses:
+        intent_clause = (
+            clause
+            if SLEEP_INTENT_SCOPE.search(clause)
+            or (not affirmative_sleep and re.fullmatch(r"\s*not\s+sleeping\s*", clause, re.I))
+            else SLEEP_DIFFICULTY.sub("", clause)
+        )
+        if NEGATED_SLEEP.search(intent_clause):
+            return False
+        if AWAKE.search(NEGATED_AWAKE.sub("", intent_clause)):
+            return False
+        sleep = sleep or SLEEP.search(clause) is not None
+    return sleep
+
+
+def _requested_posture(clauses: list[str], *, sleep: bool) -> Posture:
+    excluded: set[Posture] = set()
+    requested: set[Posture] = set()
+    for clause in clauses:
+        negated = [match.span() for match in NEGATED_POSTURE.finditer(clause)]
+        for posture, cue in POSTURE_CUES.items():
+            for match in cue.finditer(clause):
+                if any(start <= match.start() < end for start, end in negated):
+                    excluded.add(posture)
+                else:
+                    requested.add(posture)
+    for posture in POSTURE_CUES:
+        if posture in requested and posture not in excluded:
+            return posture
+    default: Posture = "lying_down" if sleep else "sitting"
+    alternative: Posture = "sitting" if sleep else "lying_down"
+    for posture in (default, alternative):
+        if posture not in excluded:
+            return posture
+    raise ValueError("Both supported postures are excluded; choose sitting or lying down.")
+
+
+def route_session(
+    prompt: str,
+    duration_seconds: int,
+    *,
+    posture: Posture | None = None,
+    meditation_kind: MeditationKind | None = None,
+    library: RecipeLibrary | None = None,
+) -> RoutedSession:
+    """Use need and explicit constraints before selecting the hidden grammar."""
+
+    clauses = REQUEST_CLAUSE_BOUNDARY.split(prompt)
+    excluded = any(NO_BREATH.search(BOX_BREATHING.sub("", clause)) for clause in clauses)
+    if any(BOX_BREATHING.search(NEGATED_BOX_BREATHING.sub("", clause)) for clause in clauses):
+        raise ValueError(
+            "Box breathing is not supported by a reviewed holding protocol. "
+            "Request natural breathing or gentle no-hold breathing instead."
+        )
+    sleep = meditation_kind == "sleep" or (meditation_kind is None and _requests_sleep(clauses))
+    if posture is None:
+        posture = _requested_posture(clauses, sleep=sleep)
+    if excluded or re.search(r"\b(?:sound|listen|noise|overstimulat|panic)\w*\b", prompt, re.I):
+        anchor: Anchor = "sound"
+    elif re.search(r"\b(?:body|contact|ground|support)\w*\b", prompt, re.I):
+        anchor = "contact"
+    else:
+        anchor = "natural_breath"
+    if sleep:
+        recipe_id = (
+            "good-night-reflection"
+            if duration_seconds >= 180 and REFLECTION.search(prompt)
+            else "sleep-settling"
+        )
+        kind: MeditationKind = "sleep"
+        practice = "An ordered, neutral body scan connected to the chosen support anchor."
+    else:
+        recipe_id = "daytime-steadying"
+        kind = meditation_kind or "grounding"
+        if meditation_kind is None:
+            if REFLECTION.search(prompt):
+                kind = "reflection"
+            elif re.search(
+                r"\b(?:setback|self.critic|compassion|failed|failure|harsh)\w*\b", prompt, re.I
+            ):
+                kind = "self_compassion"
+            elif re.search(r"\b(?:anxious|anxiety|thought|worr|ruminat)\w*\b", prompt, re.I):
+                kind = "noting"
+            elif re.search(r"\b(?:focus|meeting|concentrat|attention)\w*\b", prompt, re.I):
+                kind = "focused_attention"
+            elif re.search(r"\bbody.scan\b", prompt, re.I):
+                kind = "body_scan"
+        practices = {
+            "reflection": (
+                "Recall one bounded ordinary event; ask one genuine question, then release it."
+            ),
+            "self_compassion": (
+                "Acknowledge one difficulty; offer one modest optional phrase of kindness."
+            ),
+            "noting": (
+                "Notice one thought, optionally name it thinking, and return to the same anchor."
+            ),
+            "focused_attention": (
+                "Rehearse returning to one concrete anchor; let the next real task wait."
+            ),
+            "body_scan": (
+                "Notice body areas in one ordered neutral sequence without demanding relaxation."
+            ),
+            "grounding": (
+                "Explore the selected anchor as it is, returning to that same anchor after "
+                "wandering."
+            ),
+            "breath_awareness": (
+                "Observe natural breathing without controlling it, or use the chosen external "
+                "anchor when breathing is excluded."
+            ),
+            "loving_kindness": "Offer one or two optional well-wishes without demanding a feeling.",
+            "visualization": (
+                "Imagine one simple scene while staying connected to the chosen anchor."
+            ),
+            "open_awareness": (
+                "Notice sound, sensation, and thought without selecting or changing any of them."
+            ),
+        }
+        practice = practices[kind]
+    recipe = next(
+        item for item in (library or load_recipe_library()).recipes if item.id == recipe_id
+    )
+    return RoutedSession(
+        recipe=recipe,
+        posture=posture,
+        anchor=anchor,
+        kind=kind,
+        main_practice=practice,
+        breath_excluded=excluded,
+    )
+
+
+class ParagraphSlot(BaseModel):
+    """One bounded prose-and-quiet interval; actual words determine its exact quiet."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    duration_ms: int
+    minimum_words: int
+    maximum_words: int
+    maximum_quiet_ms: int
+
+
+def allocate_slots(
+    session: RoutedSession, duration_seconds: int, words_per_minute: int
+) -> list[list[ParagraphSlot]]:
+    weights = [beat.weight for beat in session.recipe.beats]
+    remaining = duration_seconds * 1_000
+    beats: list[list[ParagraphSlot]] = []
+    for index, weight in enumerate(weights):
+        beat_ms = (
+            remaining
+            if index == len(weights) - 1
+            else round(duration_seconds * 1_000 * weight / sum(weights))
+        )
+        remaining -= beat_ms
+        maximum_quiet = (
+            22_000
+            if session.recipe.ending == "sleep_taper" and index >= len(weights) - 2
+            else 16_000
+        )
+        # Keep guidance brief at the selected speech rate; longer beats gain
+        # practice invitations rather than requiring longer paragraphs.
+        cycle_ms = min(35_000, maximum_quiet + 24 * 60_000 / words_per_minute)
+        count = max(1, math.ceil(beat_ms / cycle_ms))
+        slot_ms = [beat_ms // count] * count
+        slot_ms[-1] += beat_ms - sum(slot_ms)
+        beats.append(
+            [
+                ParagraphSlot(
+                    duration_ms=duration,
+                    minimum_words=max(
+                        4, math.ceil((duration - maximum_quiet) * words_per_minute / 60_000)
+                    ),
+                    maximum_words=max(
+                        4, math.floor((duration - 1_200) * words_per_minute / 60_000)
+                    ),
+                    maximum_quiet_ms=maximum_quiet,
+                )
+                for duration in slot_ms
+            ]
+        )
+    return beats

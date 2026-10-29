@@ -1,5 +1,7 @@
 # Native Portability Contract
 
+> **Historical foundation with current principles.** For the exact Local V1 target matrix and acceptance command, use [setup](setup.md).
+
 Whoopy aims for one user experience across ordinary Windows, macOS, and Linux laptops without requiring Docker or asking users to understand inference backends. The promise is not that every machine can run the same large model. The promise is that Whoopy detects what is safe, selects an appropriate local mode, and refuses unsafe model loads before downloading gigabytes of data.
 
 ## One Logical Runtime Path
@@ -75,17 +77,23 @@ Runtime PRs will extend the check with llama.cpp device enumeration, model memor
 
 ## Distribution Contract
 
-Developers use one locked `uv` workflow across Windows, macOS, and Linux. End users should eventually receive native artifacts built on each target OS:
+Local V1 ships a target-native, hash-inventoried application bundle for Windows, macOS, and Linux.
+It carries Whoopy and every locked Python dependency as wheels, installs from its wheelhouse with
+indexes disabled, and launches as `whoopy app` after environment activation. The locked
+`uv sync --locked` source workflow remains for contributors. Both paths serve the bundled frontend
+without Node, Docker, CMake, or a separate web process. Python, FFmpeg, and models remain separate,
+verified acquisitions selected only after compatibility checks.
 
-- a signed macOS application or installer;
-- a signed Windows installer;
-- a Linux AppImage or equivalent package.
-
-Those artifacts will bundle the application runtime and the correct platform binaries. Models remain separate, verified downloads selected only after the compatibility check. The user should never need Python, CMake, CUDA configuration, or a model-format decision for the normal path.
+Signed native macOS/Windows installers and a Linux AppImage are a later distribution milestone;
+their absence is not disguised as completed Local V1 evidence. The current product-bundle path
+requires a supported Python with `venv`/`ensurepip`, while bundle acquisition and source development
+use `uv`. Neither path requires users to select CUDA, Metal, Vulkan, quantization, or model formats.
 
 ## Test Contract
 
-Every PR runs the same Python checks on Windows, macOS, and Linux. Real runtime releases additionally require:
+The same Python checks are intended to run on each target, but a declaration is not evidence. Local
+V1 release acceptance requires independent machine reports, aggregated through the documented
+cross-platform evidence command. Real runtime releases additionally require:
 
 - CPU smoke tests on all three operating systems;
 - Apple Silicon Metal tests;

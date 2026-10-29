@@ -1,0 +1,6 @@
+{
+  "purpose": "Actual ASR negative controls, independent of unit-test mocked transcripts.",
+  "noise": "8 seconds mono PCM16 at 16kHz; Python Random seed 20261028 uniform amplitude [-0.2,0.2]; not speech.",
+  "silence": "8 seconds exact zero PCM16 samples; not speech.",
+  "expected": "Welcome. Let your shoulders soften."
+}

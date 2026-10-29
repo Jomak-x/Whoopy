@@ -1,0 +1,109 @@
+WHOOPY VOICE CANDIDATES — LICENSE EVIDENCE, 2026-10-28
+
+This is a source audit for this local benchmark, not a warranty of third-party
+voice, dataset, output copyright or other rights. Exact fetched texts, SHA256s,
+source URLs and failed lookups are in licenses/sources.json and licenses/*.txt.
+Code licenses, model declarations, conversion declarations and codec terms are
+kept separate. Runtime versions/revisions belong to each candidate report.
+
+Kokoro 82M: upstream hexgrad code Apache-2.0; official hexgrad/Kokoro-82M model
+card declares Apache-2.0. The pinned MLX conversion declares Apache-2.0. These
+declarations do not clear the complete runtime: the actual Sherpa/Kokoro and MLX
+paths contain eSpeak/GPL dependencies. The managed archive includes 391
+espeak-ng-data entries; its top-level Apache LICENSE is not a bundle-wide audit.
+MLX Kokoro uses Misaki 0.9.4 (Apache), phonemizer-fork 3.3.2 (GPLv3), and
+espeakng-loader 0.2.4 (bundled eSpeak 1.52.0/data, no license-named file found).
+See ../../../../docs/kokoro-license-audit.md for primary source links, the
+Sherpa/piper static-link evidence, and the still-unverified installed-wheel
+source closure. Full-bundle redistribution review remains incomplete. GPL does
+not itself prohibit commercial or paid network use; distribution and linked-work
+obligations require a separate review. No legal clearance is claimed here.
+The Apache components retain their license/notice/modification obligations.
+The official card credits CC BY training datasets. Preserve its card/credits
+when redistributing model assets; do not infer either that all outputs require
+dataset attribution or that individual outputs are guaranteed cleared.
+
+Qwen3-TTS 1.7B CustomVoice / VoiceDesign: official code and model declarations
+are Apache-2.0. Commercial/local/hosted use is permitted under those terms;
+redistribution carries Apache obligations. This benchmark reads existing managed
+weights and runtime, without editing managed model/runtime readiness evidence.
+Base cloning remains excluded because its configured reference is missing;
+we did not silently substitute another person's recording.
+
+VoxCPM2: official OpenBMB code Apache-2.0; official model card and pinned MLX
+conversion declare Apache-2.0. Commercial/local/hosted use permitted under
+Apache terms. Synthetic voice design prompts describe vocal characteristics,
+not a named real person. A deliberately generated short synthetic reference is
+used only as conditioning for clone comparisons, with text/audio hashes.
+
+Chatterbox Multilingual v3: official resemble-ai code MIT; official ResembleAI
+model card declares MIT; exact pinned mlx-community/chatterbox-multilingual-v3
+card declares MIT. Some OTHER/older MLX variants declare Apache, so do not copy
+that metadata onto v3. MIT permits commercial/local/hosted use; retain copyright
+and license notices with copies/substantial portions of code/model materials.
+MLX-Audio runtime code is separately MIT. Its S3TokenizerV2 conversion has no
+license field in its card; it identifies official FunAudioLLM/CosyVoice2-0.5B
+upstream, whose model card declares Apache-2.0 and code license is saved. A
+standalone upstream model LICENSE lookup returned 404. Keep this missing conversion-level
+license statement visible before redistributing the complete runtime bundle.
+
+MOSS Local Transformer v1.5: official OpenMOSS code Apache-2.0 and official
+model card declares Apache-2.0. Its separate MOSS Audio Tokenizer v2 card also
+declares Apache-2.0; the tokenizer is a required component, not another voice.
+Pinned v1.5 MLX 4bit model declares Apache-2.0. Commercial/local/hosted use is
+permitted subject to Apache obligations. A 404 for a separate model LICENSE
+file is recorded; the model-card declaration and official code license remain
+distinct evidence. Existing modified managed MOSS source is not overwritten.
+
+Dots SOAR: official studio-dots-ai code Apache-2.0; official dots-studio SOAR
+model card declares Apache-2.0. Pinned sb1992 MLX runtime and shraey conversion
+are separate artifacts; their exact license/card evidence is retained. Apache
+permits commercial/local/hosted use under its notice obligations. This local
+test disables runtime onset trimming explicitly and does not use time-stretch.
+The attempted audition stopped for severe system swap pressure during decoding,
+before a speech waveform returned. This is a local resource failure, not a voice
+quality verdict. The original synthetic reference is retained; the Dots-only
+PCM16 conditioning copy and runtime reference preprocessing are declared.
+
+For the Apache/MIT group, the inspected license does not separately impose an
+audio-output copyleft rule or prohibit commercial hosting. That does not grant
+rights to somebody else's voice, recording, text or protected output; clone
+conditioning here is deliberately synthetic. No voice quality or preference
+is established by the permissiveness of its license.
+
+Fish Audio Drama 3: NOT Apache/MIT/open source. Exact official LICENSE is Fish
+Audio Community License v1.0, notwithstanding any metadata on conversions.
+Research/noncommercial use permitted under its conditions. Community commercial
+use requires aggregate licensee/affiliate revenue below USD 500,000; certain
+third-party installs/deliveries also test that third party's revenue. Threshold
+crossing has notification and 90-day transition provisions. III(c) separately
+requires a license for a defined Hosted Service: self-serve generation from
+third-party supplied text/audio/voice input. Explicit exceptions include speech
+for content you create/select/control or your product generates and delivers,
+finished-output directed production services, and qualifying free noncommercial
+research demos. Whoopy's future classification depends on its actual flow;
+do not call this a blanket ban on all hosted narration. Distribution requires
+license/notice retention and the specified Fish attribution; product/service
+use also carries prominent Built with Fish Audio attribution. Outputs are
+owned by the user as between the parties, to extent law permits; use, consent,
+watermark and model-training restrictions still apply. Model materials are not
+to be automatically redistributed in an MIT app bundle.
+This run EXCLUDES download/inference: pinned MLX4bit files total 23.78 GB before
+runtime/KV/codec, with upstream reported generation peak around 26 GB. Initial
+available memory was only about 19 GiB; we preserve OS/app headroom rather than
+force an unsafe run. This is resource preflight failure, not quality failure.
+
+Higgs TTS3: source-available research/noncommercial model terms, not open source.
+Creator Use Grant permits qualifying creative content on owned/controlled
+channels, including monetized channels, with the required acknowledgement.
+It expressly excludes embedding/integrating materials into third-party-facing
+products/apps/services and redistribution/resale/derivative distribution under
+that creator exception. Product/service/commercial uses need separate terms.
+Evaluation and published benchmark outputs have defined permissions, while
+model/system-development and other restrictions remain significant. Excluded
+from download/inference here: it adds no permissive production candidate and
+its terms do not match the immediate local open-source benchmark priority.
+
+No paid API, cloud generation, course implementation or ambience integration
+was added by this benchmark. No model redistribution or license compatibility
+claim is established merely by saving local audition audio.

@@ -1,0 +1,12 @@
+{
+  "artifact_id": "ministral_3_14b_q4_k_m",
+  "component": "llm_model_high",
+  "display_name": "Ministral 3 14B Q4_K_M",
+  "version": "74fac473c43357d7fb2671713608183cc72496d0",
+  "license_id": "Apache-2.0",
+  "state": "installed",
+  "download_path": "models/managed/downloads/Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+  "installed_path": "models/managed/downloads/Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+  "size_bytes": 8239593024,
+  "message": "Installed and matched to the immutable lock."
+}

@@ -1,5 +1,7 @@
 # Phase 3.5: First Real Local Meditation
 
+> **Historical implementation record.** Measurements and artifacts are retained as evidence, not as the current product contract. See [model capabilities](model-capabilities.md).
+
 Phase 3.5 is the bridge between the reliable fixture pipeline and the Phase 4
 user interface. It proves that Whoopy can turn an ordinary prompt into a real,
 spoken meditation entirely on one laptop.

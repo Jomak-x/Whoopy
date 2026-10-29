@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import re
 
-SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+# Keep closing quotation marks attached to the sentence while still splitting
+# after them. The older boundary joined two short quoted well-wishes into one
+# apparent 40-word sentence and caused valid self-compassion prose to fail.
+SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+|(?<=[.!?]['\"\u201d\u2019])\s+")
 WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
 
 # These pauses are deliberately audio events rather than prompt suggestions.
@@ -111,3 +114,39 @@ def estimated_seconds_per_word(articulation_words_per_minute: int) -> float:
     speech_seconds = 60 / articulation_words_per_minute
     average_rest_seconds = PLANNING_PAUSE_MS / 1_000 / TARGET_SENTENCE_WORDS
     return speech_seconds + average_rest_seconds
+
+
+def allocate_bounded_quiet(
+    budget_ms: int, weights: list[float], caps: list[int], *, minimum_ms: int = 1_000
+) -> list[int]:
+    """Distribute a fixed quiet budget while preserving every paragraph's bounds."""
+
+    if len(weights) != len(caps) or any(cap < minimum_ms for cap in caps):
+        raise ValueError("Maximum quiet must allow the one-second minimum.")
+    if budget_ms < minimum_ms * len(caps):
+        raise ValueError("Quiet budget cannot preserve the one-second minimum rests.")
+    if budget_ms > sum(caps):
+        raise ValueError(
+            "Real speech would require unprepared long silence. "
+            "Revise the session or its voice timing instead of padding the duration."
+        )
+    remaining = budget_ms - minimum_ms * len(caps)
+    raw = [remaining * weight / sum(weights) for weight in weights]
+    extras = [int(value) for value in raw]
+    remainder = remaining - sum(extras)
+    order = sorted(range(len(raw)), key=lambda index: raw[index] - extras[index], reverse=True)
+    for index in order[:remainder]:
+        extras[index] += 1
+    capacities = [cap - minimum_ms for cap in caps]
+    overflow = sum(max(0, extra - cap) for extra, cap in zip(extras, capacities, strict=True))
+    extras = [min(extra, cap) for extra, cap in zip(extras, capacities, strict=True)]
+    while overflow:
+        active = [index for index, extra in enumerate(extras) if extra < capacities[index]]
+        share = max(1, overflow // len(active))
+        for index in active:
+            addition = min(share, capacities[index] - extras[index], overflow)
+            extras[index] += addition
+            overflow -= addition
+            if not overflow:
+                break
+    return [minimum_ms + extra for extra in extras]

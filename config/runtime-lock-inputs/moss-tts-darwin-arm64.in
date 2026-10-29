@@ -1,0 +1,22 @@
+# MOSS-TTS v1.5 production-inference closure for CPython 3.12.12 on
+# macOS ARM64, built from official revision
+# 58b20a0d5fcc6766658d50967a90a9d890009a46.
+#
+# Whoopy's persistent worker performs local file-based PyTorch inference for
+# the Local Transformer 5B and delay 8B models. The upstream Gradio, training,
+# CUDA-only flash-attention, llama.cpp, TensorRT, and ONNX extras are excluded.
+# The worker also bypasses upstream URL/audio decoding and analysis, so Gradio,
+# Accelerate, TorchCodec, FFmpeg bindings, librosa, SciPy, Numba, tiktoken,
+# orjson, ninja, and einops are intentionally outside this inference closure.
+# Model checkpoints and MOSS Audio Tokenizer weights remain separate verified
+# managed model packs and are never included in this Python runtime archive.
+
+numpy==2.1.0
+pyyaml==6.0.3
+safetensors==0.6.2
+setuptools==82.0.0
+torch==2.9.1
+torchaudio==2.9.1
+tqdm==4.67.1
+transformers==5.0.0
+wheel==0.46.2

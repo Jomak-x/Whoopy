@@ -8,7 +8,7 @@ import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 from uuid import NAMESPACE_URL, uuid5
 
 import psutil
@@ -17,13 +17,16 @@ from whoopy.evaluation.models import (
     BakeoffCaseResult,
     BakeoffReport,
     EvaluationSet,
+    WritingMethod,
 )
 from whoopy.meditation import (
     GenerationWorkspace,
     LocalMeditationGenerator,
     PromptBundle,
 )
-from whoopy.meditation.models import RawGenerationAttempt
+from whoopy.meditation.blueprints import BlueprintLibrary
+from whoopy.meditation.models import MeditationKind, RawGenerationAttempt
+from whoopy.meditation.recipes import RecipeLibrary
 from whoopy.ports import ScriptGenerator
 
 WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
@@ -44,7 +47,15 @@ class _PeakProcessTree:
     def _sample(self) -> None:
         process = psutil.Process()
         while not self._stop.wait(0.02):
-            processes = [process, *process.children(recursive=True)]
+            # Some sandboxed macOS launches allow reading this process but
+            # deny the sysctl used by ``children(recursive=True)``. Memory
+            # telemetry is diagnostic evidence, not a reason to crash the
+            # sampler thread or obscure the actual corpus result.
+            try:
+                children = process.children(recursive=True)
+            except (PermissionError, psutil.AccessDenied, psutil.NoSuchProcess):
+                children = []
+            processes = [process, *children]
             total = 0
             for current in processes:
                 try:
@@ -92,22 +103,28 @@ class BakeoffRunner:
         evaluation_set: EvaluationSet,
         prompts: PromptBundle,
         output_directory: Path,
+        blueprints: BlueprintLibrary | None = None,
+        recipes: RecipeLibrary | None = None,
         seed: int = 42,
+        writing_method: WritingMethod = "plan_first",
     ) -> None:
         self.evaluation_set = evaluation_set
         self.prompts = prompts
+        self.blueprints = blueprints
+        self.recipes = recipes
         self.output_directory = output_directory
         self.seed = seed
+        self.writing_method = writing_method
 
     def run_candidate(
         self,
         *,
-        profile: Literal["lite", "standard"],
+        profile: Literal["lite", "standard", "high"],
         adapter: ScriptGenerator,
         model_artifact_bytes: int,
     ) -> list[BakeoffCaseResult]:
-        if profile not in ("lite", "standard"):
-            raise ValueError("bake-off profile must be lite or standard")
+        if profile not in ("lite", "standard", "high"):
+            raise ValueError("bake-off profile must be lite, standard, or high")
         results: list[BakeoffCaseResult] = []
         for case in self.evaluation_set.cases:
             run_id = uuid5(
@@ -122,12 +139,20 @@ class BakeoffRunner:
                     generated = LocalMeditationGenerator(
                         adapter,
                         self.prompts,
+                        blueprints=self.blueprints,
+                        recipes=self.recipes,
                         workspace=workspace,
                     ).generate(
                         prompt=case.prompt,
                         duration_seconds=case.duration_seconds,
                         run_id=run_id,
                         seed=self.seed,
+                        meditation_kind=(
+                            cast(MeditationKind, case.category)
+                            if self.evaluation_set.schema_version == 2
+                            else None
+                        ),
+                        writing_method=self.writing_method,
                     )
                 except Exception as error:
                     results.append(
@@ -135,6 +160,7 @@ class BakeoffRunner:
                             case_id=case.id,
                             category=case.category,
                             profile=profile,
+                            writing_method=self.writing_method,
                             success=False,
                             elapsed_seconds=time.monotonic() - started,
                             peak_process_tree_mb=memory.peak_bytes / 1_048_576,
@@ -153,6 +179,7 @@ class BakeoffRunner:
                     case_id=case.id,
                     category=case.category,
                     profile=profile,
+                    writing_method=self.writing_method,
                     success=True,
                     elapsed_seconds=time.monotonic() - started,
                     peak_process_tree_mb=memory.peak_bytes / 1_048_576,
@@ -165,7 +192,9 @@ class BakeoffRunner:
                     )
                     / case.duration_seconds
                     * 100,
-                    repeated_trigram_ratio=_repeated_trigram_ratio(generated.script),
+                    repeated_trigram_ratio=_repeated_trigram_ratio(
+                        " ".join(section.text for section in generated.sections)
+                    ),
                     invitational_phrase_count=len(INVITATIONAL_PATTERN.findall(generated.script)),
                     safety_validation_passed=True,
                 )
@@ -184,6 +213,7 @@ class BakeoffRunner:
             evaluation_version=self.evaluation_set.version,
             created_at=datetime.now(UTC),
             seed=self.seed,
+            writing_method=self.writing_method,
             platform=platform,
             candidates={name: adapter.metadata for name, adapter in candidates.items()},
             results=results,

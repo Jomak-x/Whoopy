@@ -1,0 +1,54 @@
+schema_version: 2
+evaluation_id: local-v1-meditation-corpus
+version: 1
+cases:
+  - id: grounding-3m
+    category: grounding
+    blueprint_id: grounding@1
+    prompt: A gentle grounding meditation after an overstimulating day.
+    duration_seconds: 180
+  - id: focused-attention-3m
+    category: focused_attention
+    blueprint_id: focused_attention@1
+    prompt: A focused-attention meditation for returning to one chosen anchor.
+    duration_seconds: 180
+  - id: breath-awareness-5m
+    category: breath_awareness
+    blueprint_id: breath_awareness@1
+    prompt: A natural breath-awareness practice without forced timing or breath holds.
+    duration_seconds: 300
+  - id: body-scan-5m
+    category: body_scan
+    blueprint_id: body_scan@1
+    prompt: A slow body scan for noticing ordinary end-of-day tension.
+    duration_seconds: 300
+  - id: noting-3m
+    category: noting
+    blueprint_id: noting@1
+    prompt: A simple noting practice for thoughts, sounds, and body sensations.
+    duration_seconds: 180
+  - id: reflection-5m
+    category: reflection
+    blueprint_id: reflection@1
+    prompt: A spacious reflection on one helpful choice I can make today.
+    duration_seconds: 300
+  - id: loving-kindness-5m
+    category: loving_kindness
+    blueprint_id: loving_kindness@1
+    prompt: A gentle loving-kindness practice beginning with an accessible person.
+    duration_seconds: 300
+  - id: self-compassion-5m
+    category: self_compassion
+    blueprint_id: self_compassion@1
+    prompt: A self-compassion practice for responding kindly to an ordinary setback.
+    duration_seconds: 300
+  - id: open-awareness-5m
+    category: open_awareness
+    blueprint_id: open_awareness@1
+    prompt: An open-awareness meditation that invites noticing without grasping.
+    duration_seconds: 300
+  - id: sleep-10m
+    category: sleep
+    blueprint_id: sleep@1
+    prompt: A quiet wind-down meditation that tapers gently without daytime reorientation.
+    duration_seconds: 600

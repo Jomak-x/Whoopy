@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "suite_id": "local-v1-primary-v1",
+  "suite_scope": "primary_machine_full",
+  "description": "Primary-machine 20-run duration soak plus exact production-stage interruption and verified restart recovery for all six required stages.",
+  "cases": [
+    {
+      "case_id": "soak-1-minute",
+      "kind": "soak",
+      "command": ["{python}", "scripts/acceptance_production_case.py", "--minutes", "1", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}", "--evidence-dir", "evaluations/local/production-cases"],
+      "duration_minutes": 1,
+      "evidence_contract": "production_receipt_v2",
+      "repetitions": 4,
+      "timeout_seconds": 1800
+    },
+    {
+      "case_id": "soak-3-minute",
+      "kind": "soak",
+      "command": ["{python}", "scripts/acceptance_production_case.py", "--minutes", "3", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}", "--evidence-dir", "evaluations/local/production-cases"],
+      "duration_minutes": 3,
+      "evidence_contract": "production_receipt_v2",
+      "repetitions": 4,
+      "timeout_seconds": 1800
+    },
+    {
+      "case_id": "soak-5-minute",
+      "kind": "soak",
+      "command": ["{python}", "scripts/acceptance_production_case.py", "--minutes", "5", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}", "--evidence-dir", "evaluations/local/production-cases"],
+      "duration_minutes": 5,
+      "evidence_contract": "production_receipt_v2",
+      "repetitions": 4,
+      "timeout_seconds": 1800
+    },
+    {
+      "case_id": "soak-10-minute",
+      "kind": "soak",
+      "command": ["{python}", "scripts/acceptance_production_case.py", "--minutes", "10", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}", "--evidence-dir", "evaluations/local/production-cases"],
+      "duration_minutes": 10,
+      "evidence_contract": "production_receipt_v2",
+      "repetitions": 4,
+      "timeout_seconds": 3600
+    },
+    {
+      "case_id": "soak-20-minute",
+      "kind": "soak",
+      "command": ["{python}", "scripts/acceptance_production_case.py", "--minutes", "20", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}", "--evidence-dir", "evaluations/local/production-cases"],
+      "duration_minutes": 20,
+      "evidence_contract": "production_receipt_v2",
+      "repetitions": 4,
+      "timeout_seconds": 7200
+    },
+    {
+      "case_id": "interrupt-planning",
+      "kind": "forced_interruption",
+      "command": ["{python}", "scripts/forced_interruption_case.py", "interrupt", "--stage", "planning", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "interruption_stage": "planning",
+      "ready_file": "evaluations/local/markers/planning.ready",
+      "recovery_command": ["{python}", "scripts/forced_interruption_case.py", "recover", "--stage", "planning", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "timeout_seconds": 1800
+    },
+    {
+      "case_id": "interrupt-drafting",
+      "kind": "forced_interruption",
+      "command": ["{python}", "scripts/forced_interruption_case.py", "interrupt", "--stage", "drafting", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "interruption_stage": "drafting",
+      "ready_file": "evaluations/local/markers/drafting.ready",
+      "recovery_command": ["{python}", "scripts/forced_interruption_case.py", "recover", "--stage", "drafting", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "timeout_seconds": 1800
+    },
+    {
+      "case_id": "interrupt-synthesis",
+      "kind": "forced_interruption",
+      "command": ["{python}", "scripts/forced_interruption_case.py", "interrupt", "--stage", "synthesis", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "interruption_stage": "synthesis",
+      "ready_file": "evaluations/local/markers/synthesis.ready",
+      "recovery_command": ["{python}", "scripts/forced_interruption_case.py", "recover", "--stage", "synthesis", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "timeout_seconds": 1800
+    },
+    {
+      "case_id": "interrupt-assembly",
+      "kind": "forced_interruption",
+      "command": ["{python}", "scripts/forced_interruption_case.py", "interrupt", "--stage", "assembly", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "interruption_stage": "assembly",
+      "ready_file": "evaluations/local/markers/assembly.ready",
+      "recovery_command": ["{python}", "scripts/forced_interruption_case.py", "recover", "--stage", "assembly", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "timeout_seconds": 1800
+    },
+    {
+      "case_id": "interrupt-encoding",
+      "kind": "forced_interruption",
+      "command": ["{python}", "scripts/forced_interruption_case.py", "interrupt", "--stage", "encoding", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "interruption_stage": "encoding",
+      "ready_file": "evaluations/local/markers/encoding.ready",
+      "recovery_command": ["{python}", "scripts/forced_interruption_case.py", "recover", "--stage", "encoding", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "timeout_seconds": 1800
+    },
+    {
+      "case_id": "interrupt-qc",
+      "kind": "forced_interruption",
+      "command": ["{python}", "scripts/forced_interruption_case.py", "interrupt", "--stage", "qc", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "interruption_stage": "qc",
+      "ready_file": "evaluations/local/markers/qc.ready",
+      "recovery_command": ["{python}", "scripts/forced_interruption_case.py", "recover", "--stage", "qc", "--state-dir", "evaluations/local/interruption-cases", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}"],
+      "timeout_seconds": 1800
+    }
+  ]
+}

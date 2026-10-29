@@ -1,0 +1,74 @@
+{
+  "_id": "693323204ca129c0337114e6",
+  "id": "mlx-community/S3TokenizerV2",
+  "private": false,
+  "library_name": "mlx-audio-plus",
+  "tags": [
+    "mlx-audio-plus",
+    "safetensors",
+    "s3_tokenizer_v2",
+    "mlx",
+    "speech-tokenizer",
+    "base_model:FunAudioLLM/CosyVoice2-0.5B",
+    "base_model:finetune:FunAudioLLM/CosyVoice2-0.5B",
+    "region:us"
+  ],
+  "downloads": 9684,
+  "likes": 0,
+  "modelId": "mlx-community/S3TokenizerV2",
+  "author": "mlx-community",
+  "sha": "e0c9886f0e1c35ae85b1f27277416fb19fc72bec",
+  "lastModified": "2025-12-05T18:23:32.000Z",
+  "gated": false,
+  "disabled": false,
+  "model-index": null,
+  "config": {
+    "model_type": "s3_tokenizer_v2"
+  },
+  "cardData": {
+    "library_name": "mlx-audio-plus",
+    "base_model": [
+      "FunAudioLLM/CosyVoice2-0.5B"
+    ],
+    "tags": [
+      "mlx",
+      "speech-tokenizer"
+    ]
+  },
+  "siblings": [
+    {
+      "rfilename": ".gitattributes",
+      "blobId": "a6344aac8c09253b3b630fb776ae94478aa0275b",
+      "size": 1519
+    },
+    {
+      "rfilename": "README.md",
+      "blobId": "0f7d26c02743dc16f9ea37eff62dd1a38ff1aa6c",
+      "size": 459
+    },
+    {
+      "rfilename": "config.json",
+      "blobId": "59938193a24f642ca668d3f692be0a4c2964afcc",
+      "size": 126
+    },
+    {
+      "rfilename": "model.safetensors",
+      "blobId": "c6c4ce2a924a0e1de566ea16c9a44ede14b2437b",
+      "size": 494868984,
+      "lfs": {
+        "sha256": "928726bc1f206a613d36b8f49e297eae9c5593a21bf9b92ddfe2c23f85eb92cc",
+        "size": 494868984,
+        "pointerSize": 134
+      }
+    }
+  ],
+  "spaces": [],
+  "createdAt": "2025-12-05T18:23:28.000Z",
+  "safetensors": {
+    "parameters": {
+      "F32": 123714568
+    },
+    "total": 123714568
+  },
+  "usedStorage": 494868984
+}

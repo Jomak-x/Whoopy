@@ -1,5 +1,7 @@
 # Phase 3.6: Voice And Meditation Lab
 
+> **Historical implementation record.** The permanent Lab implementation and UI supersede this planning document. See [the architecture guide](architecture.md).
+
 This document explains the changes made after the first real listening review.
 The review found four concrete problems:
 

@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-28T23:56:28.617147+00:00",
+  "status": "pass",
+  "failure_reasons": [],
+  "review_reasons": [],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/kokoro-bm-george-080/raw.wav",
+  "audio_sha256": "e5ed6e2cd333140fc4547552b7f19433551837aae0df75653d2bcd6b211482ac",
+  "expected_text_sha256": "7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69",
+  "mode": "speech",
+  "pcm": {
+    "frame_count": 1299000,
+    "sample_rate": 24000,
+    "duration_seconds": 54.125,
+    "nonfinite_samples": 0,
+    "peak": 0.4032757580280304,
+    "rms": 0.05796329613769012,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.2120428518655338,
+    "leading_silence_seconds": 0.28,
+    "trailing_silence_seconds": 0.6,
+    "zero_crossing_fraction": 0.13878994518086618,
+    "difference_to_signal_energy": 0.0666706101462518,
+    "speech_established_by_pcm": false
+  },
+  "asr": {
+    "engine": "mlx-whisper",
+    "model_path": "/Users/jakob/.cache/huggingface/hub/models--mlx-community--whisper-small-mlx/snapshots/45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_revision": "45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+    "model_weights_sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
+    "model_config_sha256": "e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e",
+    "audio_sha256": "e5ed6e2cd333140fc4547552b7f19433551837aae0df75653d2bcd6b211482ac",
+    "language": "en",
+    "inference_seconds": 3.1889819169882685,
+    "versions": {
+      "mlx-whisper": "0.4.3",
+      "mlx": "0.32.4",
+      "mlx-metal": "0.32.4",
+      "numpy": "2.4.6",
+      "soundfile": "0.14.0"
+    },
+    "python": "3.11.16",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "decoding": {
+      "language": "en",
+      "temperature": 0.0,
+      "condition_on_previous_text": false,
+      "expected_text_prompted": false
+    },
+    "gpu_lock": "/tmp/whoopy-benchmark-gpu.lock",
+    "gpu_lock_wait_seconds": 63.01357258297503,
+    "network": "offline; existing local snapshot only"
+  },
+  "content": {
+    "expected_word_count": 123,
+    "observed_word_count": 123,
+    "word_error_rate": 0.0,
+    "ordered_word_coverage": 1.0,
+    "matches": 123,
+    "deletions": 0,
+    "insertions": 0,
+    "substitutions": 0,
+    "possible_truncation": false
+  },
+  "limits": [
+    "ASR is independent evidence, not a human transcription or a proof of perfect speech.",
+    "Noise rejection requires content agreement; duration and RMS do not prove speech.",
+    "Warmth, naturalness, voice identity, and quality require listener judgment.",
+    "Narration mode permits intentional silence; expected words still require recognition."
+  ],
+  "thresholds": {
+    "pass_max_wer": 0.15,
+    "pass_min_coverage": 0.85,
+    "fail_wer_above": 0.35,
+    "fail_coverage_below": 0.65
+  },
+  "verifier_source_sha256": "3669cf3793b7200110dab88dd698d4eed1816a291f3f8581de7c6bf7dd83b3d3",
+  "harness_source_sha256": "a35b1cc25f4418de82b402e1ca5bc361ea22c6c6ee13eeee778c84db8854b8b5",
+  "publication": {
+    "schema_version": 1,
+    "kind": "compact_verification_receipt",
+    "original_receipt_sha256": "97e255f46a9f351e54cad5486495ed8474011c70dfd7ea01e15256df418647d4",
+    "original_status": "pass",
+    "full_trace_included": false,
+    "referenced_receipt_hashes": "original_receipt_bytes"
+  }
+}

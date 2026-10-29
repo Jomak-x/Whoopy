@@ -1,0 +1,187 @@
+[
+  {
+    "name": "mlx-audio-code",
+    "url": "https://raw.githubusercontent.com/Blaizzy/mlx-audio/8c244a1faff44cfa69e3151c195f52a4c1c90be5/LICENSE",
+    "sha256": "11d27e0259dec3a323fa6c04c330621d0950ab96c6760d5aac3e2e97229e6f22",
+    "bytes": 1070,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/mlx-audio-code.txt"
+  },
+  {
+    "name": "qwen-code",
+    "url": "https://raw.githubusercontent.com/QwenLM/Qwen3-TTS/main/LICENSE",
+    "sha256": "a44a6081c73ad75f0255bb2bb5cab74ef1829565a895a24e53a4f11290ab7655",
+    "bytes": 11343,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/qwen-code.txt"
+  },
+  {
+    "name": "kokoro-code",
+    "url": "https://raw.githubusercontent.com/hexgrad/kokoro/main/LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "bytes": 11357,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/kokoro-code.txt"
+  },
+  {
+    "name": "kokoro-model-card",
+    "url": "https://huggingface.co/hexgrad/Kokoro-82M/raw/main/README.md",
+    "sha256": "91dcabced89db6f109b8786642f50402d3ee87450e8189589b6f85520e7f4d78",
+    "bytes": 6348,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/kokoro-model-card.txt"
+  },
+  {
+    "name": "voxcpm-code",
+    "url": "https://raw.githubusercontent.com/OpenBMB/VoxCPM/main/LICENSE",
+    "sha256": "4f10acc209addacfad28293315c74c4cd648f771ee1263a748f1781d1e0265e4",
+    "bytes": 11298,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/voxcpm-code.txt"
+  },
+  {
+    "name": "voxcpm2-model",
+    "url": "https://huggingface.co/openbmb/VoxCPM2/raw/main/README.md",
+    "sha256": "c18d2ffbfb2f0aec770481c967842aee6c200cde65f6b033efd892a849986fda",
+    "bytes": 7939,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/voxcpm2-model.txt"
+  },
+  {
+    "name": "qwen-custom-model",
+    "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice/raw/main/README.md",
+    "sha256": "64f65e809b51cc0c35f393fbbfcc2d735c0cb3fdbbc6f3fdc4a5e6ce55e9d088",
+    "bytes": 57846,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/qwen-custom-model.txt"
+  },
+  {
+    "name": "qwen-design-model",
+    "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign/raw/main/README.md",
+    "sha256": "acfaf6c0d433866cb5e2bb73e7915ea3767f5a2e3abca413b485635a2c72b5e6",
+    "bytes": 3214,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/qwen-design-model.txt"
+  },
+  {
+    "name": "chatterbox-code",
+    "url": "https://raw.githubusercontent.com/resemble-ai/chatterbox/master/LICENSE",
+    "sha256": "4248e910a928849fe5815a0f9236e17fa07768d95b9193212752c464b93d6caa",
+    "bytes": 1067,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/chatterbox-code.txt"
+  },
+  {
+    "name": "chatterbox-v3-model",
+    "url": "https://huggingface.co/ResembleAI/chatterbox/raw/main/LICENSE",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "name": "chatterbox-conversion-card",
+    "url": "https://huggingface.co/mlx-community/chatterbox-multilingual-v3/raw/03565773edd72e949572557597af8063bb49a18a/README.md",
+    "sha256": "46c84fad9fced28abe32cd11a0ed6eb05ca25df722893bf4c3ddc7a03bd94343",
+    "bytes": 1289,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/chatterbox-conversion-card.txt"
+  },
+  {
+    "name": "moss-local-model",
+    "url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5/raw/main/LICENSE",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "name": "moss-code",
+    "url": "https://raw.githubusercontent.com/OpenMOSS/MOSS-TTS/main/LICENSE",
+    "sha256": "e83b87b4c86fc39a3e3278705e02f3599d63b0a9fd006a6ec7aa721d38d4086d",
+    "bytes": 11375,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/moss-code.txt"
+  },
+  {
+    "name": "dots-code",
+    "url": "https://raw.githubusercontent.com/studio-dots-ai/dots.tts/main/LICENSE",
+    "sha256": "d4f4eb4ef1480fed48420b88bcbd887c90f0fee416ad7f2f5e5b165857a7b410",
+    "bytes": 11352,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/dots-code.txt"
+  },
+  {
+    "name": "dots-soar-model",
+    "url": "https://huggingface.co/dots-studio/dots.tts-soar/raw/main/LICENSE",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "name": "drama3-model",
+    "url": "https://huggingface.co/fishaudio/drama-3/raw/main/LICENSE",
+    "sha256": "733a32442087acbda12ecafe8e71eb8ee5890c89b50ce7ac4ea3777faa3c823e",
+    "bytes": 19685,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/drama3-model.txt"
+  },
+  {
+    "name": "drama3-notice",
+    "url": "https://huggingface.co/fishaudio/drama-3/raw/main/NOTICE",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "name": "higgs3-model",
+    "url": "https://huggingface.co/bosonai/higgs-tts-3-4b/raw/main/LICENSE",
+    "sha256": "0382189330b87c38517530e4e5bf0c9dfeb6c7bfbe62812577ddcb73e09a60c5",
+    "bytes": 32184,
+    "saved": "evaluations/benchmarks/2026-10-28/voices/licenses/higgs3-model.txt"
+  },
+  {
+    "name": "chatterbox-upstream-card",
+    "url": "https://huggingface.co/ResembleAI/chatterbox/raw/main/README.md",
+    "sha256": "6ac86d5ec7e85a9cf6566a34c6aae60ac1d50a6fceccade4c2aa57cfa6f590b4",
+    "bytes": 10081
+  },
+  {
+    "name": "moss-local-card",
+    "url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5/raw/be7766a6735b98bd793f7c79fb720b4d0f5d13b8/README.md",
+    "sha256": "ef63734dae2e6ac149a5c4fd75a916848abc1c8ef98fabc7dcb247d8ff4a3a04",
+    "bytes": 16359
+  },
+  {
+    "name": "dots-soar-card",
+    "url": "https://huggingface.co/dots-studio/dots.tts-soar/raw/main/README.md",
+    "sha256": "313cb77ca0395b1f092b1fac6f2f96f3765f77fcd13fba7405dcaf9de47d00df",
+    "bytes": 8155
+  },
+  {
+    "name": "moss-codec-card",
+    "url": "https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-v2/raw/f6e20e543b33d2c252a7ef71bdf8aa71e5ff9169/README.md",
+    "sha256": "f491cd9d124156d854d6a3401dc1f227d5d70373b6584b1a5f8adb908a5f7a70",
+    "bytes": 12976
+  },
+  {
+    "name": "s3tokenizer-card",
+    "url": "https://huggingface.co/mlx-community/S3TokenizerV2/raw/e0c9886f0e1c35ae85b1f27277416fb19fc72bec/README.md",
+    "sha256": "7114249e13d3487e1b3d7f5f91fefdce746679342dca7afc8e52b1617b66bea5",
+    "bytes": 459
+  },
+  {
+    "name": "dots-mlx-code",
+    "url": "https://raw.githubusercontent.com/sb1992/dots-tts-mlx/main/LICENSE",
+    "sha256": "4229a0c2e06e1ed9e569924f3c139dd0864a96745e4d92845d15f34db4662170",
+    "bytes": 11344
+  },
+  {
+    "name": "s3tokenizer-upstream-card",
+    "url": "https://huggingface.co/FunAudioLLM/CosyVoice2-0.5B/raw/main/README.md",
+    "sha256": "7b00725016d3fe143fc13cef1df27615df6ba9cd98c6716c5b98bbc54aefd525",
+    "bytes": 12073
+  },
+  {
+    "name": "s3tokenizer-upstream-license",
+    "url": "https://huggingface.co/FunAudioLLM/CosyVoice2-0.5B/raw/main/LICENSE",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "name": "s3tokenizer-upstream-code-license",
+    "url": "https://raw.githubusercontent.com/FunAudioLLM/CosyVoice/main/LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "bytes": 11357
+  },
+  {
+    "name": "mlx-qwen-design-card",
+    "url": "https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit/raw/f90d617701d9f7f4ca499291e0b57f2b3c2fd2ee/README.md",
+    "sha256": "0d342ad28927ddd1a65c8ee936f513ab324b6f4442fe0b61750c264c767aa199",
+    "bytes": 1068,
+    "provenance": "copied from exact pinned downloaded model snapshot"
+  },
+  {
+    "name": "mlx-qwen-custom-card",
+    "url": "https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit/raw/41d3337e8b7f2843a75841595fc14e4b9a7a4b96/README.md",
+    "sha256": "50fe8f13fc95466beb50a96ae743e40573512754e80330373a043f4bd34d6212",
+    "bytes": 1118,
+    "provenance": "copied from exact pinned downloaded model snapshot"
+  }
+]

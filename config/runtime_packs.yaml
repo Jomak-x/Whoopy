@@ -1,0 +1,59 @@
+# Isolated Python runtimes are release artifacts, separate from checkpoints.
+# An upstream commit alone is not enough: installable entries must also name a
+# target-specific archive with its exact byte size and SHA-256. Whoopy must not
+# copy or bless a development virtualenv.
+schema_version: 1
+runtimes:
+  - runtime_id: fish-speech
+    display_name: Fish Speech 1.4 isolated runtime
+    revision: 1359896b0648c688dee901794969d976a06c86be
+    upstream_repository: https://github.com/fishaudio/fish-speech
+    upstream_revision: 1359896b0648c688dee901794969d976a06c86be
+    python_version: 3.10.19
+    license_id: CC-BY-NC-SA-4.0
+    managed_directory: managed/runtimes/fish-speech-1359896
+    required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, fish_speech/models/vqgan/__init__.py]
+    bundles:
+      - target: darwin-arm64
+        filename: fish-speech-1359896b0648-darwin-arm64.tar.gz
+        size_bytes: 114728041
+        sha256: 3fac2a38ef4b8f4188d673650ad78ec16ebf6f5cc4fd5a142f89684584bbf3a2
+        archive: tar.gz
+        install_mode: locked-wheelhouse
+        url: null
+
+  - runtime_id: moss-tts
+    display_name: MOSS-TTS isolated runtime
+    revision: 58b20a0d5fcc6766658d50967a90a9d890009a46
+    upstream_repository: https://github.com/OpenMOSS/MOSS-TTS
+    upstream_revision: 58b20a0d5fcc6766658d50967a90a9d890009a46
+    python_version: 3.12.12
+    license_id: Apache-2.0
+    managed_directory: managed/runtimes/moss-tts-58b20a0
+    required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, moss_tts_local_v1.5/__init__.py, moss_tts_delay/modeling_moss_tts.py]
+    bundles:
+      - target: darwin-arm64
+        filename: moss-tts-58b20a0d5fcc-darwin-arm64.tar.gz
+        size_bytes: 120576299
+        sha256: 353e0611b814764f934e0c7abdd07e6ed12267b631de9c291dcf611086b6aef6
+        archive: tar.gz
+        install_mode: locked-wheelhouse
+        url: null
+
+  - runtime_id: qwen3-tts
+    display_name: Qwen3-TTS isolated runtime
+    revision: 022e286b98fbec7e1e916cb940cdf532cd9f488e
+    upstream_repository: https://github.com/QwenLM/Qwen3-TTS
+    upstream_revision: 022e286b98fbec7e1e916cb940cdf532cd9f488e
+    python_version: 3.12.12
+    license_id: Apache-2.0
+    managed_directory: managed/runtimes/qwen3-tts-022e286
+    required_markers: [.whoopy-runtime.json, .venv/pyvenv.cfg, qwen_tts/__init__.py]
+    bundles:
+      - target: darwin-arm64
+        filename: qwen3-tts-022e286b98fb-darwin-arm64.tar.gz
+        size_bytes: 320623827
+        sha256: 90984ef46a8c879b98de8e33fbfacef841f31b09bbe5f79d61c68b977bbe67c4
+        archive: tar.gz
+        install_mode: locked-wheelhouse
+        url: null

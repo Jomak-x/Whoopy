@@ -45,6 +45,30 @@ def _samples(audio: PcmAudio) -> array[int]:
     return samples
 
 
+def processed_speech_metadata(
+    inner: AdapterMetadata,
+    *,
+    inner_cache_identity: str,
+    settings: SpeechProcessingSettings,
+) -> AdapterMetadata:
+    return AdapterMetadata(
+        adapter_id="whoopy.processed_speech",
+        versioned_model_id=inner.versioned_model_id,
+        runtime_id=inner.runtime_id,
+        runtime_version=inner.runtime_version,
+        license_id=inner.license_id,
+        device=inner.device,
+        settings=(
+            f"inner_cache_identity={inner_cache_identity}",
+            f"trim_threshold_dbfs={settings.trim_threshold_dbfs}",
+            f"edge_residual_ms={settings.edge_residual_ms}",
+            f"edge_fade_ms={settings.edge_fade_ms}",
+            f"target_peak_dbfs={settings.target_peak_dbfs}",
+            f"max_gain_db={settings.max_gain_db}",
+        ),
+    )
+
+
 class ProcessedSpeechSynthesizer:
     """Trim unintended edge silence and normalize speech deterministically."""
 
@@ -54,23 +78,13 @@ class ProcessedSpeechSynthesizer:
         settings: SpeechProcessingSettings | None = None,
     ) -> None:
         self.inner = inner
+        self.capabilities = getattr(inner, "capabilities", None)
         self.settings = settings or SpeechProcessingSettings()
         self.sample_rate = inner.sample_rate
-        self.metadata = AdapterMetadata(
-            adapter_id="whoopy.processed_speech",
-            versioned_model_id=inner.metadata.versioned_model_id,
-            runtime_id=inner.metadata.runtime_id,
-            runtime_version=inner.metadata.runtime_version,
-            license_id=inner.metadata.license_id,
-            device=inner.metadata.device,
-            settings=(
-                f"inner_cache_identity={inner.cache_identity}",
-                f"trim_threshold_dbfs={self.settings.trim_threshold_dbfs}",
-                f"edge_residual_ms={self.settings.edge_residual_ms}",
-                f"edge_fade_ms={self.settings.edge_fade_ms}",
-                f"target_peak_dbfs={self.settings.target_peak_dbfs}",
-                f"max_gain_db={self.settings.max_gain_db}",
-            ),
+        self.metadata = processed_speech_metadata(
+            inner.metadata,
+            inner_cache_identity=inner.cache_identity,
+            settings=self.settings,
         )
         self.cache_identity = self.metadata.cache_identity
 
@@ -121,6 +135,22 @@ class ProcessedSpeechSynthesizer:
         """Release the wrapped model or subprocess exactly once per worker."""
 
         self.inner.close()
+
+    def prepare(self) -> bool:
+        """Eagerly load adapters that expose a truthful readiness boundary."""
+
+        prepare = getattr(self.inner, "prepare", None)
+        if callable(prepare):
+            prepare()
+            return True
+        return False
+
+    @property
+    def runtime_device(self) -> str | None:
+        """Expose the device actually reported by the wrapped runtime, if known."""
+
+        value = getattr(self.inner, "runtime_device", None)
+        return str(value) if value is not None else None
 
     def diagnostics(self) -> tuple[str, ...]:
         """Expose bounded inner-worker diagnostics without widening the TTS port."""

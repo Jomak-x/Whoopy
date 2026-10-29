@@ -3,6 +3,7 @@
 from whoopy.pipeline.cache import CacheStats, SegmentCache
 from whoopy.pipeline.generation import (
     GenerationRunSettings,
+    PacingRunSettings,
     PendingGenerationConfig,
     RunModelMetadata,
     ScriptRunConfig,
@@ -20,12 +21,19 @@ from whoopy.pipeline.runs import (
     RunStatus,
     RunStore,
 )
+from whoopy.pipeline.takes import (
+    SegmentTakeError,
+    SegmentTakeManifest,
+    SegmentTakeStore,
+    TakeSelection,
+)
 from whoopy.pipeline.worker import LocalWorker, RetryPolicy
 
 __all__ = [
     "CacheStats",
     "GenerationRunSettings",
     "LocalWorker",
+    "PacingRunSettings",
     "PendingGenerationConfig",
     "RetryPolicy",
     "RunExecution",
@@ -38,6 +46,10 @@ __all__ = [
     "ScriptRunConfig",
     "SegmentCache",
     "SegmentRegenerationPreparation",
+    "SegmentTakeError",
+    "SegmentTakeManifest",
+    "SegmentTakeStore",
     "TTSRunSettings",
+    "TakeSelection",
     "prepare_segment_regeneration",
 ]

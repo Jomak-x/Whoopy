@@ -1,5 +1,7 @@
 # Phase 2: Deterministic Audio Assembly
 
+> **Historical implementation record.** The deterministic principles remain relevant, but commands and product status may be obsolete. Start with [the architecture guide](architecture.md).
+
 Phase 2 makes a canonical Whoopy timeline produce a real, playable audio file.
 The narration is not a human voice yet. `SPEECH` segments become soft,
 deterministic fixture tones so timing and assembly can be tested without a TTS

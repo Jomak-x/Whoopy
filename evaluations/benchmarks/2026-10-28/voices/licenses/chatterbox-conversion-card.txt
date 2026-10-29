@@ -1,0 +1,67 @@
+---
+library_name: mlx-audio
+license: mit
+base_model:
+- ResembleAI/chatterbox
+language:
+  - ar
+  - da
+  - de
+  - el
+  - en
+  - es
+  - fi
+  - fr
+  - he
+  - hi
+  - it
+  - ja
+  - ko
+  - ms
+  - nl
+  - no
+  - pl
+  - pt
+  - ru
+  - sv
+  - sw
+  - tr
+  - zh
+pipeline_tag: text-to-speech
+tags:
+- mlx
+- text-to-speech
+- voice-cloning
+---
+
+# mlx-community/chatterbox-multilingual-v3
+
+This is Chatterbox Multilingual V3, converted to MLX format from [ResembleAI/chatterbox](https://huggingface.co/ResembleAI/chatterbox) using [mlx-audio](https://github.com/Blaizzy/mlx-audio) version **0.4.7**.
+
+**Note:** This model requires the S3Tokenizer weights from [mlx-community/S3TokenizerV2](https://huggingface.co/mlx-community/S3TokenizerV2), which will be downloaded automatically.
+
+## Use with mlx-audio
+
+```bash
+pip install -U mlx-audio
+```
+
+### Command line
+
+```bash
+mlx_audio.tts.generate --model mlx-community/chatterbox-multilingual-v3 --text "Bonjour, voici Chatterbox sur MLX !" --ref_audio reference.wav --lang_code fr
+```
+
+### Python
+
+```python
+from mlx_audio.tts.generate import generate_audio
+
+generate_audio(
+    text="Bonjour, voici Chatterbox sur MLX !",
+    model="mlx-community/chatterbox-multilingual-v3",
+    ref_audio="reference.wav",
+    lang_code="fr",
+    file_prefix="output",
+)
+```

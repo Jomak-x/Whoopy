@@ -13,6 +13,7 @@ import os
 import platform
 import socket
 import sys
+import wave
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -22,6 +23,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from whoopy.hardware import HardwareSnapshot, inspect_hardware
+from whoopy.locations import SOURCE_PROJECT_ROOT, installed_data_root
 
 
 class ModelPackError(ValueError):
@@ -390,9 +392,9 @@ class ModelPackStatus(BaseModel):
 
 def _normalize_architecture(value: str) -> str:
     normalized = value.lower()
-    if normalized in {"amd64", "x64"}:
+    if normalized in {"amd64", "x64", "x86-64"}:
         return "x86_64"
-    if normalized == "aarch64":
+    if normalized in {"aarch64", "arm64e"}:
         return "arm64"
     return normalized
 
@@ -440,6 +442,71 @@ def _read_evidence(path: Path, model: type[RuntimeEvidence] | type[SmokeTestEvid
         return None
 
 
+def _playable_smoke_sample_check(
+    records: Path, evidence: SmokeTestEvidence | None
+) -> ReadinessCheck:
+    """Verify the retained WAV behind a successful smoke claim.
+
+    A JSON record is provenance, not playable output.  READY therefore binds
+    the record to the exact mono 24 kHz PCM saved by the production smoke
+    path.  Missing, replaced, symlinked, malformed, or hash-mismatched audio
+    invalidates readiness without loading the model.
+    """
+
+    sample = records / "smoke.wav"
+    if evidence is None or not evidence.success:
+        return ReadinessCheck(
+            check="playable_smoke_sample",
+            passed=False,
+            message="no successful current smoke evidence has a playable sample",
+        )
+    if sample.is_symlink():
+        return ReadinessCheck(
+            check="playable_smoke_sample",
+            passed=False,
+            message="the retained smoke sample may not be a symlink",
+        )
+    try:
+        with wave.open(str(sample), "rb") as source:
+            if (
+                source.getnchannels() != 1
+                or source.getsampwidth() != 2
+                or source.getframerate() != 24_000
+            ):
+                return ReadinessCheck(
+                    check="playable_smoke_sample",
+                    passed=False,
+                    message="the retained smoke sample is not mono 24 kHz PCM16 WAV",
+                )
+            frames = source.getnframes()
+            pcm = source.readframes(frames)
+    except (OSError, EOFError, wave.Error):
+        return ReadinessCheck(
+            check="playable_smoke_sample",
+            passed=False,
+            message="the retained smoke sample is missing or corrupt",
+        )
+    duration = frames / 24_000
+    digest_matches = (
+        evidence.output_sha256 is not None
+        and hashlib.sha256(pcm).hexdigest() == evidence.output_sha256
+    )
+    duration_matches = evidence.output_duration_seconds is not None and abs(
+        duration - evidence.output_duration_seconds
+    ) <= (1 / 24_000)
+    if not digest_matches or not duration_matches:
+        return ReadinessCheck(
+            check="playable_smoke_sample",
+            passed=False,
+            message="the retained smoke sample does not match current synthesis evidence",
+        )
+    return ReadinessCheck(
+        check="playable_smoke_sample",
+        passed=True,
+        message=f"retained playable sample matches {duration:.2f}s synthesis evidence",
+    )
+
+
 _RUNTIME_PROJECT_SOURCES: dict[str, tuple[Path, ...]] = {
     "fish-speech": (
         Path("scripts/fish_speech_1_4_worker.py"),
@@ -451,8 +518,32 @@ _RUNTIME_PROJECT_SOURCES: dict[str, tuple[Path, ...]] = {
         Path("src/whoopy/adapters/tts/moss_tts.py"),
         Path("src/whoopy/adapters/tts/_json_process.py"),
     ),
+    "qwen3-tts": (
+        Path("scripts/qwen3_tts_worker.py"),
+        Path("src/whoopy/adapters/tts/qwen3_tts.py"),
+        Path("src/whoopy/adapters/tts/_json_process.py"),
+    ),
     "sherpa-onnx": (Path("src/whoopy/adapters/tts/sherpa_onnx.py"),),
 }
+
+
+def _runtime_project_source_path(source: Path) -> Path:
+    """Resolve one fingerprinted source in a checkout or installed wheel.
+
+    Wheels install Python modules below ``site-packages/whoopy`` and optional
+    subprocess workers below ``share/whoopy/scripts``. Hashing a checkout-only
+    ``src/whoopy`` path would record ``missing`` in a wheel and allow adapter
+    changes to escape the runtime identity.
+    """
+
+    checkout = SOURCE_PROJECT_ROOT / source
+    if checkout.is_file():
+        return checkout
+    if source.parts[:2] == ("src", "whoopy"):
+        return Path(__file__).resolve().parents[1] / Path(*source.parts[2:])
+    if source.parts[:1] == ("scripts",):
+        return installed_data_root() / source
+    return checkout
 
 
 def _runtime_fingerprint(runtime_directory: Path, runtime: RuntimeSpec) -> str:
@@ -508,9 +599,8 @@ def _runtime_fingerprint(runtime_directory: Path, runtime: RuntimeSpec) -> str:
     else:
         add_value("runtime_interpreter", "missing")
 
-    project_root = Path(__file__).resolve().parents[3]
     for source in _RUNTIME_PROJECT_SOURCES.get(runtime.runtime_id, ()):
-        add_file(f"project_source:{source.as_posix()}", project_root / source)
+        add_file(f"project_source:{source.as_posix()}", _runtime_project_source_path(source))
 
     lock_names = (
         "uv.lock",
@@ -627,6 +717,7 @@ class ModelPackRegistry:
         hardware: HardwareSnapshot | None = None,
         machine: MachineIdentity | None = None,
         verify_digests: bool = True,
+        check_resources: bool = True,
     ) -> ModelPackStatus:
         """Inspect one pack and all declared dependencies without changing disk."""
 
@@ -639,6 +730,7 @@ class ModelPackRegistry:
             verify_digests,
             {},
             set(),
+            check_resources,
         )
 
     def _existing_inspection_path(self) -> Path:
@@ -657,6 +749,7 @@ class ModelPackRegistry:
         verify_digests: bool,
         memo: dict[str, ModelPackStatus],
         visiting: set[str],
+        check_resources: bool = True,
     ) -> ModelPackStatus:
         if pack.pack_id in memo:
             return memo[pack.pack_id]
@@ -754,7 +847,9 @@ class ModelPackRegistry:
                 )
                 state = ModelPackState.INSTALLED
             else:
-                state = self._readiness_state(pack, hardware, machine, checks, memo, visiting)
+                state = self._readiness_state(
+                    pack, hardware, machine, checks, memo, visiting, check_resources
+                )
 
         status = ModelPackStatus(
             pack_id=pack.pack_id,
@@ -872,15 +967,17 @@ class ModelPackRegistry:
         checks: list[ReadinessCheck],
         memo: dict[str, ModelPackStatus],
         visiting: set[str],
+        check_resources: bool,
     ) -> ModelPackState:
-        resources_ok, resource_message = _hardware_check(pack.hardware, hardware)
-        checks.append(
-            ReadinessCheck(
-                check="hardware_preflight", passed=resources_ok, message=resource_message
+        if check_resources:
+            resources_ok, resource_message = _hardware_check(pack.hardware, hardware)
+            checks.append(
+                ReadinessCheck(
+                    check="hardware_preflight", passed=resources_ok, message=resource_message
+                )
             )
-        )
-        if not resources_ok:
-            return ModelPackState.RESOURCE_BLOCKED
+            if not resources_ok:
+                return ModelPackState.RESOURCE_BLOCKED
 
         runtime_directory = self.runtime_directory(pack)
         checks.append(
@@ -896,6 +993,33 @@ class ModelPackRegistry:
         )
         if runtime_directory is None:
             return ModelPackState.INSTALLED
+
+        receipt_path = runtime_directory / ".whoopy-runtime.json"
+        if receipt_path.exists() or pack.runtime.runtime_id == "qwen3-tts":
+            from whoopy.model_packs.runtime import RuntimeInstallReceipt, _tree_sha256
+
+            try:
+                receipt = RuntimeInstallReceipt.model_validate_json(receipt_path.read_text("utf-8"))
+                tree_matches = (
+                    receipt.runtime_id == pack.runtime.runtime_id
+                    and receipt.revision == pack.runtime.revision
+                    and receipt.installed_tree_sha256 == _tree_sha256(runtime_directory)
+                )
+            except (OSError, ValueError):
+                tree_matches = False
+            checks.append(
+                ReadinessCheck(
+                    check="runtime_installed_tree",
+                    passed=tree_matches,
+                    message=(
+                        "installed runtime tree verified"
+                        if tree_matches
+                        else "installed runtime tree does not match its receipt"
+                    ),
+                )
+            )
+            if not tree_matches:
+                return ModelPackState.CORRUPT
 
         runtime_fingerprint = _runtime_fingerprint(runtime_directory, pack.runtime)
 
@@ -931,7 +1055,7 @@ class ModelPackRegistry:
 
         for dependency_id in pack.dependencies:
             dependency = self._inspect(
-                self.get(dependency_id), hardware, machine, True, memo, visiting
+                self.get(dependency_id), hardware, machine, True, memo, visiting, check_resources
             )
             dependency_ok = dependency.state == ModelPackState.READY
             checks.append(
@@ -970,12 +1094,20 @@ class ModelPackRegistry:
         )
         if smoke_matches and not smoke.success:
             return ModelPackState.INCOMPATIBLE
-        return ModelPackState.READY if smoke_ok else ModelPackState.INSTALLED
+        sample_check = _playable_smoke_sample_check(
+            records, smoke if smoke_matches and isinstance(smoke, SmokeTestEvidence) else None
+        )
+        checks.append(sample_check)
+        return (
+            ModelPackState.READY if smoke_ok and sample_check.passed else ModelPackState.INSTALLED
+        )
 
 
-def _hardware_check(
+def hardware_requirement_error(
     requirement: HardwareRequirement, hardware: HardwareSnapshot
-) -> tuple[bool, str]:
+) -> str | None:
+    """Return exact unmet live-resource requirements, or ``None`` when safe."""
+
     reasons: list[str] = []
     if hardware.total_ram_gb < requirement.min_total_ram_gb:
         reasons.append(f"requires {requirement.min_total_ram_gb:g} GB total RAM")
@@ -987,7 +1119,14 @@ def _hardware_check(
         reasons.append(
             "requires one of these accelerators: " + ", ".join(requirement.accelerator_any_of)
         )
-    return (not reasons, "hardware preflight passed" if not reasons else "; ".join(reasons))
+    return "; ".join(reasons) if reasons else None
+
+
+def _hardware_check(
+    requirement: HardwareRequirement, hardware: HardwareSnapshot
+) -> tuple[bool, str]:
+    error = hardware_requirement_error(requirement, hardware)
+    return error is None, "hardware preflight passed" if error is None else error
 
 
 def load_model_pack_registry(

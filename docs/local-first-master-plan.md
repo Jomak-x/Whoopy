@@ -1,8 +1,9 @@
 # Whoopy Local-First Master Plan
 
-This is the authoritative near-term plan for Whoopy as of **August 3, 2026**.
-If an older phase document or the long implementation backlog disagrees with
-this document about what happens next, use this document.
+> **Historical planning record.** The shipped-source contract is now [README](../README.md), [setup](setup.md), and [architecture](architecture.md).
+
+This was the authoritative near-term plan for Whoopy on **August 3, 2026**. It
+is now a snapshot of the state and decisions that led to Local V1.
 
 The immediate objective is deliberately narrow:
 

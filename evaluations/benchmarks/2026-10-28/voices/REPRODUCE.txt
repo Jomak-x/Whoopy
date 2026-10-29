@@ -1,0 +1,98 @@
+Fixed-script voice audition, 28 October 2026
+
+Input: ../voice-script.txt, SHA256
+7848064887d723a63028cdc4c15040698d8a6ef37fd55b3b3db2a89ba6329e69
+Every audition uses its four paragraphs verbatim and in order. After the model
+API returns, no inserted pauses, tempo change, trimming, denoising, EQ,
+normalization or ambience is applied to raw.wav. Native model silence is retained.
+Four native FLOAT segment
+files are concatenated without inserted samples to make raw.wav.
+
+The voxcpm2-reference output is a deliberately generated synthetic conditioning
+asset with the sentence 'Settle into a position that feels comfortable.' It is
+excluded from the identical-script audition comparison. It represents no named
+person and replaces no managed clone consent/reference declaration.
+
+Dots uses a separate PCM16 conditioning copy because its standard-library WAV
+reader rejects FLOAT WAV. This changes only encoding quantization, with unity
+gain and the same rate/channel/frame count. Its hash and Dots' native reference
+silence trimming are declared in the report. Generated output onset trimming
+remains disabled. The original FLOAT reference remains available unchanged.
+
+Run each candidate in a fresh process. All inference (including ASR/writing in
+other workers) must hold the common /tmp/whoopy-benchmark-gpu.lock. The script
+acquires/releases it per candidate. Downloads do not acquire that GPU lock.
+RTF is synthesis wall seconds divided by native generated audio seconds, not
+including cold load or the wall time waiting for the lock. Native output may
+include model-generated silence; this is output RTF, not a forced-alignment
+measurement of voiced-only phonation. Lower RTF is faster.
+Fresh-process timing includes any lazy first-generation phonemizer/kernel
+initialization in synthesis time; it is not a controlled disk/kernel-cold
+versus steady-state speed experiment. Different native rates/pacing/voices
+remain visible and are not stretched into equal durations.
+
+From the repository root:
+  PY=models/experimental/voice-benchmark-2026-10-28/.venv/bin/python
+  HF_HOME=models/experimental/voice-benchmark-2026-10-28/hf-home \
+    $PY scripts/benchmark_voice_candidates.py download kokoro voxcpm2 \
+      chatterbox-v3 s3tokenizer moss-local dots-soar
+  HF_HOME=models/experimental/voice-benchmark-2026-10-28/hf-home \
+    $PY scripts/benchmark_voice_candidates.py download mlx-qwen-design mlx-qwen-custom
+  HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 $PY \
+    scripts/benchmark_voice_candidates.py run kokoro-am-michael
+
+Other names: kokoro-bm-george-080, kokoro-af-heart-080, voxcpm2-designed-male,
+voxcpm2-reference (conditioning only), chatterbox-v3-synthetic-male,
+moss-local-synthetic-male, dots-soar-synthetic-male, mlx-qwen-designed-male,
+mlx-qwen-custom-ryan (final same-preset follow-up).
+George and Heart use the model's native speed 0.8 control for calmer pacing;
+Michael retains native speed 1.0 as the control. These are labelled separate
+candidate settings. No waveform time-stretch is used.
+Clone candidates require voxcpm2-reference/raw.wav first. Chatterbox's known
+S3Tokenizer request is resolved to the isolated pinned codec by a benchmark-only
+Hub resolver; no upstream runtime source is altered. MOSS reads the existing
+separately pinned tokenizer v2, without touching managed source/weights.
+
+For qwen-custom-ryan and qwen-designed-male, use existing managed Qwen runtime
+models/managed/runtimes/qwen3-tts-022e286/.venv/bin/python with the same script.
+The initial Ryan run used max_new_tokens 1800, sampled decoding and no fallback;
+that limit is recorded in a provenance supplement. The later runner uses the
+current production text-based token budget and observes codec EOS explicitly.
+These runs must not be silently combined as the same generation policy.
+The same-preset MLX Ryan follow-up uses 8-bit weights and the revised text-based
+budget/EOS capture, while the initial MPS Ryan uses FP16 and a 1800-token limit.
+A successful follow-up establishes that the named model/preset can work on this
+Mac; it cannot isolate the cause of a backend/precision/policy difference.
+
+Revisions and SHA256 file manifests are in *-download.json. Runtime freezes are
+separate for MLX and existing Qwen. Reports record actual package versions,
+seeds, controls, load/synthesis time, native duration, waveform hashes, process
+peak RSS and allocator telemetry separately. macOS ru_maxrss is bytes; MPS
+current/driver allocation snapshots are not a GPU peak measurement.
+RSS and GPU allocator figures overlap on unified memory and are not additive.
+The finite MLX cap reserves six GiB from measured available memory, capped at 24 GiB.
+Dots demonstrated that an allocator cap does not bound total system pressure:
+its first-paragraph decoder caused severe observed swap growth, so its own
+process was stopped before a waveform returned. That attempt has a resource
+failure, no quality verdict, and no further retry.
+
+The revised runner therefore records RAM/swap before loading and samples every
+0.5 seconds. It interrupts its own process if system swap grows more than 4 GiB
+above that baseline or available RAM remains below 2 GiB for 2 seconds. Observer
+failure also stops the candidate. It saves the reason/observations before the
+interrupt, and collects process peak RSS during observation and cleanup. This
+is a conservative system-condition gate; unrelated app memory also affects it.
+The final MLX Ryan run additionally requires 16 GiB available at preflight and
+was started only after stable physical-memory recovery. Earlier runs predate
+this watchdog; their evidence is not relabelled as protected by it.
+The revised runner records an eight-minute per-paragraph deadline. Earlier
+launches are separately identified rather than relabelled as that policy.
+
+Fish Drama3 was not downloaded/run after resource preflight. Higgs3 was not
+downloaded/run after license-fit review. See excluded-candidates.json,
+license-matrix.json, LICENSE-AUDIT.txt and exact snapshots in licenses/.
+
+Signal/content verification and separate gain-matched listening copies belong
+to ../verification/. Successful rendering/ASR does not establish naturalness,
+warmth, preferred vocal register, comfort or sustained long-form voice quality.
+Human listening/promotion remains a separate decision.

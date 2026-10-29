@@ -1,5 +1,7 @@
 # Phase 3.5 PR 2: Runtime Ports And Native Adapters
 
+> **Historical implementation record.** Adapter concepts remain useful; current readiness and controls are documented in [model capabilities](model-capabilities.md).
+
 This PR makes the first real models usable from Python without coupling Whoopy's
 pipeline to either model. It does not yet change the normal worker command;
 PR 3 connects real Kokoro speech to a script-file flow.

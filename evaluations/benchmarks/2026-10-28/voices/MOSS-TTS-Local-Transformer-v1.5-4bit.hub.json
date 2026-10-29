@@ -1,0 +1,181 @@
+{
+  "_id": "6a97b81d74a3038f5d8ff8a8",
+  "id": "mlx-community/MOSS-TTS-Local-Transformer-v1.5-4bit",
+  "private": false,
+  "pipeline_tag": "text-to-speech",
+  "library_name": "mlx",
+  "tags": [
+    "mlx",
+    "safetensors",
+    "moss_tts_local",
+    "mlx-audio",
+    "text-to-speech",
+    "voice-cloning",
+    "streaming",
+    "apple-silicon",
+    "quantized",
+    "4bit",
+    "custom_code",
+    "zh",
+    "en",
+    "ja",
+    "ko",
+    "de",
+    "fr",
+    "es",
+    "it",
+    "ru",
+    "pt",
+    "base_model:OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5",
+    "base_model:quantized:OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5",
+    "license:apache-2.0",
+    "4-bit",
+    "region:us"
+  ],
+  "downloads": 288,
+  "likes": 0,
+  "modelId": "mlx-community/MOSS-TTS-Local-Transformer-v1.5-4bit",
+  "author": "mlx-community",
+  "sha": "613364100996995dd095f7abd04b24372ce11a8e",
+  "lastModified": "2026-09-02T05:48:46.000Z",
+  "gated": false,
+  "disabled": false,
+  "model-index": null,
+  "config": {
+    "architectures": [
+      "MossTTSLocalModel"
+    ],
+    "auto_map": {
+      "AutoConfig": "configuration_moss_tts.MossTTSLocalConfig",
+      "AutoModel": "modeling_moss_tts.MossTTSLocalModel",
+      "AutoProcessor": "processing_moss_tts.MossTTSLocalProcessor"
+    },
+    "model_type": "moss_tts_local",
+    "quantization_config": {
+      "bits": 4
+    },
+    "tokenizer_config": {
+      "bos_token": null,
+      "eos_token": "<|im_end|>",
+      "pad_token": "<|endoftext|>",
+      "unk_token": null
+    },
+    "chat_template_jinja": "{%- if tools %}\n    {{- '<|im_start|>system\\n' }}\n    {%- if messages[0].role == 'system' %}\n        {{- messages[0].content + '\\n\\n' }}\n    {%- endif %}\n    {{- \"# Tools\\n\\nYou may call one or more functions to assist with the user query.\\n\\nYou are provided with function signatures within <tools></tools> XML tags:\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\\n\\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\\n<tool_call>\\n{\\\"name\\\": <function-name>, \\\"arguments\\\": <args-json-object>}\\n</tool_call><|im_end|>\\n\" }}\n{%- else %}\n    {%- if messages[0].role == 'system' %}\n        {{- '<|im_start|>system\\n' + messages[0].content + '<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}\n{%- for message in messages[::-1] %}\n    {%- set index = (messages|length - 1) - loop.index0 %}\n    {%- if ns.multi_step_tool and message.role == \"user\" and message.content is string and not(message.content.startswith('<tool_response>') and message.content.endswith('</tool_response>')) %}\n        {%- set ns.multi_step_tool = false %}\n        {%- set ns.last_query_index = index %}\n    {%- endif %}\n{%- endfor %}\n{%- for message in messages %}\n    {%- if message.content is string %}\n        {%- set content = message.content %}\n    {%- else %}\n        {%- set content = '' %}\n    {%- endif %}\n    {%- if (message.role == \"user\") or (message.role == \"system\" and not loop.first) %}\n        {{- '<|im_start|>' + message.role + '\\n' + content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {%- set reasoning_content = '' %}\n        {%- if message.reasoning_content is string %}\n            {%- set reasoning_content = message.reasoning_content %}\n        {%- else %}\n            {%- if '</think>' in content %}\n                {%- set reasoning_content = content.split('</think>')[0].rstrip('\\n').split('<think>')[-1].lstrip('\\n') %}\n                {%- set content = content.split('</think>')[-1].lstrip('\\n') %}\n            {%- endif %}\n        {%- endif %}\n        {%- if loop.index0 > ns.last_query_index %}\n            {%- if loop.last or (not loop.last and reasoning_content) %}\n                {{- '<|im_start|>' + message.role + '\\n<think>\\n' + reasoning_content.strip('\\n') + '\\n</think>\\n\\n' + content.lstrip('\\n') }}\n            {%- else %}\n                {{- '<|im_start|>' + message.role + '\\n' + content }}\n            {%- endif %}\n        {%- else %}\n            {{- '<|im_start|>' + message.role + '\\n' + content }}\n        {%- endif %}\n        {%- if message.tool_calls %}\n            {%- for tool_call in message.tool_calls %}\n                {%- if (loop.first and content) or (not loop.first) %}\n                    {{- '\\n' }}\n                {%- endif %}\n                {%- if tool_call.function %}\n                    {%- set tool_call = tool_call.function %}\n                {%- endif %}\n                {{- '<tool_call>\\n{\"name\": \"' }}\n                {{- tool_call.name }}\n                {{- '\", \"arguments\": ' }}\n                {%- if tool_call.arguments is string %}\n                    {{- tool_call.arguments }}\n                {%- else %}\n                    {{- tool_call.arguments | tojson }}\n                {%- endif %}\n                {{- '}\\n</tool_call>' }}\n            {%- endfor %}\n        {%- endif %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if loop.first or (messages[loop.index0 - 1].role != \"tool\") %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- content }}\n        {{- '\\n</tool_response>' }}\n        {%- if loop.last or (messages[loop.index0 + 1].role != \"tool\") %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n    {%- if enable_thinking is defined and enable_thinking is false %}\n        {{- '<think>\\n\\n</think>\\n\\n' }}\n    {%- endif %}\n{%- endif %}"
+  },
+  "cardData": {
+    "license": "apache-2.0",
+    "library_name": "mlx",
+    "pipeline_tag": "text-to-speech",
+    "base_model": "OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5",
+    "base_model_relation": "quantized",
+    "language": [
+      "zh",
+      "en",
+      "ja",
+      "ko",
+      "de",
+      "fr",
+      "es",
+      "it",
+      "ru",
+      "pt"
+    ],
+    "tags": [
+      "mlx",
+      "mlx-audio",
+      "text-to-speech",
+      "voice-cloning",
+      "streaming",
+      "apple-silicon",
+      "quantized",
+      "4bit"
+    ]
+  },
+  "siblings": [
+    {
+      "rfilename": ".gitattributes",
+      "blobId": "52373fe24473b1aa44333d318f578ae6bf04b49b",
+      "size": 1570
+    },
+    {
+      "rfilename": "README.md",
+      "blobId": "52706e8a21c17b35fc17aa20ce28196c9a233a77",
+      "size": 2187
+    },
+    {
+      "rfilename": "added_tokens.json",
+      "blobId": "9e5f284c0d74ecf9b9c006194bd5040b1fe3b640",
+      "size": 790
+    },
+    {
+      "rfilename": "chat_template.jinja",
+      "blobId": "01be9b307daa2d425f7c168c9fb145a286e0afb4",
+      "size": 4168
+    },
+    {
+      "rfilename": "config.json",
+      "blobId": "0c59984c396fe9a0adcf59b6066a00d5f7b9278e",
+      "size": 11871
+    },
+    {
+      "rfilename": "merges.txt",
+      "blobId": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+      "size": 1671853
+    },
+    {
+      "rfilename": "model.safetensors",
+      "blobId": "64cd576c96ab6f84a6229f55bc32d42ae8e1a7d6",
+      "size": 2605273853,
+      "lfs": {
+        "sha256": "96039db3b96b278e98674e9bb2232f5306e056e7dc0a5dbbb26705107834ac1e",
+        "size": 2605273853,
+        "pointerSize": 135
+      }
+    },
+    {
+      "rfilename": "model.safetensors.index.json",
+      "blobId": "1b3267e2d1342b27e0ca5235c63abe5106be9a82",
+      "size": 73928
+    },
+    {
+      "rfilename": "processor_config.json",
+      "blobId": "9bb021c7cc13f3e886f4be9ca326b68f6b42c461",
+      "size": 210
+    },
+    {
+      "rfilename": "special_tokens_map.json",
+      "blobId": "a2a920bbe1a549d19078491a836432ca805caa22",
+      "size": 394
+    },
+    {
+      "rfilename": "tokenizer.json",
+      "blobId": "8da72c77edd838e0a08d37d2b3005f25b9e9b60c",
+      "size": 11423220,
+      "lfs": {
+        "sha256": "06902d1fb775216338802205886a24bc715ccc606bd872a892e3d3c83ca1b9e2",
+        "size": 11423220,
+        "pointerSize": 133
+      }
+    },
+    {
+      "rfilename": "tokenizer_config.json",
+      "blobId": "5426bc4f185cb5a3f45b0c7db3d3379eb6019fed",
+      "size": 5727
+    },
+    {
+      "rfilename": "vocab.json",
+      "blobId": "4783fe10ac3adce15ac8f358ef5462739852c569",
+      "size": 2776833
+    }
+  ],
+  "spaces": [],
+  "createdAt": "2026-09-02T05:46:05.000Z",
+  "safetensors": {
+    "parameters": {
+      "BF16": 31691264,
+      "U32": 4518712320
+    },
+    "total": 4550403584
+  },
+  "usedStorage": 2616697073
+}

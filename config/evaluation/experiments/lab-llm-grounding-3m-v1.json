@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "experiment_id": "local-v1-llm-grounding-3m",
+  "version": 1,
+  "experiment_type": "llm",
+  "evaluation_id": "local-v1-meditation-corpus",
+  "evaluation_version": 1,
+  "seed": 42,
+  "candidates": [
+    {
+      "candidate_id": "standard-qwen3-4b",
+      "label": "Standard · Qwen3 4B",
+      "condition": {
+        "llm_model_id": "qwen3-4b-standard",
+        "writing_method": "blueprint_first_sparse",
+        "voice": {
+          "configuration_id": "kokoro-af-heart-calm",
+          "model_id": "kokoro",
+          "voice_id": "af_heart",
+          "voice_mode": "preset",
+          "delivery": "calm",
+          "intensity": "subtle",
+          "language": "English",
+          "instruction": null
+        },
+        "pacing_profile_id": "meditative-v2"
+      }
+    },
+    {
+      "candidate_id": "lite-qwen3-1-7b",
+      "label": "Lite · Qwen3 1.7B",
+      "condition": {
+        "llm_model_id": "qwen3-1.7b-lite",
+        "writing_method": "blueprint_first_sparse",
+        "voice": {
+          "configuration_id": "kokoro-af-heart-calm",
+          "model_id": "kokoro",
+          "voice_id": "af_heart",
+          "voice_mode": "preset",
+          "delivery": "calm",
+          "intensity": "subtle",
+          "language": "English",
+          "instruction": null
+        },
+        "pacing_profile_id": "meditative-v2"
+      }
+    }
+  ],
+  "baseline_candidate_id": "standard-qwen3-4b"
+}

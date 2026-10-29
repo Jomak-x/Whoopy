@@ -1,0 +1,35 @@
+from pathlib import Path
+import fcntl, json, subprocess, time, resource, re
+root = Path(__file__).resolve().parents[4]
+evidence = Path(__file__).resolve().parent
+binary = root / "models/managed/installed/llama_cpp_b10142_darwin_arm64/llama-b10142/llama-cli"
+model = root / "models/experimental/writer-quality-2026-10-28/Ministral-3-14B-Instruct-2512-Q4_K_M.gguf"
+command = [str(binary), "--model", str(model), "--file", str(evidence / "smoke-prompt.txt"), "--system-prompt-file", str(evidence / "smoke-system.txt"), "--output-file", str(evidence / "smoke-generated.txt"), "--ctx-size", "32768", "--n-predict", "256", "--temperature", "0.05", "--top-p", "0.9", "--seed", "42", "--gpu-layers", "99", "--threads", "8", "--reasoning", "off", "--conversation", "--single-turn", "--no-display-prompt", "--simple-io", "--color", "off", "--offline", "--perf"]
+print("Waiting for exclusive GPU lock", flush=True)
+with open("/tmp/whoopy-benchmark-gpu.lock", "a+") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    print("Exclusive GPU lock acquired; starting one short JSON smoke", flush=True)
+    start = time.monotonic()
+    done = subprocess.run(command, capture_output=True, text=True, timeout=180)
+    elapsed = time.monotonic() - start
+    peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+(evidence / "smoke-stdout.txt").write_text(done.stdout)
+(evidence / "smoke-stderr.txt").write_text(done.stderr)
+raw = (evidence / "smoke-generated.txt").read_text() if (evidence / "smoke-generated.txt").exists() else ""
+json_value = None
+error = None
+try:
+    # The CLI output file can contain its single-turn transcript wrapper.
+    candidate = raw[raw.find("{"):raw.rfind("}")+1]
+    json_value = json.loads(candidate)
+except Exception as exc:
+    error = str(exc)
+checks = {
+    "json_object": isinstance(json_value, dict),
+    "exact_keys": isinstance(json_value, dict) and set(json_value) == {"title", "spoken_text", "pause_seconds"},
+    "word_count_in_range": isinstance(json_value, dict) and isinstance(json_value.get("spoken_text"), str) and 35 <= len(json_value["spoken_text"].split()) <= 50,
+    "pause_seconds_is_integer_2": isinstance(json_value, dict) and type(json_value.get("pause_seconds")) is int and json_value["pause_seconds"] == 2,
+}
+result = {"returncode": done.returncode, "elapsed_seconds": elapsed, "peak_child_rss_bytes_macos": peak, "runtime": "llama.cpp b10142 (3d1c3a897), Darwin arm64", "command": command, "json": json_value, "json_parse_error": error, "checks": checks, "passed_structural_smoke": done.returncode == 0 and all(checks.values()), "note": "One short native unconstrained JSON smoke; exact raw JSON formatting must be reviewed separately; does not establish whole-session writer quality."}
+(evidence / "smoke-result.json").write_text(json.dumps(result, indent=2) + "\n")
+print(json.dumps(result, indent=2), flush=True)

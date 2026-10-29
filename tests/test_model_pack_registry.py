@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import wave
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
+import whoopy.model_packs.registry as registry_module
 from whoopy.hardware import HardwareSnapshot
 from whoopy.model_packs import (
     DigestSpec,
@@ -29,6 +31,35 @@ from whoopy.model_packs import (
 
 NOW = datetime(2026, 8, 4, tzinfo=UTC)
 MACHINE = MachineIdentity(machine_id="a" * 64, operating_system="darwin", architecture="arm64")
+
+
+def test_runtime_source_fingerprint_resolves_installed_wheel_layout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = tmp_path / "checkout"
+    package = tmp_path / "venv/lib/python3.11/site-packages/whoopy"
+    data_root = tmp_path / "venv/share/whoopy"
+    adapter = package / "adapters/tts/sherpa_onnx.py"
+    worker = data_root / "scripts/qwen3_tts_worker.py"
+    adapter.parent.mkdir(parents=True)
+    worker.parent.mkdir(parents=True)
+    adapter.write_text("# installed adapter\n", encoding="utf-8")
+    worker.write_text("# installed worker\n", encoding="utf-8")
+    fake_registry = package / "model_packs/registry.py"
+    fake_registry.parent.mkdir(parents=True)
+    fake_registry.write_text("# registry\n", encoding="utf-8")
+
+    monkeypatch.setattr(registry_module, "SOURCE_PROJECT_ROOT", checkout)
+    monkeypatch.setattr(registry_module, "installed_data_root", lambda: data_root)
+    monkeypatch.setattr(registry_module, "__file__", str(fake_registry))
+
+    assert (
+        registry_module._runtime_project_source_path(Path("src/whoopy/adapters/tts/sherpa_onnx.py"))
+        == adapter
+    )
+    assert (
+        registry_module._runtime_project_source_path(Path("scripts/qwen3_tts_worker.py")) == worker
+    )
 
 
 def _hardware(*, total: float = 64, available: float = 48, disk: float = 100) -> HardwareSnapshot:
@@ -163,6 +194,20 @@ def _write_evidence(
     )
     (records / "runtime.json").write_text(runtime.model_dump_json(), encoding="utf-8")
     (records / "smoke.json").write_text(smoke.model_dump_json(), encoding="utf-8")
+    if smoke_success:
+        pcm = b"\x00\x00" * 24_000
+        smoke = smoke.model_copy(
+            update={
+                "output_sha256": hashlib.sha256(pcm).hexdigest(),
+                "output_duration_seconds": 1.0,
+            }
+        )
+        (records / "smoke.json").write_text(smoke.model_dump_json(), encoding="utf-8")
+        with wave.open(str(records / "smoke.wav"), "wb") as destination:
+            destination.setnchannels(1)
+            destination.setsampwidth(2)
+            destination.setframerate(24_000)
+            destination.writeframes(pcm)
 
 
 def test_missing_partial_and_corrupt_states_are_distinct(tmp_path: Path) -> None:
@@ -300,6 +345,26 @@ def test_ready_evidence_is_invalidated_when_runtime_marker_changes(tmp_path: Pat
     assert "runtime fingerprint" in runtime_check.message
 
 
+def test_ready_evidence_requires_the_exact_retained_playable_sample(tmp_path: Path) -> None:
+    payloads = {"model.bin": b"model"}
+    pack = _pack(payloads)
+    _write_pack(tmp_path, pack, payloads)
+    _write_runtime(tmp_path)
+    registry = _registry(tmp_path, pack)
+    _write_evidence(registry, pack)
+
+    assert registry.inspect(pack.pack_id, hardware=_hardware(), machine=MACHINE).state == "ready"
+
+    sample = registry.records_directory(pack.pack_id) / "smoke.wav"
+    sample.write_bytes(b"not a wave")
+    status = registry.inspect(pack.pack_id, hardware=_hardware(), machine=MACHINE)
+
+    assert status.state == ModelPackState.INSTALLED
+    check = next(item for item in status.checks if item.check == "playable_smoke_sample")
+    assert not check.passed
+    assert "missing or corrupt" in check.message
+
+
 def test_ready_evidence_is_invalidated_when_installed_packages_change(tmp_path: Path) -> None:
     payloads = {"model.bin": b"model"}
     pack = _pack(payloads)
@@ -401,7 +466,7 @@ def test_manifest_rejects_unsafe_paths_and_unknown_dependencies() -> None:
         ModelPackManifest(schema_version=1, packs=[pack])
 
 
-def test_default_registry_contains_all_pr14_packs_and_fish_license() -> None:
+def test_default_registry_contains_all_local_v1_packs_and_fish_license() -> None:
     registry = load_model_pack_registry()
 
     assert {pack.pack_id for pack in registry.packs} == {
@@ -410,16 +475,81 @@ def test_default_registry_contains_all_pr14_packs_and_fish_license() -> None:
         "moss-audio-tokenizer-v2",
         "moss-local-5b",
         "moss-8b",
+        "qwen3-tts-custom-voice-0.6b",
+        "qwen3-tts-custom-voice-1.7b",
+        "qwen3-tts-voice-design-1.7b",
+        "qwen3-tts-base-clone-0.6b",
+        "qwen3-tts-base-clone-1.7b",
     }
     fish = registry.get("fish-speech-1.4")
     assert fish.license_id == "CC-BY-NC-SA-4.0"
     assert not fish.commercial_use_allowed
     assert "Non-commercial" in fish.license_notice
-    kokoro = registry.get("kokoro")
-    assert kokoro.installed_tree_sha256 == (
-        "9bc58f2791c964568c1f9105a7272e4b73e7db113b141d204c8846e6796ed0af"
+    assert fish.runtime.candidate_directories == [Path("managed/runtimes/fish-speech-1359896")]
+    assert all(
+        "experimental" not in str(candidate)
+        for pack in registry.packs
+        for candidate in pack.runtime.candidate_directories
     )
+    kokoro = registry.get("kokoro")
+    # Require a complete-tree lock, while allowing reviewed upstream repins.
+    assert kokoro.installed_tree_sha256 is not None
+    assert len(kokoro.installed_tree_sha256) == 64
+    assert all(character in "0123456789abcdef" for character in kokoro.installed_tree_sha256)
     assert kokoro.installed_tree_directory == Path("managed/installed/kokoro_multilang_v1_0")
 
     with pytest.raises(ModelPackError, match="Unknown model pack"):
         registry.get("not-real")
+
+
+def test_installation_readiness_does_not_require_live_memory(tmp_path: Path) -> None:
+    payloads = {"model.bin": b"model"}
+    dependency = _pack(payloads, pack_id="codec")
+    pack = _pack(payloads, dependencies=["codec"])
+    registry = _registry(tmp_path, dependency, pack)
+    _write_runtime(tmp_path)
+    for item in (dependency, pack):
+        _write_pack(tmp_path, item, payloads)
+        _write_evidence(registry, item)
+
+    assert (
+        registry.inspect(pack.pack_id, hardware=_hardware(available=0), machine=MACHINE).state
+        == ModelPackState.RESOURCE_BLOCKED
+    )
+    assert (
+        registry.inspect(
+            pack.pack_id, hardware=_hardware(available=0), machine=MACHINE, check_resources=False
+        ).state
+        == ModelPackState.READY
+    )
+
+
+def test_runtime_receipt_rejects_changed_unlisted_runtime_source(tmp_path: Path) -> None:
+    from whoopy.model_packs.runtime import RuntimeInstallReceipt, _tree_sha256
+
+    payloads = {"model.bin": b"model"}
+    pack = _pack(payloads)
+    registry = _registry(tmp_path, pack)
+    _write_pack(tmp_path, pack, payloads)
+    _write_runtime(tmp_path)
+    runtime = tmp_path / "runtimes/test"
+    implementation = runtime / "unlisted.py"
+    implementation.write_text("original", encoding="utf-8")
+    receipt = RuntimeInstallReceipt(
+        runtime_id=pack.runtime.runtime_id,
+        revision=pack.runtime.revision,
+        upstream_revision="upstream-test",
+        target="darwin-arm64",
+        bundle_sha256="a" * 64,
+        installed_tree_sha256=_tree_sha256(runtime),
+        installed_at=NOW,
+    )
+    (runtime / ".whoopy-runtime.json").write_text(receipt.model_dump_json(), encoding="utf-8")
+    _write_evidence(registry, pack)
+    assert registry.inspect(pack.pack_id, hardware=_hardware(), machine=MACHINE).state == "ready"
+    implementation.write_text("modified", encoding="utf-8")
+    status = registry.inspect(pack.pack_id, hardware=_hardware(), machine=MACHINE)
+    assert status.state == ModelPackState.CORRUPT
+    assert any(
+        check.check == "runtime_installed_tree" and not check.passed for check in status.checks
+    )

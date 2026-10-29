@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import TracebackType
 from typing import Any, BinaryIO, cast
@@ -15,8 +17,10 @@ class RunLockUnavailable(RuntimeError):
 class RunLock:
     """Hold an OS lock that the kernel releases automatically on process exit."""
 
-    def __init__(self, run_directory: Path) -> None:
-        self.path = run_directory / "worker.lock"
+    def __init__(self, run_directory: Path, *, require_directory: bool = True) -> None:
+        self.run_directory = run_directory
+        self.require_directory = require_directory
+        self.path = run_directory.parent / ".locks" / f"{run_directory.name}.lock"
         self._file: BinaryIO | None = None
 
     def acquire(self) -> None:
@@ -26,19 +30,31 @@ class RunLock:
             raise RuntimeError(f"Run lock is already held: {self.path}")
         lock_file: BinaryIO | None = None
         try:
+            self.path.parent.mkdir(exist_ok=True)
+            if self.path.parent.is_symlink() or self.path.is_symlink():
+                raise OSError("Run lock paths must not be symbolic links")
             lock_file = self.path.open("a+b")
             if os.name == "nt":
                 self._acquire_windows(lock_file)
             else:
                 self._acquire_posix(lock_file)
+            if self.require_directory and not self.run_directory.is_dir():
+                raise FileNotFoundError(f"Run directory not found: {self.run_directory}")
         except (OSError, BlockingIOError) as error:
             if lock_file is not None:
                 lock_file.close()
             raise RunLockUnavailable(
-                f"Another worker is processing {self.path.parent.name}"
+                f"Another worker is processing {self.run_directory.name}, "
+                "or its run directory is unavailable"
             ) from error
         assert lock_file is not None
         self._file = lock_file
+
+    @contextmanager
+    def reuse(self, run_directory: Path) -> Iterator[RunLock]:
+        if self._file is None or self.run_directory != run_directory:
+            raise RuntimeError("The caller does not hold this run's lock.")
+        yield self
 
     def release(self) -> None:
         """Release the advisory lock while leaving the harmless lock file."""

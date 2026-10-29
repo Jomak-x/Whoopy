@@ -1,9 +1,3 @@
 * text=auto eol=lf
-
-# Audio fixtures and generated media must not be normalized as text.
-*.aac binary
-*.flac binary
-*.mp3 binary
-*.ogg binary
-*.opus binary
-*.wav binary
+# Preserve fetched license snapshots byte-for-byte for their recorded hashes.
+evaluations/benchmarks/**/licenses/** -text

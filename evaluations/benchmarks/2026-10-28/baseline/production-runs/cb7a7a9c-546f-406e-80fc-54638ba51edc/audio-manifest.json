@@ -1,0 +1,58 @@
+{
+  "schema_version": 2,
+  "run_id": "cb7a7a9c-546f-406e-80fc-54638ba51edc",
+  "timeline_schema_version": 3,
+  "format": "pcm_s16le_wav",
+  "sample_rate": 24000,
+  "channels": 1,
+  "sample_width_bytes": 2,
+  "total_frames": 1868138,
+  "duration_ms": 77839.083,
+  "pcm_sha256": "14eb2b3fd8ec33dff368da8df3e74e92a892f3a4a4fdc0d7fab5f108bd8f8667",
+  "segments": [
+    {
+      "segment_id": "speech-0001",
+      "segment_type": "SPEECH",
+      "start_frame": 0,
+      "end_frame": 513566,
+      "frame_count": 513566,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 21398.583,
+      "cache_key": "006c0941ac87625fa8f43f570347d4ef0db134285d281626923c74a15c7c94d9",
+      "pcm_sha256": "6c70715125e4fe4844b0ede72fc03bf20381ec673635768d61d0d76d2dbf8015"
+    },
+    {
+      "segment_id": "speech-0002",
+      "segment_type": "SPEECH",
+      "start_frame": 513566,
+      "end_frame": 1022426,
+      "frame_count": 508860,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 21202.5,
+      "cache_key": "6eaf744752d129022a767dbefb9e1983188c0bbc844713080307bf0d280cef4a",
+      "pcm_sha256": "9296487390d63bb169775206f6480df74b1f515c89d458b2aa3086683de5a3f1"
+    },
+    {
+      "segment_id": "speech-0003",
+      "segment_type": "SPEECH",
+      "start_frame": 1022426,
+      "end_frame": 1458120,
+      "frame_count": 435694,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 18153.917,
+      "cache_key": "918e21a1bc0b39a7529743ad870b4ce9cfa8568a4c70af4631d6482f638c88ca",
+      "pcm_sha256": "a314892c0144430ce7a48728f541757cdc94e5c9623a3d10b60a7fa9c6c5739e"
+    },
+    {
+      "segment_id": "speech-0004",
+      "segment_type": "SPEECH",
+      "start_frame": 1458120,
+      "end_frame": 1868138,
+      "frame_count": 410018,
+      "requested_duration_ms": null,
+      "actual_duration_ms": 17084.083,
+      "cache_key": "0cdcccdee15585bb6c0a42f0e5707100bba956fe41669c6fd160fb58f934c1ca",
+      "pcm_sha256": "a70d7769c24bc6d7f7d797f8704607859b3ec8787b64fb3d0a47495d3c691eb6"
+    }
+  ]
+}

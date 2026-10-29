@@ -19,7 +19,7 @@ from whoopy.audio.synthesis import (
     InvalidSynthesisOutput,
     TransientSynthesisError,
 )
-from whoopy.ports import AdapterMetadata
+from whoopy.ports import AdapterMetadata, SpeechCapabilities
 from whoopy.timeline import SpeechSegment
 
 ModuleLoader = Callable[[], Any]
@@ -100,6 +100,11 @@ class SherpaOnnxKokoroAdapter:
     """Generate Whoopy PCM while importing and initializing sherpa only on first use."""
 
     sample_rate: int = SAMPLE_RATE
+    capabilities = SpeechCapabilities(
+        delivery_styles=("neutral",),
+        pace_intents=("natural", "unhurried", "slow", "very_slow"),
+        languages=("English", "Chinese"),
+    )
 
     def __init__(
         self,
@@ -208,11 +213,17 @@ class SherpaOnnxKokoroAdapter:
 
     def synthesize(self, segment: SpeechSegment) -> PcmAudio:
         engine = self._load_engine()
+        pace_multiplier = {
+            "natural": 1.0,
+            "unhurried": 0.92,
+            "slow": 0.82,
+            "very_slow": 0.72,
+        }[segment.pace]
         try:
             generated = engine.generate(
                 segment.text,
                 sid=self.settings.speaker_id,
-                speed=self.settings.speed,
+                speed=self.settings.speed * pace_multiplier,
             )
         except Exception as error:
             raise TransientSynthesisError(f"Kokoro generation failed: {error}") from error

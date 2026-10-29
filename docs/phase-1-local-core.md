@@ -1,5 +1,7 @@
 # Phase 1: The First Local-Core Flow
 
+> **Historical implementation record.** This describes an early fixture milestone, not the shipped Local V1 workflow. Start with [the user guide](user-guide.md).
+
 > [!NOTE]
 > This document describes the Phase 1 contract. Phase 2 keeps schema-v1 records
 > readable and adds silence plus audio artifacts; see
