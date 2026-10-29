@@ -31,8 +31,9 @@ from whoopy.pipeline.runs import (
     RunStore,
     RunStoreError,
 )
+from whoopy.pipeline.worker import LocalWorker
 from whoopy.ports import AdapterMetadata
-from whoopy.timeline import SpeechSegment, Timeline
+from whoopy.timeline import SpeechSegment, Timeline, build_script_timeline
 
 RUN_ID = UUID("11111111-1111-4111-8111-111111111111")
 CREATED_AT = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
@@ -959,3 +960,81 @@ def test_active_failure_keeps_long_diagnostic_without_breaking_execution_summary
     assert failed.error == diagnostic
     assert failed.execution is not None
     assert failed.execution.message == diagnostic[:2_000]
+
+
+@pytest.mark.parametrize("status", [RunStatus.FAILED, RunStatus.INTERRUPTED])
+@pytest.mark.parametrize("kind", ["script", "prompt"])
+def test_stopped_placeholder_promotion_preserves_attempts_across_store_restart(
+    tmp_path: Path, status: RunStatus, kind: str
+) -> None:
+    store = RunStore(tmp_path)
+    initial = store.create("A retained browser launch.", run_id=RUN_ID)
+    assert initial.recovery is not None
+    stopped = initial.transition(
+        status,
+        updated_at=datetime.now(UTC),
+        recovery=initial.recovery.model_copy(update={"process_attempts": 3, "resume_count": 2}),
+        execution=RunExecution(
+            stage=RunStage.COMPILING,
+            message="Previous launch stopped.",
+            interruption_kind="test" if status is RunStatus.INTERRUPTED else None,
+        ),
+        error="Previous launch failed." if status is RunStatus.FAILED else None,
+    )
+    store.save(stopped)
+    request = _pending_generation()
+    if kind == "script":
+        script = "Notice the room around you."
+        config = ScriptRunConfig(
+            profile=request.profile,
+            target=request.target,
+            tts=request.tts,
+            processing=request.processing,
+        )
+        promoted = store.promote_queued_script_run(
+            RUN_ID,
+            script=script,
+            source_name="retained.md",
+            resolved_config=config,
+            model_metadata=request.model_metadata,
+        )
+        store.write_timeline(
+            RUN_ID,
+            build_script_timeline(
+                run_id=RUN_ID,
+                script=script,
+                created_at=promoted.created_at,
+            ),
+        )
+    else:
+        store.write_generation_request(RUN_ID, request)
+        promoted = store.load(RUN_ID)
+        store.write_generation_request(RUN_ID, request)
+        assert store.load(RUN_ID) == promoted
+    assert promoted.status is status
+    assert promoted.recovery == stopped.recovery
+    assert promoted.created_at == stopped.created_at
+    assert promoted.error == stopped.error
+    restarted_store = RunStore(tmp_path)
+    assert restarted_store.load(RUN_ID) == promoted
+    if kind == "script":
+        finished = LocalWorker(restarted_store).resume(RUN_ID)
+        assert finished.status is RunStatus.COMPLETED
+        assert finished.recovery is not None
+        assert finished.recovery.process_attempts == 4
+        assert finished.recovery.resume_count == 3
+    else:
+        active = restarted_store.restart_generation(RUN_ID, owner_id="new-server", pid=os.getpid())
+        assert active.recovery is not None
+        assert active.recovery.process_attempts == 4
+        assert active.recovery.resume_count == 3
+        assert active.execution is not None and active.execution.attempt_id is not None
+        restarted_store.interrupt_active_run(
+            RUN_ID, attempt_id=active.execution.attempt_id, kind="test", message="Stopped again."
+        )
+        again = RunStore(tmp_path).restart_generation(
+            RUN_ID, owner_id="third-server", pid=os.getpid()
+        )
+        assert again.recovery is not None
+        assert again.recovery.process_attempts == 5
+        assert again.recovery.resume_count == 4

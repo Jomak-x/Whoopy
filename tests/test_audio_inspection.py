@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from tests.test_recipe_whole_session import FixtureDraft, WholeSessionAdapter
 from whoopy.audio import TimelineWaveRenderer
+from whoopy.audio.models import AudioManifest
 from whoopy.meditation import (
     DraftedSection,
     GenerationWorkspace,
@@ -19,7 +20,8 @@ from whoopy.meditation import (
     load_prompt_bundle,
 )
 from whoopy.meditation.pacing import pace_section
-from whoopy.pipeline import RunStore
+from whoopy.pipeline import RunStatus, RunStore
+from whoopy.pipeline.worker import LocalWorker
 from whoopy.timeline import BreathSegment, SpeechSegment, Timeline, build_script_timeline
 from whoopy.webui.api import create_api
 from whoopy.webui.audio_inspection import (
@@ -209,6 +211,7 @@ def test_local_application_waveform_composes_canonical_editor_context(tmp_path: 
     store = RunStore(runs)
     store.create("Inspect canonical context.", run_id=RUN_ID)
     _artifacts(store.run_directory(RUN_ID))
+    assert LocalWorker(store).process(RUN_ID).status is RunStatus.COMPLETED
     application = LocalWebApplication(
         project_root=tmp_path,
         config_directory=Path("config"),
@@ -303,14 +306,14 @@ def test_whole_session_sections_follow_paragraphs_and_reject_stale_text(tmp_path
         created_at=NOW,
         writing_method="recipe_whole_session",
     )
-    rendered = TimelineWaveRenderer().render(result.timeline)
+    store.write_timeline(RUN_ID, result.timeline)
     store.draft_sections_path(RUN_ID).mkdir()
     for section in result.sections:
         (store.draft_sections_path(RUN_ID) / f"{section.section_id}.json").write_text(
             section.model_dump_json()
         )
-    store.audio_path(RUN_ID).write_bytes(rendered.wave_bytes)
-    store.audio_manifest_path(RUN_ID).write_text(rendered.manifest.model_dump_json())
+    assert LocalWorker(store).process(RUN_ID).status is RunStatus.COMPLETED
+    manifest = AudioManifest.model_validate_json(store.audio_manifest_path(RUN_ID).read_text())
     application = LocalWebApplication(
         project_root=tmp_path,
         config_directory=Path("config"),
@@ -326,7 +329,7 @@ def test_whole_session_sections_follow_paragraphs_and_reject_stale_text(tmp_path
     ]
     assert len(waveform["sections"]) == len(result.plan.sections)
     assert descriptors[0]["start_frame"] == 0
-    assert descriptors[-1]["end_frame"] == rendered.manifest.total_frames
+    assert descriptors[-1]["end_frame"] == manifest.total_frames
     for descriptor in descriptors:
         payload = application.section_audition(str(RUN_ID), descriptor["section_id"])
         assert payload is not None

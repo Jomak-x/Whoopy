@@ -220,21 +220,18 @@ def _run_process(
     )
     stdout_reader.start()
     stderr_reader.start()
-    timeout_error: subprocess.TimeoutExpired | None = None
+    failure: BaseException | None = None
     try:
         process.wait(timeout=timeout_seconds)
-    except subprocess.TimeoutExpired as error:
-        timeout_error = error
+    except BaseException as error:
+        failure = error
         _stop_process_tree(process)
-    except BaseException:
-        _stop_process_tree(process)
-        raise
     finally:
         stop_sampling.set()
         sampler.join(timeout=1)
         stdout_reader.join(timeout=1)
         stderr_reader.join(timeout=1)
-    if timeout_error is not None:
+    if failure is not None:
         incomplete_reasons: dict[str, str] = {}
         for name, reader in (("stdout", stdout_reader), ("stderr", stderr_reader)):
             if reader.is_alive():
@@ -243,15 +240,11 @@ def _run_process(
                 )
             elif name in stream_errors:
                 incomplete_reasons[name] = stream_errors[name]
-        failure = subprocess.TimeoutExpired(
-            command,
-            timeout_seconds,
-            output="".join(output_chunks),
-            stderr="".join(error_chunks),
-        )
+        for name, chunks in (("stdout", output_chunks), ("stderr", error_chunks)):
+            setattr(failure, name, "".join(chunks))
         for name, reason in incomplete_reasons.items():
             setattr(failure, f"{name}_incomplete_reason", reason)
-        raise failure from timeout_error
+        raise failure
     completed = subprocess.CompletedProcess(
         command, process.returncode, "".join(output_chunks), "".join(error_chunks)
     )

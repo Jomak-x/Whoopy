@@ -20,8 +20,11 @@ from tests.test_takes import (
     _completed_run,
     _pending_alternative,
 )
+from whoopy.audio import TimelineWaveRenderer
 from whoopy.audio.exports import ExportArtifact, ExportManifest, ExportMetadata
+from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.audio.models import PcmAudio
+from whoopy.audio.processing import ProcessedSpeechSynthesizer
 from whoopy.pipeline import RunExecution, RunStage, RunStatus, RunStore
 from whoopy.pipeline.checkpoints import SegmentCheckpointStore
 from whoopy.pipeline.regeneration import prepare_segment_regeneration
@@ -141,11 +144,33 @@ def test_alternative_take_routes_wait_for_finalization_and_selected_reassembly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store, original_audio = _completed_run(tmp_path / "runs")
-    original_master = b"selected narration"
-    alternative_master = b"temporary alternative narration"
     alternative_audio = PcmAudio(b"\x60\x00" * 480, 24_000)
-    store.audio_path(RUN_ID).write_bytes(original_master)
     checkpoints = SegmentCheckpointStore(store)
+
+    def assemble_checkpoints() -> bytes:
+        timeline = store.load_timeline(RUN_ID)
+        speech_audio: dict[str, PcmAudio] = {}
+        cache_keys: dict[str, str] = {}
+        for segment in timeline.segments:
+            if segment.type != "SPEECH":
+                continue
+            checkpoint = checkpoints.load_optional(RUN_ID, segment.id)
+            assert checkpoint is not None
+            completed = checkpoints.load_completed(
+                RUN_ID, segment.id, cache_key=checkpoint.cache_key
+            )
+            assert completed is not None
+            speech_audio[segment.id] = completed.audio
+            cache_keys[segment.id] = checkpoint.cache_key
+        rendered = TimelineWaveRenderer().render(
+            timeline, speech_audio=speech_audio, speech_cache_keys=cache_keys
+        )
+        store.write_audio(RUN_ID, rendered.wave_bytes)
+        store.write_audio_manifest(RUN_ID, rendered.manifest)
+        store.write_quality(RUN_ID, rendered.quality)
+        return rendered.wave_bytes
+
+    original_master = assemble_checkpoints()
     child_release = Event()
     assembly_release = Event()
     assembly_finished = Event()
@@ -188,7 +213,8 @@ def test_alternative_take_routes_wait_for_finalization_and_selected_reassembly(
                     completed_at=NOW,
                 )
                 checkpoints.save(checkpoint, audio=alternative_audio)
-                store.audio_path(RUN_ID).write_bytes(alternative_master)
+                alternative_master = assemble_checkpoints()
+                assert alternative_master != original_master
                 _write_export(store, alternative_master)
                 record = store.load(RUN_ID)
                 assert record.recovery is not None
@@ -217,25 +243,11 @@ def test_alternative_take_routes_wait_for_finalization_and_selected_reassembly(
             else:
                 assert self.command == "resume"
                 assert assembly_release.wait(10)
-                store.audio_path(RUN_ID).write_bytes(original_master)
-                record = store.load(RUN_ID)
-                store.save(
-                    record.transition(
-                        RunStatus.COMPLETED,
-                        updated_at=datetime.now(UTC),
-                        timeline_artifact="timeline.json",
-                        audio_artifact="narration.wav",
-                        audio_manifest_artifact="audio-manifest.json",
-                        quality_artifact="quality.json",
-                        execution=RunExecution(
-                            stage=RunStage.COMPLETED,
-                            attempt_id=uuid4(),
-                            owner_id="test-worker",
-                            pid=1,
-                            started_at=NOW,
-                        ),
-                    )
-                )
+                assembled = LocalWorker(
+                    store, synthesizer=ProcessedSpeechSynthesizer(FixtureSpeechSynthesizer())
+                ).resume(RUN_ID)
+                assert assembled.status is RunStatus.COMPLETED
+                assert store.audio_path(RUN_ID).read_bytes() == original_master
             self.returncode = 0
             return "{}", ""
 

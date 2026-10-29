@@ -62,6 +62,7 @@ class AudioManifest(BaseModel):
     total_frames: int = Field(gt=0)
     duration_ms: float = Field(gt=0)
     pcm_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    synthesis_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     segments: list[SegmentAudioSpan] = Field(min_length=1)
 
     @model_validator(mode="after")

@@ -51,6 +51,7 @@ from whoopy.artifacts import (
     load_artifact_lock,
 )
 from whoopy.audio import ExportMetadata, export_finished_audio, load_export_manifest
+from whoopy.audio.models import AudioManifest, AudioQualityReport
 from whoopy.evaluation.pacing_profiles import PacingProfileRegistry
 from whoopy.hardware import diagnose, inspect_hardware, load_runtime_profiles
 from whoopy.meditation import MeditationPlan
@@ -82,6 +83,7 @@ from whoopy.voice_references import VoiceConsent, VoiceReferenceManager
 from whoopy.voices import KOKORO_ENGLISH_VOICES
 from whoopy.webui.audio_inspection import (
     AudioInspectionError,
+    current_audio_artifacts,
     enrich_waveform_context,
     section_descriptors,
     section_wave_bytes,
@@ -308,9 +310,7 @@ class GenerationTask:
     launching: bool = True
     cancel_requested: bool = False
     error: str | None = None
-    prior_process_attempts: int = 0
-    prior_resume_count: int = 0
-    resumed_web_launch: bool = False
+    launch_record: RunRecord | None = None
     finalizing_take: bool = False
     plan_source_record: RunRecord | None = None
 
@@ -1463,16 +1463,11 @@ class LocalWebApplication:
                 }
             except (psutil.Error, OSError):
                 live_metrics = {"elapsed_seconds": elapsed_seconds}
-        try:
-            manifest = json.loads((directory / "audio-manifest.json").read_text(encoding="utf-8"))
-            duration_seconds = round(float(manifest["duration_ms"]) / 1_000, 2)
-        except (FileNotFoundError, OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
-            pass
-        try:
-            quality = json.loads((directory / "quality.json").read_text(encoding="utf-8"))
-            quality_passed = bool(quality["passed"])
-        except (FileNotFoundError, OSError, KeyError, TypeError, json.JSONDecodeError):
-            pass
+        current_audio = self._current_audio(record)
+        if current_audio is not None:
+            _audio, manifest, quality = current_audio
+            duration_seconds = round(manifest.duration_ms / 1_000, 2)
+            quality_passed = quality.passed
         try:
             resolved = json.loads((directory / "resolved-config.json").read_text(encoding="utf-8"))
             tts_model = str(resolved["tts"].get("backend", "kokoro"))
@@ -1502,8 +1497,7 @@ class LocalWebApplication:
             "quality_passed": quality_passed,
             "tts_model": tts_model,
             "voice": voice,
-            "has_audio": record.audio_artifact is not None
-            and (directory / "narration.wav").is_file(),
+            "has_audio": current_audio is not None,
             "error": record.error,
             "resumable": record.status in (RunStatus.FAILED, RunStatus.INTERRUPTED)
             and not (
@@ -1906,7 +1900,9 @@ class LocalWebApplication:
                     raise ValueError(
                         "Could not save the durable browser launch request."
                     ) from error
-                task = GenerationTask(task_id=run_id, run_id=run_id, mode=mode)
+                task = GenerationTask(
+                    task_id=run_id, run_id=run_id, mode=mode, launch_record=record
+                )
             else:
                 record = store.load(_resume_run_id)
                 if (
@@ -1924,29 +1920,25 @@ class LocalWebApplication:
                 saved.setdefault("requested_duration_seconds", None)
                 if saved != normalized_launch_request:
                     raise ValueError("Saved browser launch settings changed and cannot be resumed.")
-                prior_process_attempts = record.recovery.process_attempts
-                prior_resume_count = record.recovery.resume_count
-                queued = RunRecord.model_validate(
-                    {
-                        **record.model_dump(mode="python"),
-                        "status": RunStatus.QUEUED,
-                        "updated_at": datetime.now(UTC),
-                        "recovery": record.recovery.model_copy(
-                            update={"process_attempts": 0, "resume_count": 0}
-                        ),
-                        "execution": RunExecution(stage=RunStage.QUEUED),
-                        "error": None,
-                    }
-                )
-                store.save(queued)
+                with RunLock(store.run_directory(_resume_run_id)):
+                    if store.load(_resume_run_id) != record:
+                        raise ValueError("The browser request changed before it could resume.")
+                    receipt = (record.model_dump_json(indent=2) + "\n").encode("utf-8")
+                    receipt_id = hashlib.sha256(receipt).hexdigest()
+                    history = (
+                        store.run_directory(_resume_run_id) / "history" / "web-launch-attempts"
+                    )
+                    history.mkdir(parents=True, exist_ok=True)
+                    receipt_path = history / f"{receipt_id}.json"
+                    if not receipt_path.exists():
+                        store._write_bytes(receipt_path, receipt)
+                    elif receipt_path.read_bytes() != receipt:
+                        raise ValueError("Browser launch attempt history is corrupt.")
+                    record = record.model_copy(update={"updated_at": datetime.now(UTC)})
+                    store.save(record)
                 run_id = _resume_run_id
                 task = GenerationTask(
-                    task_id=run_id,
-                    run_id=run_id,
-                    mode=mode,
-                    prior_process_attempts=prior_process_attempts,
-                    prior_resume_count=prior_resume_count,
-                    resumed_web_launch=True,
+                    task_id=run_id, run_id=run_id, mode=mode, launch_record=record
                 )
             self._tasks[run_id] = task
         if _run_created is not None:
@@ -2562,7 +2554,7 @@ class LocalWebApplication:
     def sections(self, run_id: str) -> list[dict[str, Any]] | None:
         """Return reviewed section boundaries backed by canonical artifacts."""
 
-        if self._record(run_id) is None:
+        if self._record(run_id) is None or self.audio_path(run_id) is None:
             return None
         store = RunStore(self.runs_directory)
         return section_descriptors(
@@ -2914,6 +2906,7 @@ class LocalWebApplication:
             run_id=run_id,
             mode="alternative_take" if finalizing_take else None,
             finalizing_take=finalizing_take,
+            launch_record=RunStore(self.runs_directory).load(run_id),
         )
         with self._task_lock:
             existing = self._tasks.get(run_id)
@@ -2964,6 +2957,11 @@ class LocalWebApplication:
                 if self._tasks.get(task.run_id) is not task:
                     return
                 cancelled_before_launch = task.cancel_requested
+            if task.launch_record is not None:
+                store = RunStore(self.runs_directory)
+                with RunLock(store.run_directory(task.run_id)):
+                    if store.load(task.run_id) != task.launch_record:
+                        return
             if cancelled_before_launch:
                 self._persist_cancel_intent(task.run_id, task=task)
                 return
@@ -3084,17 +3082,13 @@ class LocalWebApplication:
                 task.run_id, f"Could not launch generation: {error}", task=task
             )
         finally:
-            try:
-                if task.resumed_web_launch:
-                    self._record_resumed_web_launch(task)
-            finally:
-                with self._operation_admission_lock:
-                    if input_path is not None and self._owns_task(task):
-                        with suppress(OSError):
-                            input_path.unlink(missing_ok=True)
-                    with self._task_lock:
-                        task.launching = False
-                        task.process = None
+            with self._operation_admission_lock:
+                if input_path is not None and self._owns_task(task):
+                    with suppress(OSError):
+                        input_path.unlink(missing_ok=True)
+                with self._task_lock:
+                    task.launching = False
+                    task.process = None
 
     def _run_recovery_command(
         self,
@@ -3214,6 +3208,12 @@ class LocalWebApplication:
                 if task is not None and not self._owns_task(task):
                     return
                 record = store.load(run_id)
+                if (
+                    task is not None
+                    and task.launch_record is not None
+                    and record != task.launch_record
+                ):
+                    return
                 if record.recovery is None or record.status not in (
                     RunStatus.QUEUED,
                     RunStatus.FAILED,
@@ -3257,40 +3257,6 @@ class LocalWebApplication:
         except (OSError, RunLockUnavailable, RunStoreError, ValueError):
             return
 
-    def _record_resumed_web_launch(self, task: GenerationTask) -> None:
-        """Merge pre-launch retry provenance after the CLI owns the final state."""
-
-        store = RunStore(self.runs_directory)
-        try:
-            with self._operation_admission_lock, RunLock(store.run_directory(task.run_id)):
-                if not self._owns_task(task) or not task.resumed_web_launch:
-                    return
-                record = store.load(task.run_id)
-                if record.recovery is None or record.status in (
-                    RunStatus.QUEUED,
-                    RunStatus.RUNNING,
-                ):
-                    return
-                attempts = record.recovery.process_attempts + task.prior_process_attempts
-                resumes = record.recovery.resume_count + task.prior_resume_count + 1
-                updated_recovery = record.recovery.model_copy(
-                    update={
-                        "process_attempts": attempts,
-                        "resume_count": min(attempts, resumes),
-                    }
-                )
-                updated = RunRecord.model_validate(
-                    {
-                        **record.model_dump(mode="python"),
-                        "updated_at": datetime.now(UTC),
-                        "recovery": updated_recovery,
-                    }
-                )
-                store.save(updated)
-                task.resumed_web_launch = False
-        except (OSError, RunLockUnavailable, RunStoreError, ValueError):
-            return
-
     def _persist_cancel_intent(self, run_id: str, *, task: GenerationTask | None = None) -> None:
         """Make a completed browser cancellation durably resumable.
 
@@ -3309,6 +3275,18 @@ class LocalWebApplication:
                 if task is not None and not self._owns_task(task):
                     return
                 record = store.load(run_id)
+                if task is not None and task.launch_record is not None:
+                    if record.source_kind == "fixture_prompt" and record != task.launch_record:
+                        return
+                    child_pid = getattr(task.process, "pid", None)
+                    if (
+                        isinstance(child_pid, int)
+                        and record.execution is not None
+                        and record.execution.pid is not None
+                        and record.execution.pid != child_pid
+                        and record != task.launch_record
+                    ):
+                        return
                 if record.recovery is None or record.status not in (
                     RunStatus.QUEUED,
                     RunStatus.RUNNING,
@@ -3379,29 +3357,35 @@ class LocalWebApplication:
         filename = ALLOWED_ARTIFACTS.get(artifact)
         if filename is None:
             return None
+        if artifact in {"quality", "manifest"} and self.audio_path(str(parsed)) is None:
+            return None
         path = self.runs_directory / str(parsed) / filename
         return path if path.is_file() else None
 
     def audio_path(self, run_id: str) -> Path | None:
-        try:
-            parsed = UUID(run_id)
-        except ValueError:
-            return None
+        record = self._record(run_id)
+        current = None if record is None else self._current_audio(record)
+        return None if current is None else current[0]
+
+    def _current_audio(
+        self, record: RunRecord
+    ) -> tuple[Path, AudioManifest, AudioQualityReport] | None:
+        run_id = str(record.run_id)
         with self._task_lock:
-            task = self._tasks.get(str(parsed))
+            task = self._tasks.get(run_id)
             if task is not None and (task.active or task.finalizing_take):
                 return None
-        if self._pending_take(str(parsed)) is not None:
+        if self._pending_take(run_id) is not None:
             return None
-        record = self._record(str(parsed))
         if (
-            record is not None
-            and record.execution is not None
+            record.execution is not None
             and record.execution.interruption_kind == "take_finalization_failed"
         ):
             return None
-        path = self.runs_directory / str(parsed) / "narration.wav"
-        return path if path.is_file() else None
+        try:
+            return current_audio_artifacts(RunStore(self.runs_directory), record)
+        except AudioInspectionError:
+            return None
 
 
 def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHandler]:

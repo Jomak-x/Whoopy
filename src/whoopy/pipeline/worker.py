@@ -38,7 +38,12 @@ from whoopy.pipeline.checkpoints import (
     SegmentCheckpointStore,
 )
 from whoopy.pipeline.events import RunEventLog
-from whoopy.pipeline.generation import AdapterRunTelemetry, HardwareTelemetry, RunTelemetry
+from whoopy.pipeline.generation import (
+    AdapterRunTelemetry,
+    HardwareTelemetry,
+    RunTelemetry,
+    resolved_synthesis_digest,
+)
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
 from whoopy.pipeline.logs import WorkerLog
 from whoopy.pipeline.runs import (
@@ -646,6 +651,18 @@ class LocalWorker:
                     wave_bytes=rendered.wave_bytes,
                     manifest=rendered.manifest,
                     quality=quality,
+                )
+            if running.source_kind != "fixture_prompt":
+                synthesis_sha256 = resolved_synthesis_digest(
+                    self.store.load_resolved_config(running.run_id),
+                    self.store.load_model_metadata(running.run_id).tts,
+                )
+                rendered = RenderedWave(
+                    wave_bytes=rendered.wave_bytes,
+                    manifest=rendered.manifest.model_copy(
+                        update={"synthesis_sha256": synthesis_sha256}
+                    ),
+                    quality=rendered.quality,
                 )
             running = self._save_running_progress(
                 running,

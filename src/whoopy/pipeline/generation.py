@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
@@ -221,6 +223,17 @@ class ScriptRunConfig(BaseModel):
             if self.profile == "basic":
                 raise ValueError("generated-prompt config requires a local LLM profile")
         return self
+
+
+def resolved_synthesis_digest(config: ScriptRunConfig, metadata: AdapterMetadata) -> str:
+    payload = {
+        "tts": config.tts.model_dump(mode="json"),
+        "processing": config.model_dump(mode="json")["processing"],
+        "adapter": metadata.model_dump(mode="json"),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 class TelemetryMeasurement(BaseModel):

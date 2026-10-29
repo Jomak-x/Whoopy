@@ -741,9 +741,11 @@ class RunStore:
         model_metadata: RunModelMetadata,
         promoted_at: datetime | None = None,
     ) -> RunRecord:
-        """Commit script inputs into a pre-created, never-started run UUID."""
+        """Commit script inputs into an unrendered run UUID."""
 
-        placeholder = self._promotable_placeholder(run_id, allow_partial_artifacts=True)
+        placeholder = self._promotable_placeholder(
+            run_id, allow_partial_artifacts=True, allow_stopped=True
+        )
         if (
             placeholder.generation_request_artifact is not None
             or self.generation_request_path(placeholder.run_id).exists()
@@ -756,7 +758,7 @@ class RunStore:
             promoted = RunRecord(
                 schema_version=6,
                 run_id=placeholder.run_id,
-                status=RunStatus.QUEUED,
+                status=placeholder.status,
                 prompt=f"Render local script: {source_name}",
                 source_kind="script_file",
                 audience=placeholder.audience,
@@ -766,7 +768,14 @@ class RunStore:
                 resolved_config_artifact=RESOLVED_CONFIG_FILENAME,
                 model_metadata_artifact=MODEL_METADATA_FILENAME,
                 recovery=placeholder.recovery,
-                execution=RunExecution(stage=RunStage.QUEUED),
+                execution=(
+                    RunExecution(stage=RunStage.QUEUED)
+                    if placeholder.status is RunStatus.QUEUED
+                    else (placeholder.execution or RunExecution(stage=RunStage.QUEUED)).model_copy(
+                        update={"stage": RunStage.COMPILING}
+                    )
+                ),
+                error=placeholder.error,
             )
         except ValidationError as error:
             raise RunStoreError(f"Invalid script run promotion:\n{error}") from error
@@ -1269,16 +1278,18 @@ class RunStore:
         run_id: UUID | str,
         *,
         allow_partial_artifacts: bool = False,
+        allow_stopped: bool = False,
     ) -> RunRecord:
-        """Validate that promotion cannot overwrite started or immutable work."""
+        """Validate that promotion cannot overwrite active or immutable work."""
 
         placeholder = self.load(run_id)
         recovery = placeholder.recovery
-        if placeholder.status is not RunStatus.QUEUED:
+        stopped = allow_stopped and placeholder.status in (RunStatus.FAILED, RunStatus.INTERRUPTED)
+        if placeholder.status is not RunStatus.QUEUED and not stopped:
             raise RunStoreError(
                 f"Run {placeholder.run_id} is {placeholder.status.value}; only queued runs promote"
             )
-        if recovery is None or recovery.process_attempts != 0:
+        if recovery is None or (not stopped and recovery.process_attempts != 0):
             raise RunStoreError(f"Run {placeholder.run_id} has already started and cannot promote")
         self._assert_no_immutable_inputs(
             placeholder,
@@ -1381,13 +1392,13 @@ class RunStore:
                     raise RunStoreError(
                         f"Run {record.run_id} cannot be initialized as a generation request"
                     )
-                placeholder = self._promotable_placeholder(record.run_id)
+                placeholder = self._promotable_placeholder(record.run_id, allow_stopped=True)
                 timestamp = written_at or _utc_now()
                 try:
                     upgraded = RunRecord(
                         schema_version=6,
                         run_id=placeholder.run_id,
-                        status=RunStatus.QUEUED,
+                        status=placeholder.status,
                         prompt=placeholder.prompt,
                         source_kind="generated_prompt",
                         audience=placeholder.audience,
@@ -1395,7 +1406,14 @@ class RunStore:
                         updated_at=timestamp,
                         generation_request_artifact=GENERATION_REQUEST_FILENAME,
                         recovery=placeholder.recovery,
-                        execution=RunExecution(stage=RunStage.QUEUED),
+                        execution=(
+                            RunExecution(stage=RunStage.QUEUED)
+                            if placeholder.status is RunStatus.QUEUED
+                            else (
+                                placeholder.execution or RunExecution(stage=RunStage.QUEUED)
+                            ).model_copy(update={"stage": RunStage.PLANNING})
+                        ),
+                        error=placeholder.error,
                     )
                 except ValidationError as error:
                     raise RunStoreError(f"Invalid generation request upgrade:\n{error}") from error

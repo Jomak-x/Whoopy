@@ -11,15 +11,171 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from whoopy.audio.models import AudioManifest
+from whoopy.audio.fixture import FixtureSpeechSynthesizer
+from whoopy.audio.models import AudioManifest, AudioQualityReport
+from whoopy.audio.processing import processed_speech_metadata
+from whoopy.audio.quality import inspect_wave
+from whoopy.audio.synthesis import cache_key_for_identity
 from whoopy.meditation import DraftedSection, MeditationPlan
 from whoopy.meditation.pacing import pace_section
-from whoopy.pipeline.runs import RunStoreError
+from whoopy.pipeline.generation import TTSRunSettings, resolved_synthesis_digest
+from whoopy.pipeline.runs import RunRecord, RunStatus, RunStore, RunStoreError
+from whoopy.ports import AdapterMetadata
 from whoopy.timeline import BreathSegment, SpeechSegment, Timeline, build_script_timeline
 
 
 class AudioInspectionError(RunStoreError):
     """Raised when finished audio cannot be inspected without guessing."""
+
+
+def current_audio_artifacts(
+    store: RunStore, record: RunRecord
+) -> tuple[Path, AudioManifest, AudioQualityReport]:
+    if record.status is not RunStatus.COMPLETED or record.audio_artifact is None:
+        raise AudioInspectionError("The active meditation has no completed narration.")
+    try:
+        timeline = store.load_timeline(record.run_id)
+        manifest = AudioManifest.model_validate_json(
+            store.audio_manifest_path(record.run_id).read_text(encoding="utf-8")
+        )
+        quality = AudioQualityReport.model_validate_json(
+            store.quality_path(record.run_id).read_text(encoding="utf-8")
+        )
+        if record.source_kind == "fixture_prompt":
+            identity = FixtureSpeechSynthesizer.cache_identity
+        else:
+            config = store.load_resolved_config(record.run_id)
+            metadata = store.load_model_metadata(record.run_id).tts
+            if manifest.synthesis_sha256 is not None:
+                if manifest.synthesis_sha256 != resolved_synthesis_digest(config, metadata):
+                    raise AudioInspectionError(
+                        "Narration differs from resolved synthesis settings."
+                    )
+            else:
+                _validate_resolved_synthesis(metadata, config.tts)
+            identity = processed_speech_metadata(
+                metadata, inner_cache_identity=metadata.cache_identity, settings=config.processing
+            ).cache_identity
+        if (
+            manifest.schema_version != 2
+            or manifest.run_id != record.run_id
+            or timeline.run_id != record.run_id
+            or manifest.timeline_schema_version != timeline.schema_version
+            or len(manifest.segments) != len(timeline.segments)
+        ):
+            raise AudioInspectionError("Narration has no matching canonical timeline identity.")
+        for segment, span in zip(timeline.segments, manifest.segments, strict=True):
+            if segment.id != span.segment_id or segment.type != span.segment_type:
+                raise AudioInspectionError("Narration differs from the active segment sequence.")
+            if isinstance(segment, SpeechSegment):
+                expected = cache_key_for_identity(
+                    segment, synthesizer_identity=identity, sample_rate=manifest.sample_rate
+                )
+                if span.cache_key != expected:
+                    raise AudioInspectionError("Narration differs from the active speech controls.")
+            elif span.requested_duration_ms != segment.duration_ms:
+                raise AudioInspectionError("Narration differs from the active pause timing.")
+        audio = store.audio_path(record.run_id)
+        actual = inspect_wave(audio.read_bytes(), manifest)
+        if not actual.passed or any(
+            getattr(actual, name) != getattr(quality, name)
+            for name in (
+                "pcm_sha256",
+                "sample_rate",
+                "channels",
+                "sample_width_bytes",
+                "frame_count",
+                "duration_ms",
+                "peak_dbfs",
+                "clipped_samples",
+                "max_join_delta",
+                "headroom_limit_dbfs",
+            )
+        ):
+            raise AudioInspectionError("Narration bytes do not match their quality evidence.")
+        if quality.passed != all(check.passed for check in quality.checks) or not all(
+            check in quality.checks for check in actual.checks
+        ):
+            raise AudioInspectionError("Narration quality evidence is inconsistent.")
+        return audio, manifest, quality
+    except AudioInspectionError:
+        raise
+    except (OSError, ValueError, RunStoreError, wave.Error, EOFError) as error:
+        raise AudioInspectionError(f"Current narration cannot be verified: {error}") from error
+
+
+def _validate_resolved_synthesis(metadata: AdapterMetadata, settings: TTSRunSettings) -> None:
+    if metadata == FixtureSpeechSynthesizer.metadata:
+        return
+    backend = settings.backend
+    expected: dict[str, object] = {"sample_rate": 24_000}
+    if backend == "kokoro":
+        adapter_id = "whoopy.sherpa_onnx_kokoro"
+        expected.update(
+            voice=settings.voice_name,
+            speaker_id=settings.speaker_id,
+            speed=settings.speed,
+            threads=settings.num_threads,
+            language=settings.language,
+        )
+        if metadata.device != settings.provider:
+            raise AudioInspectionError("Resolved speech provider differs from rendered metadata.")
+    elif backend in {"moss-local-v1.5", "moss-v1.5"}:
+        adapter_id = f"whoopy.{backend}"
+        expected.update(
+            language=settings.language,
+            instruction=settings.instruction,
+            use_reference=settings.use_reference,
+            seed=settings.seed,
+        )
+        if not settings.use_reference:
+            expected["reference_sha256"] = "none"
+        elif settings.reference_audio_sha256 is not None:
+            expected["reference_sha256"] = settings.reference_audio_sha256
+    elif backend == "fish-1.4":
+        raise AudioInspectionError("Reference narration has no bound resolved synthesis settings.")
+    elif backend.startswith("mlx-qwen3-"):
+        task = "custom_voice" if settings.voice_mode == "preset" else "voice_design"
+        adapter_id = f"whoopy.experimental_mlx_qwen3.{task}"
+        expected.pop("sample_rate")
+        expected.update(
+            voice=settings.voice_name,
+            language=settings.language,
+            seed=settings.seed,
+            installation_sha256=settings.experimental_installation_sha256,
+            worker_sha256=settings.experimental_worker_sha256,
+            adapter_sha256=settings.experimental_adapter_sha256,
+        )
+        if (
+            metadata.runtime_version != settings.experimental_runtime_revision
+            or not metadata.versioned_model_id.endswith(f"@{settings.experimental_model_revision}")
+        ):
+            raise AudioInspectionError("Resolved experimental revisions differ from narration.")
+    else:
+        if settings.voice_mode == "reference":
+            raise AudioInspectionError(
+                "Reference narration has no bound resolved synthesis settings."
+            )
+        adapter_id = f"whoopy.qwen3_tts.{backend.removeprefix('qwen3-')}"
+        expected.update(
+            language=settings.language,
+            seed=settings.seed,
+            speaker=settings.voice_name if settings.voice_mode == "preset" else "none",
+            voice_design_profile=(
+                settings.qwen_voice_design_preset if settings.voice_mode == "designed" else "none"
+            ),
+            consent_scope=settings.reference_consent_scope or "none",
+        )
+        if (
+            metadata.runtime_version != settings.qwen_runtime_revision
+            or not metadata.versioned_model_id.endswith(f"@{settings.qwen_model_revision}")
+        ):
+            raise AudioInspectionError("Resolved Qwen revisions differ from narration.")
+    rendered = dict(value.split("=", 1) for value in metadata.settings)
+    if metadata.adapter_id != adapter_id or any(
+        rendered.get(name) != str(value) for name, value in expected.items()
+    ):
+        raise AudioInspectionError("Resolved speech settings differ from rendered metadata.")
 
 
 def waveform_payload(

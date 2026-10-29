@@ -21,6 +21,7 @@ folder or pooling different prompt versions.
 | Corrected prompt v6 grounding | 180.000042 seconds; full-file Pass, all 9 selected native segments Pass | High Ministral + MLX Ryan; earlier failed attempts retained |
 | Five matched grounding voice auditions | 5 Review; actual lengths 167.797542–192.733042 seconds | Portable Michael and MLX Ryan/Aiden/Serena/VoiceDesign on the same authored script |
 | Matched writing, common Michael 0.8 voice | New recipe: 185.507375 seconds, Pass; old plan-first: 180.223375 seconds, Review | Both generated with the same pinned High writer settings; human content review pending |
+| Prevalidation grounding at `ec45495c` | 180.000042 seconds; full-file Pass, all 9 native segments Pass, zero word edits | High Ministral + MLX Ryan in the isolated core environment; separate from final-source qualification |
 
 Pass means automated speech screening, not listener approval. Every normalized
 word mismatch remains Review; major omissions, truncation, no speech, invalid
@@ -51,6 +52,15 @@ still found repetition, weak independence wording, and missing clear fallback,
 check-in and carryforward in the new sample. Automated screening establishes
 neither human warmth nor teaching quality. Final review-source smoke remains
 separate from these earlier live-source results.
+
+The completed outer handoff also records a prevalidation probe at
+`ec45495c0c5cd35328f09d7c404bc10f84eea48e`, generated in 123.470876 seconds.
+Its narration SHA256 is
+`15f76595014cec8b4937a19f29b886343feeb73a816c96bf76077ab5a1426a27`.
+The handoff records one full narration player and nine native segment players,
+all returning HTTP 200 with served bytes matching local and ASR evidence.
+This is supplied evidence from the outer executor, not an inference or HTTP
+check performed by this review phase. Human listening remains unreviewed.
 
 ## What changed in writing
 

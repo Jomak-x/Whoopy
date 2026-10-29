@@ -2973,7 +2973,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                         handoff_heartbeat.raise_if_failed()
                         handoff_heartbeat.stop()
                     if generation_attempt_id is None:
-                        completed = worker.process(queued.run_id)
+                        completed = (
+                            worker.process(queued.run_id)
+                            if queued.status is RunStatus.QUEUED
+                            else worker.resume(queued.run_id)
+                        )
                     else:
                         completed = worker.continue_generated(
                             queued.run_id,

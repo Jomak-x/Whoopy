@@ -17,6 +17,7 @@ import pytest
 from pytest import MonkeyPatch
 
 from whoopy.pipeline import RunExecution, RunStage, RunStatus, RunStore
+from whoopy.pipeline.worker import LocalWorker
 from whoopy.timeline import build_script_timeline
 from whoopy.webui.server import GenerationTask, LocalWebApplication, _handler_factory
 
@@ -1205,9 +1206,10 @@ def test_app_cli_is_the_browser_opening_permanent_entrypoint(
 def test_audio_endpoint_supports_browser_byte_ranges(tmp_path: Path) -> None:
     application = _application(tmp_path)
     run_id = "23d079b0-5fe0-46d1-ae11-04038ef9d802"
-    audio = tmp_path / "runs" / run_id / "narration.wav"
-    audio.parent.mkdir(parents=True)
-    audio.write_bytes(b"0123456789")
+    store = RunStore(application.runs_directory)
+    store.create("Notice the room around you.", run_id=UUID(run_id))
+    LocalWorker(store).process(run_id)
+    payload = store.audio_path(run_id).read_bytes()
     server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_factory(application))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -1223,8 +1225,8 @@ def test_audio_endpoint_supports_browser_byte_ranges(tmp_path: Path) -> None:
 
         assert response.status == 206
         assert response.getheader("Accept-Ranges") == "bytes"
-        assert response.getheader("Content-Range") == "bytes 2-5/10"
-        assert response.read() == b"2345"
+        assert response.getheader("Content-Range") == f"bytes 2-5/{len(payload)}"
+        assert response.read() == payload[2:6]
         connection.close()
     finally:
         server.shutdown()

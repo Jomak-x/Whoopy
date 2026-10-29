@@ -625,3 +625,40 @@ gates, final native smoke, Document/PR reconciliation and CI remain with the
 outer executor. Completed live receipts retain their earlier source versions
 in RESULTS.md; these deterministic checks do not certify current live speech
 or human quality.
+
+
+## Review fixes after bf847ced
+
+The four selected findings were confirmed at their playback, retry-promotion,
+routing and subprocess-evidence boundaries.
+
+| Finding | Correction and behavioral coverage |
+| --- | --- |
+| REVIEW-STALE-REVISION-PLAYBACK | Current playback, quality and export availability require retained narration to match the active canonical timeline, persisted synthesis/processing identity and actual PCM. Failed edited rendering preserves historical files without presenting them as current accepted output. |
+| REVIEW-RESTART-RETRY-PROVENANCE | Stopped browser-placeholder promotion preserves durable attempt history instead of resetting counters and reconstructing them from an in-memory finalizer. Restart and repeated-resume regressions retain prior attempts without duplicate merging. |
+| REVIEW-SLEEP-DIFFICULTY-VETO | Routing distinguishes descriptive sleep difficulty from negative session intent before applying exclusion precedence, preserving positive requests and actual sleep/awake exclusions. |
+| REVIEW-INTERRUPTED-WRITER-EVIDENCE | Interrupted subprocesses share timeout cleanup and bounded stream-draining before the original exception is rethrown with collected output and incomplete-stream diagnostics. A real interrupted emitting child reaches immutable invocation records, including partial lines; retrying the same evidence location cannot overwrite it. |
+
+Current render manifests bind resolved TTS and processing settings to their
+adapter metadata. Historical Fish/Qwen reference renders lacking a complete
+binding are retained on disk but withheld from current playback rather than
+assuming their reference identity.
+
+Focused verification covered the four changes and their worker, CLI, audio,
+recipe and web callers: **640 passed, 7 failed in 26.33 seconds** initially.
+The failures were test-fixture setup errors (thread method binding, missing
+interruption kind, nonlocal TestClient host, and bare text standing in for
+verified audio). Corrected fixtures preserve every regression assertion; the
+four affected files then passed **59 tests in 4.50 seconds**. Both runs reported
+the existing Starlette/httpx deprecation warning. Real SIGINT stream capture
+passed in the initial batch; no live model inference was performed.
+
+Touched-file Ruff checking found **18 pre-existing violations**: an unused
+CLI import, two nested-if simplifications, and 15 curly-apostrophe literals in
+routing cases. These remain for the outer lint phase; they are not new failures
+introduced by this fix. Touched Python files were formatted. The whitespace
+check passed and both excluded frontend trees remain identical to base
+`01680383`. Full repository testing, lint/type gates, native smoke and
+publication remain with the outer executor. RESULTS.md records the supplied
+completed live probe at its actual earlier source revision, with human
+listening still pending.

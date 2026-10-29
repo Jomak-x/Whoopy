@@ -94,12 +94,18 @@ INTENT_NEGATION = (
     r"(?:do|is|are|should|must) not|rather not)\b"
     r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?;\n])*"
 )
-NEGATED_SLEEP = re.compile(
-    r"\b(?P<difficulty>(?:could|can|did|was|were)\s+not|"
-    r"(?:(?:(?:am|is|are)\s+)?not|(?:is|are)n['\u2019]t)\s+"
-    r"(?:sleeping\s+(?:well|enough|properly|soundly)|"
-    r"getting\s+(?:enough|much|adequate)\s+sleep))\b|"
-    rf"{INTENT_NEGATION}{SLEEP.pattern}",
+NEGATED_SLEEP = re.compile(rf"{INTENT_NEGATION}{SLEEP.pattern}", re.I)
+SLEEP_DIFFICULTY = re.compile(
+    r"\b(?:could|can|did|was|were)\s+not\b|"
+    r"\b(?:(?:am|is|are)\s+not|(?:is|are)n['\u2019]t|"
+    r"(?:i['\u2019]m|(?:we|they|you)['\u2019]re|(?:he|she)['\u2019]s)\s+not)\s+"
+    r"(?:sleeping|getting(?:\s+[\w'\u2019-]+){0,4}\s+sleep)\b",
+    re.I,
+)
+SLEEP_INTENT_SCOPE = re.compile(
+    r"\b(?:during|throughout|for|in)\s+(?:(?:this|the|my|our|a)\s+)?"
+    r"(?:meditation|session|meeting)\b|"
+    r"\b(?:goal|aim|intention|preference)\s+(?:is|are|isn['\u2019]t|aren['\u2019]t)\b",
     re.I,
 )
 AWAKE = re.compile(r"\b(?:(?:stay|remain)|keep\s+(?:me|us))\s+awake\b", re.I)
@@ -151,10 +157,12 @@ NEGATED_POSTURE = re.compile(
 def _requests_sleep(clauses: list[str]) -> bool:
     sleep = False
     for clause in clauses:
-        if any(match.group("difficulty") is None for match in NEGATED_SLEEP.finditer(clause)):
+        intent_clause = (
+            clause if SLEEP_INTENT_SCOPE.search(clause) else SLEEP_DIFFICULTY.sub("", clause)
+        )
+        if NEGATED_SLEEP.search(intent_clause):
             return False
-        awake_clause = NEGATED_SLEEP.sub("", clause)
-        if AWAKE.search(NEGATED_AWAKE.sub("", awake_clause)):
+        if AWAKE.search(NEGATED_AWAKE.sub("", intent_clause)):
             return False
         sleep = sleep or SLEEP.search(clause) is not None
     return sleep
