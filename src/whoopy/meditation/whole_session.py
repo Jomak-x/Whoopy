@@ -392,7 +392,10 @@ def _validate_session(
     if not re.search(r"\b(?:sound\w*|hear\w*|listen\w*)\b", orientation, re.I):
         errors.append("orientation: establish surrounding sound before inward practice")
     if not re.search(
-        r"\b(?:support|contact|weight|surface|chair|bed|floor|mattress)\b", orientation, re.I
+        r"\b(?:support|contact|weight|surface|seat|chair|bed|floor|mattress)\b|"
+        r"\b(?:body|hands?|feet|back|legs?|arms?)\s+touch(?:es|ing)?\b",
+        orientation,
+        re.I,
     ):
         errors.append("orientation: establish bodily support or contact")
     ending = " ".join(draft.sections[-1].paragraphs)
@@ -403,7 +406,11 @@ def _validate_session(
             errors.append("taper: permit quiet rest without a new task")
     else:
         if not re.search(r"\b(?:room|surround\w*|sound\w*)\b", ending, re.I) or not re.search(
-            r"\b(?:mov\w*|stretch\w*|finger\w*|toe\w*)\b", ending, re.I
+            r"\b(?:mov\w*|stretch\w*|finger\w*|toe\w*)\b|"
+            r"\b(?:lift|shift)(?:ing)?\s+(?:(?:your|the)\s+)?"
+            r"(?:hands?|arms?|feet|legs?|body|weight|position|posture)\b",
+            ending,
+            re.I,
         ):
             errors.append("return: include surrounding sound and an optional small movement")
         if re.search(

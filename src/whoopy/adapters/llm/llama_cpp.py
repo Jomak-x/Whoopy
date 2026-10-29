@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import signal
@@ -253,9 +254,13 @@ def _assistant_text(output: str) -> str:
     """Remove llama-cli's single-turn transcript wrapper when it is present."""
 
     normalized = output.strip()
-    marker = "\nAssistant:\n"
-    if marker in normalized and (normalized.startswith("User:") or "\nUser:\n" in normalized):
-        return normalized.rpartition(marker)[2].strip()
+    transcript, marker, answer = normalized.rpartition("\nAssistant:")
+    if (
+        marker
+        and (transcript.startswith("User:") or "\nUser:\n" in transcript)
+        and (not answer or answer.startswith("\n"))
+    ):
+        return answer.strip()
     return normalized
 
 
@@ -264,6 +269,13 @@ _TOKEN_COUNT = re.compile(r"/\s*(?P<value>[0-9]+)\s+(?:tokens?|runs?)\b", re.IGN
 _DEVICE = re.compile(r"\b(?:using|found) device\s*:?\s*(?P<value>[^\r\n,]+)", re.IGNORECASE)
 _GENERATION_SPEED = re.compile(
     r"\bGeneration:\s*(?P<value>[0-9]+(?:\.[0-9]+)?)\s*t/s\b", re.IGNORECASE
+)
+
+
+_SAMPLER_FAILURE = re.compile(
+    r"^[^\r\n]*\b(?:common_sampler_init|srv[ \t]+send_error):[^\r\n]*\b"
+    r"(?P<diagnostic>Failed to initialize samplers|error initializing grammar sampler)\b",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 
@@ -293,7 +305,8 @@ def _llama_timing_evidence(diagnostic: str) -> dict[str, float | int | str | Non
                 runtime_device = match.group("value").strip()
         speed = _GENERATION_SPEED.search(line)
         if speed is not None:
-            output_tokens_per_second = float(speed.group("value"))
+            rate = float(speed.group("value"))
+            output_tokens_per_second = rate if math.isfinite(rate) and rate > 0 else None
     return {
         "load_elapsed_seconds": load_seconds,
         "output_tokens": output_tokens,
@@ -469,6 +482,11 @@ class LlamaCppScriptGenerator:
                 raise FatalAdapterError(
                     f"llama.cpp exited with code {completed.returncode}: {diagnostic}"
                 )
+            sampler_failure = _SAMPLER_FAILURE.search(completed.stderr)
+            if sampler_failure is not None:
+                raise InvalidAdapterOutput(
+                    "llama.cpp runtime sampler failure: " + sampler_failure.group("diagnostic")
+                )
             try:
                 text = _assistant_text(output_path.read_text(encoding="utf-8"))
             except OSError as error:
@@ -517,7 +535,7 @@ class LlamaCppScriptGenerator:
                     output_tokens_per_second_unavailable_reason=(
                         None
                         if output_tokens_per_second is not None
-                        else "llama.cpp did not emit parseable generation throughput"
+                        else "llama.cpp did not emit positive finite generation throughput"
                     ),
                     peak_process_tree_memory_bytes=peak_memory,
                     peak_process_tree_memory_unavailable_reason=(

@@ -645,6 +645,99 @@ def test_adapter_receives_dynamic_exact_order_response_schema(
     assert len(result.plan.response_schema_sha256) == 64
 
 
+@pytest.mark.parametrize(
+    ("section_id", "paragraph"),
+    [
+        (
+            "orientation",
+            "Listen to the sounds around you. They may be near or far. "
+            "Also notice where your body touches the seat.",
+        ),
+        (
+            "orientation",
+            "Listen to the sounds around you. Notice your body touching the cushion.",
+        ),
+        (
+            "return",
+            "Check in with the sounds around you. You might lift your hands or shift "
+            "your weight slightly before opening your eyes. Whenever you\u2019re ready, "
+            "return to the rest of your day.",
+        ),
+        ("return", "Listen to surrounding sounds. You may lift your hands slightly."),
+        ("return", "Listen to surrounding sounds. You may shift your weight slightly."),
+    ],
+)
+def test_concrete_contact_and_physical_return_cues_preserve_authored_prose(
+    section_id: str, paragraph: str
+) -> None:
+    def mutate(output: FixtureDraft) -> None:
+        section = next(item for item in output["sections"] if item["section_id"] == section_id)
+        section["paragraphs"][0] = paragraph
+
+    adapter = WholeSessionAdapter(mutate, always_mutate=True)
+    result = run(adapter, "Grounding with ordinary sounds and bodily contact", 180)
+
+    assert len(adapter.requests) == 1
+    assert result.raw_attempts[0].validation_error is None
+    section = next(item for item in result.sections if item.section_id == section_id)
+    assert section.text == paragraph
+    assert paragraph in result.script
+
+
+@pytest.mark.parametrize(
+    ("section_id", "paragraph", "failure"),
+    [
+        (
+            "orientation",
+            "Listen to the sounds around you. They may be near or far.",
+            "orientation: establish bodily support or contact",
+        ),
+        (
+            "orientation",
+            "Listen to surrounding sounds as your attention touches on a memory.",
+            "orientation: establish bodily support or contact",
+        ),
+        (
+            "return",
+            "Listen to the sounds around you before continuing the day.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+        (
+            "return",
+            "You may shift your weight slightly before continuing the day.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+        (
+            "return",
+            "Listen to the sounds around you as they shift and change.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+        (
+            "return",
+            "Listen to the sounds around you. You may shift your attention to them.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+        (
+            "return",
+            "Listen to the sounds around you and let them lift your spirits.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+    ],
+)
+def test_contact_and_return_gates_still_require_the_actual_practice_components(
+    section_id: str, paragraph: str, failure: str
+) -> None:
+    def mutate(output: FixtureDraft) -> None:
+        section = next(item for item in output["sections"] if item["section_id"] == section_id)
+        section["paragraphs"][0] = paragraph
+
+    adapter = WholeSessionAdapter(mutate, always_mutate=True)
+    with pytest.raises(GenerationError, match=failure):
+        run(adapter, "Grounding with ordinary sounds and bodily contact", 180)
+    assert len(adapter.requests) == 2
+    assert failure in adapter.requests[1].prompt
+
+
 def test_external_sound_anchor_rejects_switch_to_breath_attention() -> None:
     def mutate(output: FixtureDraft) -> None:
         original = output["sections"][2]["paragraphs"][0]

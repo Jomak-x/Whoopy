@@ -202,7 +202,19 @@ def test_llama_adapter_delivers_requested_schema_to_native_process(tmp_path: Pat
     assert result.text == '{"message":"original prose"}'
 
 
-def test_llama_adapter_rejects_empty_output(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("output_text", "runtime_error"),
+    [
+        (" \n", ""),
+        (
+            "User:\nA prompt.\n\nAssistant:\n\n",
+            "srv send_error: Failed to initialize samplers: std::exception",
+        ),
+    ],
+)
+def test_llama_adapter_rejects_empty_output(
+    tmp_path: Path, output_text: str, runtime_error: str
+) -> None:
     executable, model = _llama_files(tmp_path)
 
     def empty_runner(
@@ -211,8 +223,15 @@ def test_llama_adapter_rejects_empty_output(tmp_path: Path) -> None:
     ) -> subprocess.CompletedProcess[str]:
         command_list = list(command)
         output_path = Path(command_list[command_list.index("--output-file") + 1])
-        output_path.write_text(" \n", encoding="utf-8")
-        return subprocess.CompletedProcess(command_list, 0, stdout="", stderr="")
+        schema_path = Path(command_list[command_list.index("--json-schema-file") + 1])
+        assert json.loads(schema_path.read_text()) == {"type": "object"}
+        output_path.write_text(output_text, encoding="utf-8")
+        return subprocess.CompletedProcess(
+            command_list,
+            0,
+            stdout="[ Prompt: 0.0 t/s | Generation: 0.0 t/s ]",
+            stderr=runtime_error,
+        )
 
     adapter = LlamaCppScriptGenerator(
         executable_path=executable,
@@ -224,14 +243,73 @@ def test_llama_adapter_rejects_empty_output(tmp_path: Path) -> None:
         process_runner=empty_runner,
     )
 
-    with pytest.raises(InvalidAdapterOutput, match="empty text"):
-        adapter.generate(ScriptGenerationRequest(prompt="A prompt."))
+    message = "sampler failure" if runtime_error else "empty text"
+    with pytest.raises(InvalidAdapterOutput, match=message) as error:
+        adapter.generate(
+            ScriptGenerationRequest(prompt="A prompt.", response_json_schema={"type": "object"})
+        )
+    assert "A prompt." not in str(error.value)
+    if runtime_error:
+        assert "Failed to initialize samplers" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "diagnostic",
+    [
+        "common_sampler_init: error initializing grammar sampler",
+        "0.01 E srv send_error: task id = 0, error: Failed to initialize samplers: std::exception",
+    ],
+)
+def test_llama_adapter_rejects_partial_output_after_engine_sampler_failure(
+    tmp_path: Path, diagnostic: str
+) -> None:
+    executable, model = _llama_files(tmp_path)
+
+    def runner(command: Sequence[str], _timeout: float) -> subprocess.CompletedProcess[str]:
+        arguments = list(command)
+        assert "--json-schema-file" in arguments
+        output = Path(arguments[arguments.index("--output-file") + 1])
+        output.write_text('User:\nA prompt.\n\nAssistant:\n{"text":', encoding="utf-8")
+        return subprocess.CompletedProcess(
+            arguments, 0, stdout="Generation: 0.0 t/s", stderr=diagnostic
+        )
+
+    adapter = LlamaCppScriptGenerator(
+        executable_path=executable,
+        model_path=model,
+        versioned_model_id="fixture/model@1",
+        runtime_version="fixture",
+        license_id="Apache-2.0",
+        device="cpu",
+        process_runner=runner,
+    )
+    with pytest.raises(InvalidAdapterOutput, match="runtime sampler failure"):
+        adapter.generate(
+            ScriptGenerationRequest(prompt="A prompt.", response_json_schema={"type": "object"})
+        )
 
 
 def test_llama_adapter_removes_single_turn_transcript_wrapper() -> None:
     output = "User:\nWrite one sentence.\n\nAssistant:\nWelcome to this moment.\n"
 
     assert _assistant_text(output) == "Welcome to this moment."
+
+
+@pytest.mark.parametrize("ending", ["", "\n", "\n\n"])
+def test_llama_transcript_parser_recognizes_empty_assistant_turn(ending: str) -> None:
+    assert _assistant_text("User:\nWrite one sentence.\n\nAssistant:" + ending) == ""
+
+
+@pytest.mark.parametrize(
+    "prose",
+    [
+        "Assistant:\nA word in an ordinary passage.",
+        "A short passage.\nAssistant:\nAn attribution in that passage.",
+        "User:\nQuoted dialogue.\nAssistant: an inline attribution.",
+    ],
+)
+def test_llama_transcript_parser_preserves_ordinary_prose(prose: str) -> None:
+    assert _assistant_text(prose) == prose
 
 
 def test_llama_parser_accepts_pinned_cli_generation_summary() -> None:

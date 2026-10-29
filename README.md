@@ -50,11 +50,12 @@ uv run --offline whoopy generate \
   --minutes 3 --profile high --writing-method recipe_whole_session
 ```
 
-The quickstart uses the measured three-minute daytime grounding path. Five-minute
-sleep writing with `recipe_whole_session` remains experimental and unqualified:
-the [retained sleep benchmark](evaluations/benchmarks/2026-10-28/writing-v5-high-sleep-retry/report.json)
-failed after its holistic revision, with no accepted new script or sleep audio.
-Sleep routing remains available; see the [completion limits](evaluations/benchmarks/2026-10-28/RESULTS.md).
+Fresh October 29 runs include complete three-minute no-breath focus and
+five-minute sleep sessions with High + MLX Ryan. All selected native speech in
+those runs passed word screening; full-file mismatches remain flagged for listening.
+These are measured examples, not a guarantee that every request or smaller model
+will pass. The earlier failed sleep attempts remain retained. See the
+[overnight evidence and current limits](evaluations/benchmarks/2026-10-29/RESULTS.md).
 
 The new path routes daytime/sleep needs and supports external anchors when breath focus
 is declined. Box breathing is explicitly unsupported; this slice uses optional

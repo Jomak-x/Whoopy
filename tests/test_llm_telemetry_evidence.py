@@ -12,9 +12,19 @@ from whoopy.adapters.llm.llama_cpp import LlamaCppScriptGenerator, LlamaProcessR
 from whoopy.ports import ScriptGenerationRequest, ScriptGenerationResult
 
 
-@pytest.mark.parametrize("with_diagnostics", [True, False])
+@pytest.mark.parametrize(
+    ("with_diagnostics", "generation_speed"),
+    [
+        (True, "40.0"),
+        (False, "40.0"),
+        (True, "0.0"),
+        (True, "-1.0"),
+        (True, "nan"),
+        (True, "9" * 400),
+    ],
+)
 def test_generated_telemetry_serializes_measurements_or_explicit_unavailability(
-    tmp_path: Path, with_diagnostics: bool
+    tmp_path: Path, with_diagnostics: bool, generation_speed: str
 ) -> None:
     executable = tmp_path / "llama-cli"
     model = tmp_path / "model.gguf"
@@ -25,7 +35,7 @@ def test_generated_telemetry_serializes_measurements_or_explicit_unavailability(
             "llama_model_load: using device Metal0 (Test GPU)",
             "llama_perf_context_print: load time = 125.50 ms",
             "llama_perf_context_print: eval time = 500.00 ms / 20 tokens",
-            "[ Prompt: 240.0 t/s | Generation: 40.0 t/s ]",
+            f"[ Prompt: 240.0 t/s | Generation: {generation_speed} t/s ]",
         )
     )
 
@@ -72,7 +82,12 @@ def test_generated_telemetry_serializes_measurements_or_explicit_unavailability(
         assert telemetry.load_elapsed_seconds == pytest.approx(0.1255)
         assert telemetry.output_tokens == 20
         assert telemetry.output_token_elapsed_seconds == 0.5
-        assert telemetry.output_tokens_per_second == 40
+        if generation_speed == "40.0":
+            assert telemetry.output_tokens_per_second == 40
+            assert telemetry.output_tokens_per_second_unavailable_reason is None
+        else:
+            assert telemetry.output_tokens_per_second is None
+            assert telemetry.output_tokens_per_second_unavailable_reason
         assert telemetry.peak_process_tree_memory_bytes == 987_654_321
         assert telemetry.runtime_device == "Metal0 (Test GPU)"
     else:
