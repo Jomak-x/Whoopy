@@ -310,6 +310,7 @@ class GenerationTask:
     prior_process_attempts: int = 0
     prior_resume_count: int = 0
     resumed_web_launch: bool = False
+    finalizing_take: bool = False
 
     @property
     def active(self) -> bool:
@@ -408,7 +409,7 @@ class LocalWebApplication:
 
     def _has_active_generation(self) -> bool:
         with self._task_lock:
-            if any(task.active for task in self._tasks.values()):
+            if any(task.active or task.finalizing_take for task in self._tasks.values()):
                 return True
         if not self.runs_directory.is_dir():
             return False
@@ -1246,11 +1247,30 @@ class LocalWebApplication:
     def delete_run(self, run_id: str) -> dict[str, Any] | None:
         """Move a stopped run to recoverable local trash."""
 
-        record = self._record(run_id)
-        if record is None:
-            return None
-        if record.status in (RunStatus.QUEUED, RunStatus.RUNNING):
-            raise ValueError("Cancel active generation before deleting this meditation.")
+        with self._operation_admission_lock:
+            record = self._record(run_id)
+            if record is None:
+                return None
+            with self._task_lock:
+                task = self._tasks.get(str(record.run_id))
+                if task is not None and (task.active or task.finalizing_take):
+                    raise ValueError("Cancel active generation before deleting this meditation.")
+            try:
+                with RunLock(self.runs_directory / str(record.run_id)):
+                    record = RunStore(self.runs_directory).load(record.run_id)
+                    if record.status in (RunStatus.QUEUED, RunStatus.RUNNING):
+                        raise ValueError(
+                            "Cancel active generation before deleting this meditation."
+                        )
+            except RunLockUnavailable as error:
+                raise ValueError(
+                    "Cancel active generation before deleting this meditation."
+                ) from error
+            # Windows cannot move a directory containing an open worker lock.
+            # Admission still excludes local worker registration during the move.
+            return self._trash_stopped_run(record)
+
+    def _trash_stopped_run(self, record: RunRecord) -> dict[str, Any]:
         source = self.runs_directory / str(record.run_id)
         trash = self.runs_directory / ".trash"
         trash.mkdir(parents=True, exist_ok=True)
@@ -2107,6 +2127,7 @@ class LocalWebApplication:
                 return None
             with self._task_lock:
                 generation_task = self._tasks[run_id]
+                generation_task.finalizing_take = True
             thread = threading.Thread(
                 target=self._finalize_alternative_take,
                 args=(generation_task, segment_id, selected),
@@ -2127,56 +2148,61 @@ class LocalWebApplication:
         segment_id: str,
         selected_take_id: str,
     ) -> None:
-        run_id = generation_task.run_id
-        deadline = time.monotonic() + 14_400
-        while time.monotonic() < deadline:
-            with self._task_lock:
-                if (
-                    self._tasks.get(run_id) is not generation_task
-                    or generation_task.cancel_requested
-                ):
-                    return
-                active = generation_task.active
-            state = self._task_public(generation_task)
-            if not active and state["status"] not in {"queued", "running"}:
-                break
-            time.sleep(0.2)
-        else:
-            return
-        with self._operation_admission_lock:
-            with self._task_lock:
-                if (
-                    self._tasks.get(run_id) is not generation_task
-                    or generation_task.cancel_requested
-                    or generation_task.active
-                ):
-                    return
-            if self._task_public(generation_task)["status"] != "completed":
+        try:
+            run_id = generation_task.run_id
+            deadline = time.monotonic() + 14_400
+            while time.monotonic() < deadline:
+                with self._task_lock:
+                    if (
+                        self._tasks.get(run_id) is not generation_task
+                        or generation_task.cancel_requested
+                    ):
+                        return
+                    active = generation_task.active
+                state = self._task_public(generation_task)
+                if not active and state["status"] not in {"queued", "running"}:
+                    break
+                time.sleep(0.2)
+            else:
                 return
-            takes = SegmentTakeStore(RunStore(self.runs_directory))
-            regeneration_attempt_id: UUID | None = None
-            history = (self.runs_directory / run_id / "history" / "manual-regeneration").glob(
-                "*/request.json"
-            )
-            try:
-                latest = max(history, key=lambda path: path.stat().st_mtime_ns)
-                payload = json.loads(latest.read_text(encoding="utf-8"))
-                regeneration_attempt_id = UUID(payload["regeneration_attempt_id"])
-            except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
-                pass
-            takes.capture_active(
-                run_id,
-                segment_id,
-                source="production_regeneration",
-                regeneration_attempt_id=regeneration_attempt_id,
-                select_if_unset=False,
-            )
-            takes.choose(run_id, segment_id, selected_take_id, action="restore")
-            RevisionStore(RunStore(self.runs_directory)).create_assembly_revision(
-                run_id,
-                note=f"Retained selected take {selected_take_id} after generating an alternative.",
-            )
-            self.resume_run(run_id)
+            with self._operation_admission_lock:
+                with self._task_lock:
+                    if (
+                        self._tasks.get(run_id) is not generation_task
+                        or generation_task.cancel_requested
+                        or generation_task.active
+                    ):
+                        return
+                if self._task_public(generation_task)["status"] != "completed":
+                    return
+                takes = SegmentTakeStore(RunStore(self.runs_directory))
+                regeneration_attempt_id: UUID | None = None
+                history = (self.runs_directory / run_id / "history" / "manual-regeneration").glob(
+                    "*/request.json"
+                )
+                try:
+                    latest = max(history, key=lambda path: path.stat().st_mtime_ns)
+                    payload = json.loads(latest.read_text(encoding="utf-8"))
+                    regeneration_attempt_id = UUID(payload["regeneration_attempt_id"])
+                except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+                    pass
+                takes.capture_active(
+                    run_id,
+                    segment_id,
+                    source="production_regeneration",
+                    regeneration_attempt_id=regeneration_attempt_id,
+                    select_if_unset=False,
+                )
+                takes.choose(run_id, segment_id, selected_take_id, action="restore")
+                RevisionStore(RunStore(self.runs_directory)).create_assembly_revision(
+                    run_id,
+                    note=f"Retained selected take {selected_take_id} after generating an alternative.",
+                )
+                self._resume_run_admitted(run_id)
+        finally:
+            with self._operation_admission_lock:
+                with self._task_lock:
+                    generation_task.finalizing_take = False
 
     def choose_segment_take(
         self,

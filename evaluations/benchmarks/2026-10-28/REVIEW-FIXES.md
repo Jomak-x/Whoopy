@@ -180,3 +180,69 @@ Tests use disposable fixtures and synthetic speech only. Historical evidence and
 source licensing remain unchanged; no real model inference or real-data purge
 was requested or performed. Final repository test/lint/type and GitHub CI gates
 belong to the outer executor.
+
+
+## Focused test-phase fixes after b0f4130
+
+This phase fixes the six defects explicitly reintroduced by the owner's later
+`REINTRODUCED_REVIEW_22_27` decision. It does not undo earlier pipeline fixes or
+reinterpret the earlier declined entries as the final decision. Only targeted
+behavioral tests ran; `scripts/check.py`, full-suite testing, lint, formatting,
+static analysis, publishing, and CI remain with the outer executor.
+
+| Finding | Reproduction and root-cause correction | Focused result |
+| --- | --- | --- |
+| REVIEW-22 | An actual wheel built with disposable synthetic `config/local.yaml` included that private override. Replaced the broad config glob with the explicit shipped config allowlist. Replaced the declaration-string test with a real wheel build, archive inspection, and loading of the emitted settings. No real local settings were copied. | Failed before the fix; passed after. The wheel excludes `local.yaml`, retains product resources, and loads `af_heart` instead of the synthetic private voice. Build used existing cached tooling with `UV_OFFLINE=1`; no package or model download. |
+| REVIEW-23 | Recompiling the editable script reset accepted canonical controls and fitted pauses. For unchanged segment ID/type topology, a three-way merge now retains unchanged controls, applicable pronunciation overrides, and fitted pauses. Compiler marker origins distinguish newly explicit default resets from unchanged implicit defaults. | Three new cases passed after reproducing the control/pronunciation failures and the explicit `natural` reset failure. Actual fixture-backed worker rendering, wording edit, and restoration preserve controls, pause durations, WAV/manifest agreement, and restored PCM. Nine existing pause/control/compiler cases also passed. Structural insertion/removal does not infer control associations across changed topology. |
+| REVIEW-24 | Alternative generation stopped counting as an owner when its subprocess ended, before the polling finalizer restored the selected take. A task reservation now lasts through finalization and admitted assembly-worker registration, and is released on cancellation/exit. | New tests reject generation/model/deletion contenders in the completed-worker gap, retain original selected PCM, register the assembly worker, and release a cancelled reservation. Existing successful, abandoned, and ordered-finalization cases passed. |
+| REVIEW-25 | Deletion checked persisted status without serializing against worker registration. It now holds application admission, checks active/finalizing local tasks, and probes durable worker ownership before moving a stopped run to trash. | New cases cover registered/interrupted and completed-but-active tasks, an existing durable worker lock, deletion waiting for registration, and successful retry after ownership ends. The durable lock is released before rename for Windows compatibility; application admission remains held. This serializes local API work and rejects an already-active external owner, without claiming atomic exclusion of a newly launched external CLI worker after the probe. |
+| REVIEW-26 | Writing cards trusted historical screening status without checking the referenced recording. The builder now requires the writing audio to exist and match its declared `audio_sha256` before publishing output. | Both changed-audio and missing-audio cases failed before the fix and passed after; prior page and receipt bytes remain unchanged on rejection. |
+| REVIEW-27 | Positive sleep/box-breathing matching consumed explicitly negated clauses. Negated clauses are removed before those positive checks, with punctuation and contrast-word boundaries preventing one exclusion from suppressing the next request. | Awake and natural-breathing requests now route correctly. Six mixed-clause regressions reproduced failures before tightening clause boundaries; nine focused cases passed, including the existing positive box-breathing rejection. |
+
+### Targeted validation
+
+Final focused verification passed **39 cases across separate targeted commands**:
+
+- `UV_OFFLINE=1 .venv/bin/python -m pytest -q tests/test_locations.py::test_built_wheel_contains_product_data_without_local_settings` — 1 passed.
+- `tests/test_revisions.py::test_wording_revision_preserves_rendered_controls_and_fitted_pauses` and `::test_new_script_controls_override_accepted_controls` — 3 passed.
+- Existing revision cases `test_generated_pause_edit_renders_and_restores_exact_timing`, `test_wording_edit_preserves_accepted_generated_pause_timing`, `test_explicit_script_pause_change_overrides_generated_timing`, `test_pause_edit_updates_compiled_markers_without_changing_ignored_text`, and `test_pace_edit_resynthesizes_only_changed_speech`, plus timeline cases `test_markdown_script_compiles_to_bounded_speech_and_exact_pauses`, `test_delivery_controls_are_typed_and_never_enter_spoken_text`, and `test_unknown_or_unsupported_delivery_control_is_rejected` — 9 passed.
+- `.venv/bin/python -m pytest -q tests/test_revision_admission.py -k 'alternative_take or delete_'` — 8 passed.
+- `.venv/bin/python -m pytest -q tests/test_takes.py -k 'alternative_finalizer or alternative_generation'` — 7 passed.
+- `tests/test_listening_review.py::test_page_refuses_damaged_writing_audio_and_preserves_existing_page` — 2 passed.
+- Eight new routing cases in `tests/test_recipe_routing.py` and `tests/test_recipe_whole_session.py::test_explicit_box_request_reports_unsupported_reviewed_protocol` — 9 passed.
+
+One intermediate ownership test incorrectly marked an invalidated fixture
+completed without the required artifacts. It was corrected to use the pristine
+completed fixture; the final focused cases passed. One existing finalizer test
+mock was updated to the internal admitted resume entry point. These fixture
+corrections are separate from the reproduced product failures. Rendering checks
+use deterministic synthetic speech, not a real voice model.
+
+### Live qualification remains incomplete
+
+`TEST-LIVE-QUALIFICATION` and the live portions of `test-2` remain **inconclusive**.
+Real inference is now authorized, superseding the earlier no-inference reason.
+However, this assigned phase explicitly confines project reads/writes to this
+worktree and forbids accessing another checkout. The requested pinned model and
+ASR environment paths are in the original checkout, and the requested benchmark
+output is also outside the permitted worktree. Those paths were not accessed.
+No model assets or working ASR environment are available within this worktree.
+
+A fresh actual CLI attempt requested HIGH, `recipe_whole_session`, Kokoro,
+three-minute grounding, and seed 42 using this worktree's model path and an
+allowed test-evidence run directory. It exited **2** before inference with:
+`Artifact kokoro_multilang_v1_0 is not safe to load: The verified download is not installed.`
+The command, complete stdout/stderr, producer hashes, elapsed time, and before/
+after memory and swap samples are retained at
+`/Users/jakob/.no-mistakes/evidence/01M62HVTDGAVV26ASJGAYEXNQ8/postfix-test-phase/generation-preflight.json`,
+with the failed run state beside it. This is a preflight refusal, not an audio
+quality result or a completed benchmark. No expected speech or ASR result was
+invented; human listening remains pending. No original data was archived or
+purged, and historical receipts were not relabeled as current certification.
+
+The outer executor still needs a boundary-compatible live generation/ASR phase
+with the pinned assets, actual attempt/resource evidence, and subsequent human
+listening. Deterministic regression passes do not resolve that qualification.
+Frontend trees remain byte-identical to the original base. No source license,
+model payload, audio payload, or recovery archive was added. Existing prepared
+dependencies were preserved; transient test bytecode/cache files were removed.

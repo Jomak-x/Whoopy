@@ -517,7 +517,7 @@ def test_successful_alternative_finalizer_retains_original_and_captures_generate
     generation_task = GenerationTask(task_id=run_id, run_id=run_id, launching=False)
     application._tasks[run_id] = generation_task
     resumed: list[str] = []
-    monkeypatch.setattr(application, "resume_run", lambda value: resumed.append(value))
+    monkeypatch.setattr(application, "_resume_run_admitted", lambda value: resumed.append(value))
 
     application._finalize_alternative_take(generation_task, "speech-0001", original)
 

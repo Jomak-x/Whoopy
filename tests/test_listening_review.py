@@ -85,6 +85,9 @@ def benchmark(tmp_path: Path) -> Path:
             }
         )
     (listening / "manifest-policy-v3-strict.json").write_text(json.dumps({"records": records}))
+    writing_audio = root / "writing" / "raw.wav"
+    writing_audio.parent.mkdir()
+    writing_audio.write_bytes(b"writing sample")
     (root / "writing-listening-policy-v3.json").write_text(
         json.dumps(
             {
@@ -98,6 +101,7 @@ def benchmark(tmp_path: Path) -> Path:
                         ),
                         "verification": f"{prefix}/verification/policy-v3/writing.json",
                         "status": "review",
+                        "audio_sha256": hashlib.sha256(writing_audio.read_bytes()).hexdigest(),
                     }
                 ]
             }
@@ -150,6 +154,30 @@ def test_page_refuses_changed_listening_copy(benchmark: Path) -> None:
         build(benchmark)
 
     assert not (benchmark / "review.html").exists()
+
+
+@pytest.mark.parametrize("damage", ["changed", "missing"])
+def test_page_refuses_damaged_writing_audio_and_preserves_existing_page(
+    benchmark: Path, damage: str
+) -> None:
+    output = build(benchmark)
+    existing_page = output.read_bytes()
+    receipt_paths = [
+        benchmark / "writing-listening-policy-v3.json",
+        benchmark / "verification/original.json",
+    ]
+    existing_receipts = {path: path.read_bytes() for path in receipt_paths}
+    audio = benchmark / "writing/raw.wav"
+    if damage == "changed":
+        audio.write_bytes(b"replacement audio")
+    else:
+        audio.unlink()
+
+    with pytest.raises((FileNotFoundError, ValueError), match="Writing sample (audio missing|changed)"):
+        build(benchmark)
+
+    assert output.read_bytes() == existing_page
+    assert {path: path.read_bytes() for path in receipt_paths} == existing_receipts
 
 
 def test_cli_selects_manifest_and_writes_outside_read_only_evidence_root(

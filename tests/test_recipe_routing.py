@@ -77,3 +77,47 @@ def test_explicit_daytime_kind_overrides_sleeping_wording() -> None:
     assert session.kind == "body_scan"
     assert session.posture == "sitting"
     assert session.recipe.ending == "daytime_reorientation"
+
+
+def test_explicitly_staying_awake_does_not_route_to_sleep() -> None:
+    session = route_session("Keep me awake; do not fall asleep during my meeting", 180)
+
+    assert session.kind == "focused_attention"
+    assert session.posture == "sitting"
+    assert session.recipe.id == "daytime-steadying"
+    assert session.recipe.ending == "daytime_reorientation"
+
+
+def test_negated_box_breathing_request_routes_natural_breathing() -> None:
+    session = route_session("No box breathing; use natural breathing", 180)
+
+    assert session.anchor == "natural_breath"
+    assert not session.breath_excluded
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "No box breathing; help me sleep",
+        "No box breathing, but help me sleep",
+        "No box breathing but help me sleep",
+    ],
+)
+def test_negated_box_breathing_clause_preserves_separate_sleep_request(prompt: str) -> None:
+    session = route_session(prompt, 180)
+
+    assert session.kind == "sleep"
+    assert session.recipe.ending == "sleep_taper"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "No sleep; use box breathing",
+        "No sleep, but use box breathing",
+        "No sleep but use box breathing",
+    ],
+)
+def test_negated_sleep_clause_preserves_separate_box_breathing_rejection(prompt: str) -> None:
+    with pytest.raises(ValueError, match="Box breathing is not supported"):
+        route_session(prompt, 180)

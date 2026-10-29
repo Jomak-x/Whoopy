@@ -37,7 +37,21 @@ where = ["src"]
 "whoopy.resources" = ["*.yaml"]
 
 [tool.setuptools.data-files]
-"share/whoopy/config" = ["config/*.yaml", "config/README.md"]
+"share/whoopy/config" = [
+  "config/artifacts.yaml",
+  "config/default.yaml",
+  "config/legacy_cleanup.yaml",
+  "config/meditation_blueprints.yaml",
+  "config/model_packs.yaml",
+  "config/models.yaml",
+  "config/pacing_profiles.yaml",
+  "config/runtime_build_recipes.yaml",
+  "config/runtime_packs.yaml",
+  "config/runtime_profiles.yaml",
+  "config/session_recipes.yaml",
+  "config/voice_references.yaml",
+  "config/README.md",
+]
 "share/whoopy/config/acceptance" = ["config/acceptance/*.json"]
 "share/whoopy/config/evaluation" = ["config/evaluation/*.yaml", "config/evaluation/README.md"]
 "share/whoopy/config/prompts" = ["config/prompts/*.md"]

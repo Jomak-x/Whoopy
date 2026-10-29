@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 import sys
-import tomllib
+import zipfile
 from pathlib import Path
 
 import pytest
 
 import whoopy.locations as locations
+from whoopy.config import load_settings
 from whoopy.locations import default_config_directory, runtime_worker_script
 
 
@@ -28,20 +31,59 @@ def test_installed_distribution_falls_back_to_bundled_config_and_workers(
     assert runtime_worker_script("qwen3_tts_worker.py") == workers / "qwen3_tts_worker.py"
 
 
-def test_wheel_declares_complete_local_product_data() -> None:
+def test_built_wheel_contains_product_data_without_local_settings(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
-    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-    data_files = project["tool"]["setuptools"]["data-files"]
+    project = tmp_path / "project"
+    project.mkdir()
+    for directory in ("src", "config", "docs", "scripts"):
+        shutil.copytree(
+            root / directory,
+            project / directory,
+            ignore=shutil.ignore_patterns("local.yaml", "__pycache__", "*.egg-info"),
+        )
+    for name in ("pyproject.toml", "README.md"):
+        shutil.copy2(root / name, project / name)
+    (project / "config/local.yaml").write_text(
+        "tts:\n  voice: synthetic-private-voice\n", encoding="utf-8"
+    )
+    assert load_settings(project / "config", environment={}).tts.voice == "synthetic-private-voice"
 
-    assert "config/*.yaml" in data_files["share/whoopy/config"]
-    assert "config/prompts/*.md" in data_files["share/whoopy/config/prompts"]
-    assert "config/evaluation/*.yaml" in data_files["share/whoopy/config/evaluation"]
-    assert set(data_files["share/whoopy/scripts"]) == {
-        "scripts/fish_speech_1_4_worker.py",
-        "scripts/moss_tts_worker.py",
-        "scripts/qwen3_tts_worker.py",
-    }
-    assert project["tool"]["setuptools"]["package-data"]["whoopy.webui"] == [
-        "static/*",
-        "static/**/*",
-    ]
+    uv = shutil.which("uv")
+    assert uv is not None, "The wheel regression requires the project's uv build tool"
+    result = subprocess.run(
+        [uv, "build", "--wheel", "--out-dir", str(tmp_path / "dist"), str(project)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    wheel = next((tmp_path / "dist").glob("*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        names = archive.namelist()
+        assert not any(name.endswith("/local.yaml") for name in names)
+        data_prefix = "whoopy-0.1.0.data/data/share/whoopy/"
+        files = {name.removeprefix(data_prefix) for name in names if name.startswith(data_prefix)}
+        assert {
+            "config/default.yaml",
+            "config/artifacts.yaml",
+            "config/legacy_cleanup.yaml",
+            "config/meditation_blueprints.yaml",
+            "config/model_packs.yaml",
+            "config/models.yaml",
+            "config/pacing_profiles.yaml",
+            "config/runtime_build_recipes.yaml",
+            "config/runtime_packs.yaml",
+            "config/runtime_profiles.yaml",
+            "config/session_recipes.yaml",
+            "config/voice_references.yaml",
+            "config/prompts/whole_session_system.md",
+            "config/evaluation/local-v1.yaml",
+            "scripts/fish_speech_1_4_worker.py",
+            "scripts/moss_tts_worker.py",
+            "scripts/qwen3_tts_worker.py",
+        } <= files
+        assert any(name.startswith("whoopy/webui/static/") for name in names)
+        archive.extractall(tmp_path / "installed")
+    config = tmp_path / "installed" / data_prefix / "config"
+    assert load_settings(config, environment={}).tts.voice == "af_heart"

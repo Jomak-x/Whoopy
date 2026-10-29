@@ -30,9 +30,8 @@ from whoopy.timeline import (
     SilenceSegment,
     SpeechSegment,
     Timeline,
-    build_script_timeline,
 )
-from whoopy.timeline.compiler import rewrite_script_pauses
+from whoopy.timeline.compiler import compile_script, rewrite_script_pauses
 
 REVISION_ROOT = "revisions"
 ACTIVE_REVISION = "active.json"
@@ -221,13 +220,17 @@ class RevisionStore:
                 affected: set[str] = set()
                 changed = False
                 if request.script is not None and request.script != script:
-                    previous_script_timeline = build_script_timeline(
+                    previous_script_timeline, _, previous_controls = compile_script(
                         run_id=parsed,
                         script=script,
                         created_at=old_timeline.created_at,
+                        source=cast(
+                            Literal["script_file", "generated_prompt"],
+                            old_timeline.source,
+                        ),
                     )
                     script = request.script
-                    new_timeline = build_script_timeline(
+                    new_timeline, _, requested_controls = compile_script(
                         run_id=parsed,
                         script=script,
                         created_at=datetime.now(UTC),
@@ -246,10 +249,62 @@ class RevisionStore:
                         for segment in new_timeline.segments
                         if isinstance(segment, SilenceSegment)
                     ]
+                    # The editable script can predate accepted controls and fitted
+                    # pauses. Only changed script fields replace canonical values.
+                    if (
+                        [(s.id, s.type) for s in previous_script_timeline.segments]
+                        == [(s.id, s.type) for s in old_timeline.segments]
+                        == [(s.id, s.type) for s in new_timeline.segments]
+                    ):
+                        merged_segments = []
+                        for previous, current, requested in zip(
+                            previous_script_timeline.segments,
+                            old_timeline.segments,
+                            new_timeline.segments,
+                            strict=True,
+                        ):
+                            updates: dict[str, object] = {}
+                            if (
+                                isinstance(previous, SpeechSegment)
+                                and isinstance(current, SpeechSegment)
+                                and isinstance(requested, SpeechSegment)
+                            ):
+                                for name in ("delivery", "intensity", "pace", "voice_mode"):
+                                    if (
+                                        getattr(previous, name) == getattr(requested, name)
+                                        and previous_controls[previous.id].get(name)
+                                        == requested_controls[requested.id].get(name)
+                                    ):
+                                        updates[name] = getattr(current, name)
+                                updates["language"] = current.language
+                                updates["pronunciation_overrides"] = tuple(
+                                    override
+                                    for override in current.pronunciation_overrides
+                                    if override.source in requested.text
+                                )
+                                if previous.text == requested.text:
+                                    updates["target_duration_ms"] = current.target_duration_ms
+                            elif (
+                                isinstance(previous, SilenceSegment)
+                                and isinstance(current, SilenceSegment)
+                                and isinstance(requested, SilenceSegment)
+                                and previous.duration_ms == requested.duration_ms
+                            ):
+                                updates["duration_ms"] = current.duration_ms
+                            merged_segments.append(requested.model_copy(update=updates))
+                        new_timeline = new_timeline.model_copy(
+                            update={"segments": merged_segments}
+                        )
+                    merged_pauses = [
+                        segment.duration_ms
+                        for segment in new_timeline.segments
+                        if isinstance(segment, SilenceSegment)
+                    ]
                     new_timeline = new_timeline.model_copy(
                         update={
                             "preserve_timing": old_timeline.preserve_timing
                             or requested_pauses != previous_pauses
+                            or merged_pauses != requested_pauses
                         }
                     )
                     change_kind = "script"

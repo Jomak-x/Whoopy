@@ -1003,3 +1003,104 @@ def test_pace_edit_resynthesizes_only_changed_speech(tmp_path: Path) -> None:
     manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
     silence_span = next(s for s in manifest["segments"] if s["segment_id"] == "silence-0001")
     assert silence_span["actual_duration_ms"] == 2_000
+
+
+def test_wording_revision_preserves_rendered_controls_and_fitted_pauses(tmp_path: Path) -> None:
+    generated = _generated(
+        _plan(), middle_text="Notice the support beneath you and let attention settle here."
+    )
+    store = _completed_generated_run(tmp_path / "runs", generated)
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    revisions.create(
+        RUN_ID,
+        RevisionRequest(timeline=TimelineEdit(delivery={"speech-0001": "warm"})),
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    fitted = [
+        segment
+        for segment in store.load_timeline(RUN_ID).segments
+        if isinstance(segment, SilenceSegment)
+    ]
+    assert fitted != [
+        segment for segment in generated.timeline.segments if isinstance(segment, SilenceSegment)
+    ]
+    controlled = revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            timeline=TimelineEdit(
+                pace={"speech-0001": "slow"},
+                delivery={"speech-0001": "compassionate"},
+                intensity={"speech-0001": "moderate"},
+                pronunciation_overrides={
+                    "speech-0001": (
+                        PronunciationOverride(source="steady", pronunciation="sted-ee"),
+                    ),
+                },
+            )
+        ),
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    accepted_timeline = store.load_timeline(RUN_ID)
+    accepted_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    editable_script = store.load_script(RUN_ID)
+    wording = revisions.create(
+        RUN_ID,
+        RevisionRequest(script=editable_script.replace("let attention", "let your attention", 1)),
+    )
+    assert wording.affected_speech_segment_ids == ("speech-0002",)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    rendered = store.load_timeline(RUN_ID)
+    assert rendered.segments[0] == accepted_timeline.segments[0]
+    assert [s for s in rendered.segments if isinstance(s, SilenceSegment)] == fitted
+    manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    for pause in fitted:
+        span = next(s for s in manifest["segments"] if s["segment_id"] == pause.id)
+        assert span["actual_duration_ms"] == pause.duration_ms
+    with wave.open(str(store.audio_path(RUN_ID)), "rb") as audio:
+        assert manifest["duration_ms"] == pytest.approx(
+            audio.getnframes() * 1_000 / audio.getframerate()
+        )
+    revisions.restore(RUN_ID, controlled.revision_id)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == accepted_timeline
+    restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    assert restored_manifest["pcm_sha256"] == accepted_manifest["pcm_sha256"]
+    assert restored_manifest["duration_ms"] == accepted_manifest["duration_ms"]
+
+
+@pytest.mark.parametrize("pace, delivery", [("very_slow", "warm"), ("natural", "neutral")])
+def test_new_script_controls_override_accepted_controls(
+    tmp_path: Path, pace: str, delivery: str
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            timeline=TimelineEdit(
+                pace={"speech-0001": "slow"},
+                delivery={"speech-0001": "compassionate"},
+                pronunciation_overrides={
+                    "speech-0001": (
+                        PronunciationOverride(source="Welcome", pronunciation="Well-come"),
+                    ),
+                },
+            )
+        ),
+    )
+    assert LocalWorker(store).resume(RUN_ID).status is RunStatus.COMPLETED
+    revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            script=f"[pace: {pace}]\n[delivery: {delivery}]\n\n" + store.load_script(RUN_ID)
+        ),
+    )
+    first = store.load_timeline(RUN_ID).segments[0]
+    assert isinstance(first, SpeechSegment)
+    assert first.pace == pace
+    assert first.delivery == delivery
+    assert first.pronunciation_overrides == (
+        PronunciationOverride(source="Welcome", pronunciation="Well-come"),
+    )
+    assert LocalWorker(store).resume(RUN_ID).status is RunStatus.COMPLETED

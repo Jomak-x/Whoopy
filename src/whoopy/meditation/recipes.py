@@ -86,6 +86,19 @@ NO_BREATH = re.compile(
     re.I,
 )
 SLEEP = re.compile(r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b", re.I)
+NEGATED_SLEEP = re.compile(
+    r"\b(?:no|without|avoid|skip|don't|do not|rather not)\b"
+    r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?,;\n]){0,35}"
+    r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b",
+    re.I,
+)
+BOX_BREATHING = re.compile(r"\b(?:box|square)\s+breathing\b", re.I)
+NEGATED_BOX_BREATHING = re.compile(
+    r"\b(?:no|without|avoid|skip|don't|do not|rather not)\b"
+    r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?,;\n]){0,20}"
+    r"\b(?:box|square)\s+breathing\b",
+    re.I,
+)
 REFLECTION = re.compile(r"\b(?:reflect\w*|review the day|busy day|good[ -]?night)\b", re.I)
 
 
@@ -99,12 +112,17 @@ def route_session(
 ) -> RoutedSession:
     """Use need and explicit constraints before selecting the hidden grammar."""
 
-    if re.search(r"\b(?:box|square)\s+breathing\b", prompt, re.I):
+    breath_constraints = NEGATED_BOX_BREATHING.sub("", prompt)
+    if BOX_BREATHING.search(breath_constraints):
         raise ValueError(
             "Box breathing is not supported by a reviewed holding protocol. "
             "Request natural breathing or gentle no-hold breathing instead."
         )
-    sleep = meditation_kind == "sleep" or (meditation_kind is None and bool(SLEEP.search(prompt)))
+    sleep_constraints = NEGATED_SLEEP.sub("", prompt)
+    sleep = meditation_kind == "sleep" or (
+        meditation_kind is None
+        and bool(SLEEP.search(sleep_constraints))
+    )
     if posture is None:
         if re.search(r"\b(?:lying|lie|lay)\s+(?:down|in bed)|\breclining\b", prompt, re.I):
             posture = "lying_down"
@@ -112,7 +130,7 @@ def route_session(
             posture = "sitting"
         else:
             posture = "lying_down" if sleep else "sitting"
-    excluded = bool(NO_BREATH.search(prompt))
+    excluded = bool(NO_BREATH.search(breath_constraints))
     if excluded or re.search(r"\b(?:sound|listen|noise|overstimulat|panic)\w*\b", prompt, re.I):
         anchor: Anchor = "sound"
     elif re.search(r"\b(?:body|contact|ground|support)\w*\b", prompt, re.I):

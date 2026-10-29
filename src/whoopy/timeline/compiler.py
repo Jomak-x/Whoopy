@@ -164,14 +164,14 @@ def build_script_timeline(
 ) -> Timeline:
     """Compile paragraphs and standalone pause markers without model behavior."""
 
-    timeline, _ = _compile_script(
+    timeline, _, _ = compile_script(
         run_id=run_id, script=script, created_at=created_at, source=source
     )
     return timeline
 
 
 def rewrite_script_pauses(*, script: str, timeline: Timeline, durations: dict[str, int]) -> str:
-    _, pause_lines = _compile_script(
+    _, pause_lines, _ = compile_script(
         run_id=timeline.run_id,
         script=script,
         created_at=timeline.created_at,
@@ -187,13 +187,14 @@ def rewrite_script_pauses(*, script: str, timeline: Timeline, durations: dict[st
     return "".join(lines)
 
 
-def _compile_script(
+def compile_script(
     *,
     run_id: UUID,
     script: str,
     created_at: datetime,
     source: Literal["script_file", "generated_prompt"],
-) -> tuple[Timeline, dict[str, list[int]]]:
+) -> tuple[Timeline, dict[str, list[int]], dict[str, dict[str, tuple[int, int]]]]:
+    """Compile the timeline and marker origins used for non-destructive edits."""
     if len(script) > MAX_SCRIPT_CHARACTERS:
         raise ScriptCompileError(
             f"Script exceeds the {MAX_SCRIPT_CHARACTERS:,}-character safety limit."
@@ -291,6 +292,9 @@ def _compile_script(
         "pace": "natural",
         "voice_mode": "preset",
     }
+    control_origins: dict[str, dict[str, tuple[int, int]]] = {}
+    active_origins: dict[str, tuple[int, int]] = {}
+    marker_counts: dict[tuple[str, int], int] = {}
     for block in raw_blocks:
         if isinstance(block, tuple) and len(block) == 2:
             name, value = block
@@ -301,6 +305,11 @@ def _compile_script(
                     f"Unsupported {name.replace('_', '-')} {value!r}; use {choices}."
                 )
             speech_controls[name] = value
+            # Speech position is stable across prose/whitespace edits; marker
+            # occurrence distinguishes an explicit reset to a default value.
+            marker_key = (name, speech_number)
+            marker_counts[marker_key] = marker_counts.get(marker_key, 0) + 1
+            active_origins[name] = (speech_number, marker_counts[marker_key])
             continue
         if isinstance(block, tuple):
             phase, duration_ms, cycle, protocol_id = block
@@ -333,6 +342,7 @@ def _compile_script(
             )
         else:
             speech_number += 1
+            control_origins[f"speech-{speech_number:04d}"] = active_origins.copy()
             segments.append(
                 SpeechSegment(
                     id=f"speech-{speech_number:04d}",
@@ -355,4 +365,4 @@ def _compile_script(
         source=source,
         segments=segments,
     )
-    return timeline, pause_lines
+    return timeline, pause_lines, control_origins

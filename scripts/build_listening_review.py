@@ -95,6 +95,12 @@ def build(root: Path, *, manifest_path: Path | None = None, output: Path | None 
     samples_path = root / "writing-listening-policy-v3.json"
     if samples_path.exists():
         samples = json.loads(samples_path.read_text())["samples"]
+        for sample in samples:
+            audio = local_path(sample["audio"], root)
+            if not audio.is_file():
+                raise ValueError(f"Writing sample audio missing: {audio}")
+            if hashlib.sha256(audio.read_bytes()).hexdigest() != sample["audio_sha256"]:
+                raise ValueError(f"Writing sample changed: {audio}")
         writing = "".join(
             f'<article data-status="{sample["status"]}"><h3>{html.escape(sample["label"])}</h3>'
             f"<p>{screening_label(sample['status'])}</p>"
