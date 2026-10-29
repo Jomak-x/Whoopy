@@ -14,6 +14,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from whoopy.audio import AudioManifest, AudioQualityReport
+from whoopy.locations import default_config_directory
 from whoopy.pipeline import RunStatus, RunStore
 
 _HOOK_ENVIRONMENT = (
@@ -32,6 +33,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--runs-dir", type=Path, required=True)
+    parser.add_argument("--config-dir", type=Path, default=default_config_directory())
+    parser.add_argument("--models-dir", type=Path, default=Path("models/managed"))
     return parser
 
 
@@ -116,6 +119,10 @@ def _interrupt(args: argparse.Namespace) -> int:
             str(run_id),
             "--runs-dir",
             str(args.runs_dir.resolve()),
+            "--config-dir",
+            str(args.config_dir.resolve()),
+            "--models-dir",
+            str(args.models_dir.resolve()),
             "--audience",
             "system",
             "--json",
@@ -128,6 +135,8 @@ def _interrupt(args: argparse.Namespace) -> int:
             "stage": args.stage,
             "run_id": str(run_id),
             "runs_dir": str(args.runs_dir.resolve()),
+            "config_dir": str(args.config_dir.resolve()),
+            "models_dir": str(args.models_dir.resolve()),
             "script_path": str(script_path.resolve()) if script_path is not None else None,
             "interrupt_command": command,
             "created_at": datetime.now(UTC).isoformat(),
@@ -174,6 +183,9 @@ def _recover(args: argparse.Namespace) -> int:
     state = json.loads(state_path.read_text(encoding="utf-8"))
     if state.get("stage") != args.stage:
         raise RuntimeError("Interruption state does not match the requested stage")
+    for name in ("runs_dir", "config_dir", "models_dir"):
+        if state.get(name) != str(getattr(args, name).resolve()):
+            raise RuntimeError(f"Recovery {name} differs from the interrupted execution")
     run_id = UUID(str(state["run_id"]))
     store = RunStore(args.runs_dir)
     interrupted = store.load(run_id)
@@ -212,6 +224,10 @@ def _recover(args: argparse.Namespace) -> int:
         str(run_id),
         "--runs-dir",
         str(args.runs_dir.resolve()),
+        "--config-dir",
+        str(args.config_dir.resolve()),
+        "--models-dir",
+        str(args.models_dir.resolve()),
         "--json",
     )
     completed = subprocess.run(

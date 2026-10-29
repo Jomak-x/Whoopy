@@ -1285,3 +1285,56 @@ def test_doctor_refuses_windows_arm64_release_target() -> None:
 
     assert result.supported is False
     assert result.selected_profile is None
+
+
+def test_acceptance_commands_use_selected_paths_for_production_and_recovery(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "candidate-config"
+    models = tmp_path / "candidate-models"
+    runs = tmp_path / "candidate-runs"
+    config.mkdir()
+    (config / "default.yaml").write_bytes(Path("config/default.yaml").read_bytes())
+    (config / "local.yaml").write_text("tts:\n  voice: am_michael\n")
+    (models / "managed").mkdir(parents=True)
+    (models / "managed" / "fixture.txt").write_text("selected model bytes")
+    program = (
+        "import json,sys; from pathlib import Path; from uuid import UUID; "
+        "from whoopy.config import load_settings; "
+        "from whoopy.pipeline.acceptance_stage import observe_acceptance_stage; "
+        "config,models,runs=map(Path,sys.argv[1:4]); "
+        "runs.mkdir(exist_ok=True); "
+        "value={'voice':load_settings(config).tts.voice,"
+        "'model':(models/'fixture.txt').read_text()}; "
+        "(runs/sys.argv[4]).write_text(json.dumps(value)); "
+        "observe_acceptance_stage("
+        "run_id=UUID('11111111-1111-4111-8111-111111111111'),stage='synthesis',"
+        "durable_run_status='running',durable_run_stage='synthesizing')"
+    )
+    command = ("{python}", "-c", program, "{config_dir}", "{models_dir}", "{runs_dir}")
+    report = run_acceptance(
+        cases=(
+            AcceptanceCase(case_id="produce", kind="soak", command=(*command, "produce.json")),
+            AcceptanceCase(
+                case_id="recover",
+                kind="forced_interruption",
+                interruption_stage="synthesis",
+                command=(*command, "interrupted.json"),
+                recovery_command=(*command, "recovered.json"),
+                ready_file=tmp_path / "stage.ready",
+                timeout_seconds=10,
+            ),
+        ),
+        config_directory=config,
+        models_root=models,
+        runs_directory=runs,
+        offline=_passing_offline(),
+        migrations=_passing_migrations(),
+        hardware=_hardware(),
+    )
+    assert report.current_machine_passed, report.model_dump_json(indent=2)
+    for name in ("produce.json", "interrupted.json", "recovered.json"):
+        assert json.loads((runs / name).read_text()) == {
+            "voice": "am_michael",
+            "model": "selected model bytes",
+        }

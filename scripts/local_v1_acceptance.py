@@ -222,6 +222,9 @@ def main(argv: list[str] | None = None) -> int:
         suite_sha256=acceptance_suite_sha256(suite),
         declared_case_ids=tuple(case.case_id for case in suite.cases),
         product_wheel_sha256=product_wheel_sha256,
+        config_directory=args.config_dir,
+        models_root=args.models_root,
+        runs_directory=args.runs_dir,
     )
     write_acceptance_report(args.output, report)
     print(args.output.resolve())

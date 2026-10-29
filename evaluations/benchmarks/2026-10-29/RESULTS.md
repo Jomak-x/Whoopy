@@ -272,3 +272,26 @@ No new live inference, raw-evidence publication or external receipt reconciliati
 was performed. Historical model evidence retains its actual producer revisions.
 Full repository gates, native Linux/Windows checks and final Document/PR
 reconciliation remain with the outer executor.
+
+## Follow-up review corrections after 92d3005
+
+This review narrows sleep exclusions and edited-paragraph recovery, rejects
+compiler-discarded generated prose, persists alternative-take finalization
+across restart, removes stale task-error overrides, and binds acceptance
+execution to its selected directories. Manual recipe script revisions preserve
+canonical pauses and record actual rendered duration; original drafts remain
+immutable. The [review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-92d3005)
+retains all six finding IDs and behavioral coverage.
+
+Focused verification covered **710 distinct tests**, all passing across the
+initial batch and targeted reruns. Initial results were 701 passed and nine
+fixture failures in 85.14 seconds; the affected rerun passed 53 with four remaining
+fixture counter errors in 17.56 seconds, and the final four passed in 0.93 seconds.
+The corrections preserved assertions and retained evidence; no source changes
+followed the initial batch. Touched Python files were formatted. The only warning
+was the existing Starlette/httpx deprecation.
+
+No new live inference or external receipt reconciliation was performed here.
+Historical model evidence retains its actual producer revisions. Full repository
+gates, native platform validation and final Document/PR reconciliation remain
+with the outer executor.

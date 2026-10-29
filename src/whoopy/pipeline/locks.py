@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import TracebackType
 from typing import Any, BinaryIO, cast
@@ -47,6 +49,12 @@ class RunLock:
             ) from error
         assert lock_file is not None
         self._file = lock_file
+
+    @contextmanager
+    def reuse(self, run_directory: Path) -> Iterator[RunLock]:
+        if self._file is None or self.run_directory != run_directory:
+            raise RuntimeError("The caller does not hold this run's lock.")
+        yield self
 
     def release(self) -> None:
         """Release the advisory lock while leaving the harmless lock file."""

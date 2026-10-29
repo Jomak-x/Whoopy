@@ -87,8 +87,8 @@ NO_BREATH = re.compile(
 )
 SLEEP = re.compile(r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b", re.I)
 NEGATED_SLEEP = re.compile(
-    r"\b(?:no|not|without|avoid|skip|(?:do|does|is|are|was|were|should|would|could|must)n['\u2019]t|"
-    r"do not|rather not)\b"
+    r"(?:\b(?:no|without|avoid|skip|(?:do|is|are|should|must)n['\u2019]t|"
+    r"(?:do|is|are|should|must) not|rather not)\b|^\s*not\b)"
     r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?;\n])*"
     r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b",
     re.I,

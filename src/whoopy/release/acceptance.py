@@ -481,6 +481,9 @@ def run_acceptance(
     suite_sha256: str | None = None,
     declared_case_ids: tuple[str, ...] | None = None,
     product_wheel_sha256: str | None = None,
+    config_directory: Path = Path("config"),
+    models_root: Path = Path("models"),
+    runs_directory: Path = Path("runs"),
 ) -> AcceptanceReport:
     """Execute local scenarios and assemble an honest five-target report."""
 
@@ -490,6 +493,24 @@ def run_acceptance(
         architecture=snapshot.architecture,
     )
     backend = select_friendly_backend(snapshot)
+    locations = {
+        "{config_dir}": str(config_directory.expanduser().resolve()),
+        "{models_dir}": str((models_root.expanduser() / "managed").resolve()),
+        "{runs_dir}": str(runs_directory.expanduser().resolve()),
+    }
+    cases = tuple(
+        case.model_copy(
+            update={
+                "command": tuple(locations.get(part, part) for part in case.command),
+                "recovery_command": (
+                    tuple(locations.get(part, part) for part in case.recovery_command)
+                    if case.recovery_command is not None
+                    else None
+                ),
+            }
+        )
+        for case in cases
+    )
     results = tuple(_safe_run_case(case) for case in cases)
     selected_case_ids = tuple(case.case_id for case in cases)
     suite_complete = declared_case_ids is None or selected_case_ids == declared_case_ids

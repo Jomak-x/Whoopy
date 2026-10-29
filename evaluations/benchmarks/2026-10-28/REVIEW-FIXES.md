@@ -431,3 +431,39 @@ revision/durable admission, web interfaces, plan-regeneration ownership and
 exports. The only warning was the existing Starlette/httpx deprecation.
 Touched Python files were formatted. No full repository test/lint/type or CI
 gate ran here.
+
+## Review fixes after 92d3005
+
+The six selected findings were confirmed against current source. This round
+narrows two preceding fixes: sleep inability/history is not a requested
+exclusion, and unmatched original paragraph text no longer rejects a legitimate
+manual recipe revision. Such revisions preserve their canonical pauses and
+record rendered duration rather than fitting edited prose against immutable
+original drafts. Generated paragraph admission still rejects embedded
+separators and now rejects content the script compiler would discard.
+
+| Finding | Root cause and correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-EDITED-PARAGRAPH-QUIET-RECOVERY | Original draft text was used as mandatory identity after a manual edit. Recipe script revisions now preserve canonical pauses; recovery retains the previous conservative unmatched-text cap. | Interrupted recipe edit, worker resume, actual rendered duration, unchanged drafts/raw snapshots and revision restore. |
+| REVIEW-TAKE-FINALIZATION-RESTART-GAP | Finalization identity lived only in the server process. A pending take record binds the selected take and regeneration attempt before launch and retains finalization progress until selected audio is reassembled. | Restart during generation/finalization, failure and retained-take recovery, with public playback/export checks. |
+| REVIEW-STALE-TASK-ERROR-OVERRIDES-RECOVERY | Inactive task errors overrode newer durable results. Public overlays now describe active operations; persisted run/finalization state owns terminal outcomes. | Successful recovery remains completed despite a retained old task error. |
+| REVIEW-SLEEP-INABILITY-NEGATED | Generic negation and history contractions treated inability to sleep as an exclusion. Routing now uses narrower exclusion forms while retaining noun-clause boundaries. | Inability/history wording, direct exclusions and coordinated negative objects. |
+| REVIEW-ACCEPTED-PROSE-COMPILER-DISCARD | Admission allowed lines that the compiler discards. Heading, comment, fence and separator lines are rejected before acceptance without rewriting prose. | Indented and nonstandard headings, comments/fences, exact accepted speech and immutable rejected attempts. |
+| REVIEW-ACCEPTANCE-DIRECTORY-MISMATCH | Audit paths were detached from command execution. Suite path tokens now resolve selected config/model/run directories, helpers forward them, and recovery refuses a different path identity. | Executed subprocess paths and real CLI flows with deterministic adapters verify selected voice, blueprint, model store and run state. |
+
+Focused verification covered **710 distinct tests**, all passing across the
+initial batch and targeted reruns. The initial batch passed 701 and failed nine
+in **85.14 seconds**. Fixture corrections supplied valid lifecycle records,
+complete configuration and the new durable regeneration identity; cancellation
+checks now permit only the required failure-state writes while preserving all
+audio/checkpoint evidence. The affected rerun passed 53 and exposed four
+remaining simulated-completion counter errors in **17.56 seconds**. Correcting
+those counters produced **4 passed in 0.93 seconds**. No source change was needed
+after the initial batch. The only warning was the existing Starlette/httpx
+deprecation; touched Python files were formatted.
+
+If alternative finalization fails, playback remains unavailable and the run asks
+the operator to choose a retained take. That existing selection operation restores
+its checkpoint and reassembles the selected narration; attempts and finalization
+history remain retained. No live inference, full repository test/lint/type gate,
+external receipt reconciliation, frontend change, publication or CI ran here.

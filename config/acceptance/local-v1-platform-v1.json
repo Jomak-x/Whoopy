@@ -7,7 +7,7 @@
     {
       "case_id": "platform-prompt-to-audio-1-minute",
       "kind": "soak",
-      "command": ["{python}", "scripts/acceptance_production_case.py", "--minutes", "1", "--runs-dir", "runs", "--evidence-dir", "evaluations/local/platform-production-case"],
+      "command": ["{python}", "scripts/acceptance_production_case.py", "--minutes", "1", "--runs-dir", "{runs_dir}", "--config-dir", "{config_dir}", "--models-dir", "{models_dir}", "--evidence-dir", "evaluations/local/platform-production-case"],
       "duration_minutes": 1,
       "evidence_contract": "production_receipt_v2",
       "repetitions": 1,

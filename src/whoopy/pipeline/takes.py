@@ -65,12 +65,59 @@ class TakeSelection(BaseModel):
     action: Literal["choose", "undo", "restore"]
 
 
+class PendingAlternativeTake(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    operation_id: UUID
+    run_id: UUID
+    segment_id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    selected_take_id: str = Field(pattern=r"^t[0-9]{4}-[0-9a-f]{10}$")
+    phase: Literal["generating", "restoring", "assembling", "failed"] = "generating"
+    generated_take_id: str | None = None
+    assembly_revision_id: str | None = None
+    assembly_prior_attempt_id: UUID | None = None
+    error: str | None = None
+
+
 class SegmentTakeStore:
     """Capture, select, and restore verified checkpoint audio without synthesis."""
 
-    def __init__(self, store: RunStore) -> None:
+    def __init__(self, store: RunStore, *, run_lock: RunLock | None = None) -> None:
         self.store = store
+        self.run_lock = run_lock
         self.checkpoints = SegmentCheckpointStore(store)
+
+    def pending(self, run_id: UUID | str) -> PendingAlternativeTake | None:
+        parsed = self.store.parse_run_id(run_id)
+        path = self.store.run_directory(parsed) / TAKES_ROOT / "pending.json"
+        try:
+            pending = PendingAlternativeTake.model_validate_json(path.read_text("utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError) as error:
+            raise SegmentTakeError("The pending alternative take is unreadable.") from error
+        if pending.run_id != parsed:
+            raise SegmentTakeError("The pending alternative take belongs to another run.")
+        return pending
+
+    def save_pending(self, pending: PendingAlternativeTake) -> None:
+        path = self.store.run_directory(pending.run_id) / TAKES_ROOT / "pending.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.store._write_json(path, pending.model_dump_json(indent=2) + "\n")
+
+    def finish_pending(self, pending: PendingAlternativeTake) -> None:
+        if self.pending(pending.run_id) != pending:
+            raise SegmentTakeError("The pending alternative take changed before finalization.")
+        source = self.store.run_directory(pending.run_id) / TAKES_ROOT / "pending.json"
+        destination = (
+            self.store.run_directory(pending.run_id)
+            / "history"
+            / "alternative-takes"
+            / f"{pending.operation_id}.json"
+        )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        source.replace(destination)
 
     def list(self, run_id: UUID | str, segment_id: str) -> list[SegmentTakeManifest]:
         root = self._segment_root(run_id, segment_id)
@@ -128,7 +175,11 @@ class SegmentTakeStore:
         parsed = self.store.parse_run_id(run_id)
         self._validate_speech_segment(parsed, segment_id)
         try:
-            with RunLock(self.store.run_directory(parsed)):
+            with (
+                self.run_lock.reuse(self.store.run_directory(parsed))
+                if self.run_lock is not None
+                else RunLock(self.store.run_directory(parsed))
+            ):
                 checkpoint = self.checkpoints.load_optional(parsed, segment_id)
                 if checkpoint is None:
                     raise SegmentTakeError("Speech segment has no production checkpoint.")
@@ -173,7 +224,11 @@ class SegmentTakeStore:
     ) -> TakeSelection:
         parsed = self.store.parse_run_id(run_id)
         try:
-            with RunLock(self.store.run_directory(parsed)):
+            with (
+                self.run_lock.reuse(self.store.run_directory(parsed))
+                if self.run_lock is not None
+                else RunLock(self.store.run_directory(parsed))
+            ):
                 record = self.store.load(parsed)
                 if record.status in {RunStatus.QUEUED, RunStatus.RUNNING}:
                     raise SegmentTakeError("Wait for generation to stop before choosing a take.")

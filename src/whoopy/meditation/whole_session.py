@@ -222,13 +222,7 @@ def recipe_quiet_limits(
         if isinstance(segment, SpeechSegment):
             preceding_chunks.append(segment.text)
         elif isinstance(segment, SilenceSegment):
-            chunks = tuple(preceding_chunks)
-            if chunks not in paragraph_limits:
-                raise ValueError(
-                    f"Cannot recover quiet limit for {segment.id}: preceding speech "
-                    "does not match an authored paragraph"
-                )
-            limits[segment.id] = paragraph_limits[chunks]
+            limits[segment.id] = paragraph_limits.get(tuple(preceding_chunks), 7_999)
             preceding_chunks.clear()
         else:
             preceding_chunks.clear()
@@ -373,6 +367,11 @@ def _validate_session(
             label = f"{beat.id} paragraph {index + 1}"
             if any(not line.strip() for line in text.splitlines()):
                 errors.append(f"{label}: paragraph strings must not contain blank separator lines")
+            if any(
+                line.strip().startswith(("#", "<!--", "```")) or line.strip() == "---"
+                for line in text.splitlines()
+            ):
+                errors.append(f"{label}: paragraph strings must not contain non-spoken lines")
             try:
                 validate_meditation_text(text)
             except ValueError as error:

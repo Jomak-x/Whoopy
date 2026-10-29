@@ -6,17 +6,25 @@ from pathlib import Path
 from queue import Queue
 from threading import Event
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
 from tests.test_revisions import RUN_ID as PLAN_RUN_ID
 from tests.test_revisions import _completed_generated_run, _generated, _plan
-from tests.test_takes import NOW, RUN_ID, _alternative_take, _completed_run
+from tests.test_takes import (
+    NOW,
+    RUN_ID,
+    _alternative_take,
+    _completed_run,
+    _pending_alternative,
+)
 from whoopy.audio.exports import ExportArtifact, ExportManifest, ExportMetadata
 from whoopy.audio.models import PcmAudio
 from whoopy.pipeline import RunExecution, RunStage, RunStatus, RunStore
 from whoopy.pipeline.checkpoints import SegmentCheckpointStore
+from whoopy.pipeline.regeneration import prepare_segment_regeneration
 from whoopy.pipeline.revisions import RevisionStore
 from whoopy.pipeline.runs import RunStoreError
 from whoopy.pipeline.takes import SegmentTakeStore
@@ -162,6 +170,11 @@ def test_alternative_take_routes_wait_for_finalization_and_selected_reassembly(
         def communicate(self) -> tuple[str, str]:
             if self.command == "regenerate-segment":
                 assert child_release.wait(10)
+                pending = SegmentTakeStore(store).pending(RUN_ID)
+                assert pending is not None
+                prepare_segment_regeneration(
+                    store, RUN_ID, "speech-0001", regeneration_attempt_id=pending.operation_id
+                )
                 previous = checkpoints.load_optional(RUN_ID, "speech-0001")
                 assert previous is not None
                 checkpoint = checkpoints.completed_checkpoint(
@@ -177,6 +190,30 @@ def test_alternative_take_routes_wait_for_finalization_and_selected_reassembly(
                 checkpoints.save(checkpoint, audio=alternative_audio)
                 store.audio_path(RUN_ID).write_bytes(alternative_master)
                 _write_export(store, alternative_master)
+                record = store.load(RUN_ID)
+                assert record.recovery is not None
+                store.save(
+                    record.transition(
+                        RunStatus.COMPLETED,
+                        updated_at=datetime.now(UTC),
+                        timeline_artifact="timeline.json",
+                        audio_artifact="narration.wav",
+                        audio_manifest_artifact="audio-manifest.json",
+                        quality_artifact="quality.json",
+                        recovery=record.recovery.model_copy(
+                            update={
+                                "speech_segments_completed": record.recovery.speech_segments_total
+                            }
+                        ),
+                        execution=RunExecution(
+                            stage=RunStage.COMPLETED,
+                            attempt_id=uuid4(),
+                            owner_id="test-worker",
+                            pid=1,
+                            started_at=NOW,
+                        ),
+                    )
+                )
             else:
                 assert self.command == "resume"
                 assert assembly_release.wait(10)
@@ -190,7 +227,13 @@ def test_alternative_take_routes_wait_for_finalization_and_selected_reassembly(
                         audio_artifact="narration.wav",
                         audio_manifest_artifact="audio-manifest.json",
                         quality_artifact="quality.json",
-                        execution=RunExecution(stage=RunStage.COMPLETED),
+                        execution=RunExecution(
+                            stage=RunStage.COMPLETED,
+                            attempt_id=uuid4(),
+                            owner_id="test-worker",
+                            pid=1,
+                            started_at=NOW,
+                        ),
                     )
                 )
             self.returncode = 0
@@ -311,6 +354,7 @@ def test_failed_take_finalization_hides_temporary_audio_after_restart(
     application = _application(tmp_path)
     store, _audio = _completed_run(application.runs_directory)
     selected, _alternative, _alternative_audio = _alternative_take(store)
+    _pending_alternative(store, selected)
     temporary_master = b"temporary alternative narration"
     store.audio_path(RUN_ID).write_bytes(temporary_master)
     _write_export(store, temporary_master)

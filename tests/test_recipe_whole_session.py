@@ -950,6 +950,44 @@ def test_embedded_paragraph_separators_are_rejected_without_normalizing_prose(
         assert section.text == "\n\n".join(fixture["paragraphs"])
 
 
+@pytest.mark.parametrize(
+    "discarded",
+    [
+        " # Listen to the surrounding sounds.",
+        "\t#Listen to the surrounding sounds.",
+        "  ####### Listen to the surrounding sounds.",
+        " <!-- Listen to the surrounding sounds.",
+        " ```\nListen to the surrounding sounds.",
+        " ---\nListen to the surrounding sounds.",
+    ],
+)
+def test_compiler_discarded_lines_are_rejected_before_accepting_prose(discarded: str) -> None:
+    from whoopy.timeline import SpeechSegment
+
+    def mutate(output: FixtureDraft) -> None:
+        output["sections"][-1]["paragraphs"][0] = "Move your fingers gently.\n" + discarded
+
+    adapter = WholeSessionAdapter(mutate)
+    result = run(adapter)
+
+    assert len(adapter.requests) == 2
+    error = result.raw_attempts[0].validation_error
+    assert error is not None
+    assert "return paragraph 1: paragraph strings must not contain non-spoken lines" in error
+    assert result.raw_attempts[0].text == json.dumps(adapter.outputs[0])
+    assert result.raw_attempts[-1].validation_error is None
+    for section, fixture in zip(result.sections, adapter.outputs[-1]["sections"], strict=True):
+        assert section.text == "\n\n".join(fixture["paragraphs"])
+        assert all(paragraph in result.script for paragraph in fixture["paragraphs"])
+    assert " ".join(
+        segment.text for segment in result.timeline.segments if isinstance(segment, SpeechSegment)
+    ) == " ".join(
+        paragraph
+        for fixture in adapter.outputs[-1]["sections"]
+        for paragraph in fixture["paragraphs"]
+    )
+
+
 @pytest.mark.parametrize("line_break", ["\n", "\r\n", "\r", "\u2028", "\v"])
 def test_single_line_breaks_preserve_prose_and_recover_matching_quiet_limits(
     line_break: str,
@@ -983,7 +1021,7 @@ def test_single_line_breaks_preserve_prose_and_recover_matching_quiet_limits(
     assert [limits[segment.id] for segment in silences] == expected_caps
 
 
-def test_quiet_limit_recovery_rejects_speech_that_does_not_match_authored_paragraphs() -> None:
+def test_quiet_limit_recovery_conservatively_bounds_changed_prose() -> None:
     from whoopy.meditation.whole_session import recipe_quiet_limits
     from whoopy.timeline import SpeechSegment
 
@@ -993,8 +1031,125 @@ def test_quiet_limit_recovery_rejects_speech_that_does_not_match_authored_paragr
     segments[index] = segments[index].model_copy(update={"text": "Unrelated spoken content."})
     timeline = result.timeline.model_copy(update={"segments": segments})
 
-    with pytest.raises(ValueError, match="preceding speech does not match an authored paragraph"):
-        recipe_quiet_limits(timeline, result.plan, result.sections)
+    limits = recipe_quiet_limits(timeline, result.plan, result.sections)
+
+    assert limits["silence-0001"] == 7_999
+    assert limits["silence-0002"] == 16_000
+
+
+def test_interrupted_recipe_wording_revision_resumes_with_canonical_quiet(tmp_path: Path) -> None:
+    import wave
+
+    from whoopy.artifacts import TargetPlatform
+    from whoopy.audio.fixture import FixtureSpeechSynthesizer
+    from whoopy.audio.models import PcmAudio
+    from whoopy.audio.processing import SpeechProcessingSettings
+    from whoopy.pipeline.generation import (
+        GenerationRunSettings,
+        RunModelMetadata,
+        ScriptRunConfig,
+        TTSRunSettings,
+    )
+    from whoopy.pipeline.revisions import RevisionRequest, RevisionStore
+    from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore
+    from whoopy.pipeline.worker import LocalWorker
+    from whoopy.timeline import SilenceSegment, SpeechSegment
+
+    generated = run(WholeSessionAdapter(), duration=60)
+    store = RunStore(tmp_path / "runs")
+    queued = store.create_generated_run(
+        prompt="Steady me before a meeting",
+        generated=generated,
+        resolved_config=ScriptRunConfig(
+            mode="generated_prompt",
+            profile="standard",
+            target=TargetPlatform(operating_system="linux", architecture="x86_64"),
+            tts=TTSRunSettings(
+                voice_name="af_heart",
+                speaker_id=0,
+                speed=0.8,
+                num_threads=2,
+                provider="cpu",
+                language="English",
+            ),
+            processing=SpeechProcessingSettings(),
+            generation=GenerationRunSettings(
+                duration_seconds=60,
+                seed=42,
+                plan_prompt_id="whoopy.plan",
+                plan_prompt_version=1,
+                section_prompt_id="whoopy.section",
+                section_prompt_version=1,
+                max_parallel_sections=1,
+                estimated_duration_seconds=generated.estimated_duration_seconds,
+                writing_method="recipe_whole_session",
+            ),
+        ),
+        model_metadata=RunModelMetadata(
+            tts=FixtureSpeechSynthesizer.metadata,
+            llm=WholeSessionAdapter.metadata,
+        ),
+        run_id=RUN_ID,
+        created_at=generated.timeline.created_at,
+    )
+    store.write_timeline(RUN_ID, generated.timeline)
+    assert queued.recovery is not None
+    store.save(
+        queued.transition(
+            RunStatus.INTERRUPTED,
+            updated_at=queued.updated_at,
+            recovery=queued.recovery.model_copy(update={"process_attempts": 1}),
+            execution=RunExecution(
+                stage=RunStage.SYNTHESIZING,
+                interruption_kind="operator_stop",
+            ),
+        )
+    )
+    original_drafts = {
+        path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+        for root in (store.draft_sections_path(RUN_ID), store.raw_model_output_path(RUN_ID))
+        for path in root.glob("*.json")
+    }
+    assert store.load_timeline(RUN_ID).preserve_timing is False
+    revisions = RevisionStore(store)
+    edited_script = generated.script.replace("You can adjust", "You may adjust", 1)
+    revision = revisions.create(RUN_ID, RevisionRequest(script=edited_script))
+    edited = store.load_timeline(RUN_ID)
+    assert edited.preserve_timing is True
+    assert store.load_script(RUN_ID) == edited_script
+    quiets = [segment for segment in edited.segments if isinstance(segment, SilenceSegment)]
+    assert quiets == [
+        segment for segment in generated.timeline.segments if isinstance(segment, SilenceSegment)
+    ]
+    assert all(1_000 <= segment.duration_ms <= 16_000 for segment in quiets)
+    spoken: list[str] = []
+
+    class RecordingSynthesizer(FixtureSpeechSynthesizer):
+        def synthesize(self, segment: SpeechSegment) -> PcmAudio:
+            spoken.append(segment.text)
+            return super().synthesize(segment)
+
+    completed = LocalWorker(store, synthesizer=RecordingSynthesizer()).resume(RUN_ID)
+
+    assert completed.status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == edited
+    assert spoken == [
+        segment.text for segment in edited.segments if isinstance(segment, SpeechSegment)
+    ]
+    assert spoken[0].startswith("You may adjust")
+    manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    with wave.open(str(store.audio_path(RUN_ID)), "rb") as audio:
+        assert manifest["duration_ms"] == pytest.approx(
+            audio.getnframes() * 1_000 / audio.getframerate()
+        )
+    initial = revisions.list(RUN_ID)[0].revision_id
+    for relative, contents in original_drafts.items():
+        assert (store.run_directory(RUN_ID) / relative).read_bytes() == contents
+        snapshot = store.run_directory(RUN_ID) / "revisions" / initial / relative
+        assert snapshot.read_bytes() == contents
+    revisions.restore(RUN_ID, revision.revision_id)
+    assert store.load_script(RUN_ID) == edited_script
+    assert store.load_timeline(RUN_ID) == edited
 
 
 def test_schema_algorithm_change_invalidates_completed_checkpoint(

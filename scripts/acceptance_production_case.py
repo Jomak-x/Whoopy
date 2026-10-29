@@ -14,6 +14,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from whoopy.audio import AudioManifest, AudioQualityReport
+from whoopy.locations import default_config_directory
 from whoopy.pipeline import RunStatus, RunStore
 
 
@@ -21,6 +22,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--minutes", type=int, choices=(1, 3, 5, 10, 20), required=True)
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    parser.add_argument("--config-dir", type=Path, default=default_config_directory())
+    parser.add_argument("--models-dir", type=Path, default=Path("models/managed"))
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--profile", choices=("lite", "standard"), default="standard")
     return parser
@@ -83,7 +86,11 @@ def main(argv: list[str] | None = None) -> int:
         "--run-id",
         str(run_id),
         "--runs-dir",
-        str(args.runs_dir),
+        str(args.runs_dir.resolve()),
+        "--config-dir",
+        str(args.config_dir.resolve()),
+        "--models-dir",
+        str(args.models_dir.resolve()),
         "--audience",
         "system",
         "--json",

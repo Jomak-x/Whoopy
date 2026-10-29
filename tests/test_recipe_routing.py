@@ -71,6 +71,31 @@ def test_sleep_wording_routes_posture_and_ending(prompt: str) -> None:
     assert session.recipe.ending == "sleep_taper"
 
 
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "I couldn't sleep; please help me drift off now.",
+        "I couldn’t sleep; please help me drift off now.",
+        "I could not sleep; please help me drift off now.",
+        "I can't sleep; please help me drift off now.",
+        "I cannot sleep; please help me drift off now.",
+        "I did not sleep last night; help me rest now.",
+        "I wasn't sleeping last night; help me rest now.",
+        "I was not sleeping last night; help me rest now.",
+        "No breath focus and I could not sleep; help me rest now.",
+    ],
+)
+def test_inability_or_history_of_sleep_is_not_an_exclusion(prompt: str) -> None:
+    session = route_session(prompt, 180)
+
+    assert session.kind == "sleep"
+    assert session.posture == "lying_down"
+    assert session.recipe.ending == "sleep_taper"
+    if prompt.startswith("No breath focus"):
+        assert session.breath_excluded
+        assert session.anchor == "sound"
+
+
 def test_explicit_daytime_kind_overrides_sleeping_wording() -> None:
     session = route_session("Help me with sleeping", 60, meditation_kind="body_scan")
 
@@ -230,6 +255,9 @@ def test_independent_sleep_request_keeps_breath_exclusion(prompt: str) -> None:
         "No breath focus and my goal is not sleep",
         "No breath focus and our aim isn’t sleep",
         "No breath focus and the session should not help me sleep",
+        "My goal is relaxation, not sleep",
+        "The session shouldn't help me sleep",
+        "The session must not help me sleep",
     ],
 )
 def test_actual_sleep_negation_remains_daytime_across_clauses(prompt: str) -> None:

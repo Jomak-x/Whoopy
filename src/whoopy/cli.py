@@ -1829,6 +1829,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run_regenerate_parser.add_argument("run_id", help="UUID of a recoverable run.")
     run_regenerate_parser.add_argument("segment_id", help="Stable speech segment ID.")
+    run_regenerate_parser.add_argument("--regeneration-attempt-id", type=UUID)
     run_regenerate_parser.add_argument(
         "--json",
         action="store_true",
@@ -3163,6 +3164,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 store,
                 args.run_id,
                 args.segment_id,
+                regeneration_attempt_id=args.regeneration_attempt_id,
             )
             worker = _worker_for_record(
                 store,

@@ -27,6 +27,7 @@ from whoopy.pipeline.runs import (
     RunStore,
     RunStoreError,
 )
+from whoopy.pipeline.takes import SegmentTakeStore
 from whoopy.timeline import SpeechSegment
 
 REGENERATION_HISTORY_DIRECTORY = "history/manual-regeneration"
@@ -120,6 +121,15 @@ def prepare_segment_regeneration(
     try:
         with RunLock(store.run_directory(parsed_run_id)):
             record = store.load(parsed_run_id)
+            pending = SegmentTakeStore(store).pending(parsed_run_id)
+            if pending is not None and (
+                pending.phase != "generating"
+                or pending.operation_id != regeneration_attempt_id
+                or pending.segment_id != segment_id
+            ):
+                raise SegmentRegenerationError(
+                    "Finish the pending alternative take before regenerating another segment."
+                )
             _validate_stopped_run(record)
             timeline = store.load_timeline(parsed_run_id)
             if timeline.run_id != parsed_run_id:

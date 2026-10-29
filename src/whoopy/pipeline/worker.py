@@ -54,6 +54,7 @@ from whoopy.pipeline.runs import (
     RunStore,
     RunStoreError,
 )
+from whoopy.pipeline.takes import SegmentTakeStore
 from whoopy.pipeline.telemetry import (
     PeakProcessTreeMemory,
     hardware_snapshot,
@@ -323,6 +324,13 @@ class LocalWorker:
                     # only resume after their 15-second lease expires.
                     self.store.reconcile_stale_run_locked(parsed_run_id, now=self.clock())
                 record = self.store.load(parsed_run_id)
+                pending_take = SegmentTakeStore(self.store).pending(parsed_run_id)
+                if pending_take is not None and pending_take.phase != "assembling":
+                    if (
+                        pending_take.phase != "generating"
+                        or pending_take.segment_id not in self.bypass_cache_segment_ids
+                    ):
+                        raise WorkerError("Choose a retained take before resuming this meditation.")
                 if (
                     is_resume
                     and record.execution is not None

@@ -254,8 +254,9 @@ def validate_semantic_plan_edit(
 class RevisionStore:
     """Snapshot, validate, activate, and restore immutable run revisions."""
 
-    def __init__(self, store: RunStore) -> None:
+    def __init__(self, store: RunStore, *, run_lock: RunLock | None = None) -> None:
         self.store = store
+        self.run_lock = run_lock
 
     def active_revision_id(self, run_id: UUID | str) -> str | None:
         active = self._active(self.store.parse_run_id(run_id))
@@ -490,9 +491,18 @@ class RevisionStore:
                         for segment in new_timeline.segments
                         if isinstance(segment, SilenceSegment)
                     ]
+                    generation = (
+                        self.store.load_resolved_config(parsed).generation
+                        if record.source_kind == "generated_prompt"
+                        else None
+                    )
                     new_timeline = new_timeline.model_copy(
                         update={
                             "preserve_timing": old_timeline.preserve_timing
+                            or (
+                                generation is not None
+                                and generation.writing_method == "recipe_whole_session"
+                            )
                             or requested_pauses != previous_pauses
                             or merged_pauses != requested_pauses
                         }
@@ -722,7 +732,11 @@ class RevisionStore:
 
         parsed = self.store.parse_run_id(run_id)
         try:
-            with RunLock(self.store.run_directory(parsed)):
+            with (
+                self.run_lock.reuse(self.store.run_directory(parsed))
+                if self.run_lock is not None
+                else RunLock(self.store.run_directory(parsed))
+            ):
                 record = self.store.load(parsed)
                 if record.status in (RunStatus.QUEUED, RunStatus.RUNNING):
                     raise RevisionError("Wait for generation to stop before choosing a take.")

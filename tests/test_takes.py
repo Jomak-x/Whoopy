@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from threading import Event
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +17,7 @@ from whoopy.audio.processing import ProcessedSpeechSynthesizer, SpeechProcessing
 from whoopy.audio.synthesis import cache_key_for
 from whoopy.pipeline.checkpoints import SegmentCheckpointStore
 from whoopy.pipeline.generation import RunModelMetadata, ScriptRunConfig, TTSRunSettings
+from whoopy.pipeline.regeneration import prepare_segment_regeneration
 from whoopy.pipeline.revisions import RevisionRequest, RevisionStore, TimelineEdit
 from whoopy.pipeline.runs import (
     AUDIO_FILENAME,
@@ -30,7 +31,12 @@ from whoopy.pipeline.runs import (
     RunStatus,
     RunStore,
 )
-from whoopy.pipeline.takes import SegmentTakeError, SegmentTakeManifest, SegmentTakeStore
+from whoopy.pipeline.takes import (
+    PendingAlternativeTake,
+    SegmentTakeError,
+    SegmentTakeManifest,
+    SegmentTakeStore,
+)
 from whoopy.timeline import build_script_timeline
 from whoopy.webui.api import create_api
 from whoopy.webui.server import GenerationTask, LocalWebApplication
@@ -106,6 +112,34 @@ def _completed_run(root: Path) -> tuple[RunStore, PcmAudio]:
     )
     store.save(completed)
     return store, original
+
+
+def _pending_alternative(store: RunStore, selected: str) -> PendingAlternativeTake:
+    pending = PendingAlternativeTake(
+        operation_id=uuid4(),
+        run_id=RUN_ID,
+        segment_id="speech-0001",
+        selected_take_id=selected,
+    )
+    SegmentTakeStore(store).save_pending(pending)
+    record = store.load(RUN_ID)
+    prepare_segment_regeneration(
+        store, RUN_ID, "speech-0001", regeneration_attempt_id=pending.operation_id
+    )
+    store.save(
+        record.model_copy(
+            update={
+                "execution": RunExecution(
+                    stage=RunStage.COMPLETED,
+                    attempt_id=uuid4(),
+                    owner_id="test-worker",
+                    pid=1,
+                    started_at=NOW,
+                )
+            }
+        )
+    )
+    return pending
 
 
 def test_production_checkpoints_become_immutable_takes_and_choices_only_reassemble(
@@ -511,6 +545,7 @@ def test_successful_alternative_finalizer_retains_original_and_captures_generate
 ) -> None:
     store, original_audio = _completed_run(tmp_path / "runs")
     original, _alternative, alternative_audio = _alternative_take(store)
+    _pending_alternative(store, original)
     application = LocalWebApplication(
         project_root=tmp_path,
         config_directory=Path("config"),
@@ -541,6 +576,7 @@ def test_later_selection_waits_for_alternative_finalizer_commit(
 ) -> None:
     store, _audio = _completed_run(tmp_path / "runs")
     original, alternative, _alternative_audio = _alternative_take(store)
+    _pending_alternative(store, original)
     application = LocalWebApplication(
         project_root=tmp_path,
         config_directory=Path("config"),
@@ -583,7 +619,15 @@ def test_later_selection_waits_for_alternative_finalizer_commit(
 
     monkeypatch.setattr(SegmentTakeStore, "capture_active", capture)
     monkeypatch.setattr(application, "resume_run", lambda _run_id: None)
-    monkeypatch.setattr(application, "_resume_run_admitted", lambda _run_id: None)
+
+    def assemble(run_id: str) -> None:
+        from whoopy.pipeline.worker import LocalWorker
+
+        LocalWorker(
+            store, synthesizer=ProcessedSpeechSynthesizer(FixtureSpeechSynthesizer())
+        ).resume(run_id)
+
+    monkeypatch.setattr(application, "_resume_run_admitted", assemble)
     with ThreadPoolExecutor(max_workers=2) as executor:
         finalizer = executor.submit(
             application._finalize_alternative_take, generation_task, "speech-0001", original

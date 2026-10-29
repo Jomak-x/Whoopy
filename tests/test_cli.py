@@ -1,21 +1,27 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import shutil
 import signal
 import socket
+import subprocess
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
 import yaml
 from pytest import CaptureFixture, MonkeyPatch
 
+from scripts import acceptance_production_case, forced_interruption_case
 from whoopy.adapters.llm import LlamaCppScriptGenerator
 from whoopy.adapters.tts import SherpaOnnxKokoroAdapter
 from whoopy.adapters.tts.mlx_qwen3_tts import MLX_QWEN_BACKENDS
+from whoopy.artifacts import ArtifactStore
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.cli import (
     QWEN_BACKEND_VARIANTS,
@@ -1154,3 +1160,119 @@ def test_run_cancel_refuses_to_signal_without_the_worker_lock(
         )
 
     assert signals == []
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_acceptance_helpers_execute_selected_config_models_and_runs(
+    recover: bool, tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    config_dir = tmp_path / "selected-config"
+    models_dir = tmp_path / "selected-models" / "managed"
+    runs_dir = tmp_path / "selected-runs"
+    shutil.copytree(Path("config"), config_dir, ignore=shutil.ignore_patterns("local.yaml"))
+    settings_path = config_dir / "default.yaml"
+    settings = yaml.safe_load(settings_path.read_text())
+    settings["tts"]["voice"] = "am_michael"
+    settings_path.write_text(yaml.safe_dump(settings))
+    blueprint_path = config_dir / "meditation_blueprints.yaml"
+    blueprints = yaml.safe_load(blueprint_path.read_text())
+    for blueprint in blueprints["blueprints"]:
+        blueprint["version"] = 9
+    blueprint_path.write_text(yaml.safe_dump(blueprints))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: _standard_snapshot())
+    draft = _InterruptOnceDraft() if recover else _DraftFixture()
+    model_reads: list[Path] = []
+
+    def load_draft(_cls: type[LlamaCppScriptGenerator], **kwargs: object) -> _DraftFixture:
+        store = kwargs["store"]
+        assert isinstance(store, ArtifactStore)
+        model_reads.append(store.root)
+        return draft
+
+    def load_speech(
+        _cls: type[SherpaOnnxKokoroAdapter], **kwargs: object
+    ) -> FixtureSpeechSynthesizer:
+        store = kwargs["store"]
+        assert isinstance(store, ArtifactStore)
+        model_reads.append(store.root)
+        return FixtureSpeechSynthesizer()
+
+    monkeypatch.setattr(LlamaCppScriptGenerator, "from_artifact_store", classmethod(load_draft))
+    monkeypatch.setattr(SherpaOnnxKokoroAdapter, "from_artifact_store", classmethod(load_speech))
+
+    def invoke_cli(command: tuple[str, ...], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main(list(command[3:]))
+        return subprocess.CompletedProcess(command, result, stdout.getvalue(), stderr.getvalue())
+
+    arguments = [
+        "--runs-dir",
+        str(runs_dir),
+        "--config-dir",
+        str(config_dir),
+        "--models-dir",
+        str(models_dir),
+    ]
+    if recover:
+
+        class Interrupted(Exception):
+            pass
+
+        def interrupt(_executable: str, command: list[str]) -> None:
+            assert invoke_cli(tuple(command)).returncode == 130
+            raise Interrupted
+
+        monkeypatch.setattr(forced_interruption_case.os, "execv", interrupt)
+        monkeypatch.setattr(forced_interruption_case, "subprocess", SimpleNamespace(run=invoke_cli))
+        stage_arguments = [
+            "--stage",
+            "planning",
+            "--state-dir",
+            str(tmp_path / "state"),
+            *arguments,
+        ]
+        with pytest.raises(Interrupted):
+            forced_interruption_case.main(["interrupt", *stage_arguments])
+        state_before = (tmp_path / "state" / "planning.json").read_bytes()
+        for option, field in (
+            ("--runs-dir", "runs_dir"),
+            ("--config-dir", "config_dir"),
+            ("--models-dir", "models_dir"),
+        ):
+            mismatched = list(stage_arguments)
+            mismatched[mismatched.index(option) + 1] = str(tmp_path / f"other-{field}")
+            with pytest.raises(RuntimeError, match=f"Recovery {field} differs"):
+                forced_interruption_case.main(["recover", *mismatched])
+            assert (tmp_path / "state" / "planning.json").read_bytes() == state_before
+        assert forced_interruption_case.main(["recover", *stage_arguments]) == 0
+        receipt_path = tmp_path / "state" / "planning-recovery-evidence.json"
+    else:
+        monkeypatch.setattr(
+            acceptance_production_case, "subprocess", SimpleNamespace(run=invoke_cli)
+        )
+        evidence_dir = tmp_path / "receipts"
+        assert (
+            acceptance_production_case.main(
+                [
+                    "--minutes",
+                    "1",
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    *arguments,
+                ]
+            )
+            == 0
+        )
+        receipt_path = next(evidence_dir.glob("*.json"))
+    receipt = json.loads(receipt_path.read_text())
+    run_id = UUID(receipt["run_id"])
+    store = RunStore(runs_dir)
+    assert store.load(run_id).status is RunStatus.COMPLETED
+    assert store.load_resolved_config(run_id).tts.voice_name == "am_michael"
+    plan = json.loads((store.run_directory(run_id) / "plan.json").read_text())
+    assert plan["blueprint_id"] == "grounding@9"
+    assert model_reads and set(model_reads) == {models_dir}
+    assert not (tmp_path / "runs").exists()
+    assert not (tmp_path / "models").exists()

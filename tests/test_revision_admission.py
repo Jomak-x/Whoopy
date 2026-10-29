@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from uuid import uuid4
 
 import pytest
 
 from tests.test_takes import RUN_ID, _alternative_take, _completed_run
 from whoopy.pipeline.checkpoints import SegmentCheckpointStore
 from whoopy.pipeline.locks import RunLock
+from whoopy.pipeline.regeneration import prepare_segment_regeneration
+from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus
 from whoopy.pipeline.revisions import RevisionRequest, RevisionStore, TimelineEdit
 from whoopy.pipeline.takes import SegmentTakeStore
 from whoopy.webui.server import GenerationTask, LocalWebApplication
@@ -175,7 +179,35 @@ def test_alternative_take_retains_admission_after_worker_finishes(
     result = application.generate_alternative_take(str(RUN_ID), "speech-0001")
     assert result is not None
     generation_task = application._tasks[str(RUN_ID)]
+    pending = SegmentTakeStore(store).pending(RUN_ID)
+    assert pending is not None
+    prepare_segment_regeneration(
+        store, RUN_ID, "speech-0001", regeneration_attempt_id=pending.operation_id
+    )
     _alternative_take(store)
+    record = store.load(RUN_ID)
+    assert record.recovery is not None
+    now = datetime.now(UTC)
+    store.save(
+        record.transition(
+            RunStatus.COMPLETED,
+            updated_at=now,
+            timeline_artifact="timeline.json",
+            audio_artifact="narration.wav",
+            audio_manifest_artifact="audio-manifest.json",
+            quality_artifact="quality.json",
+            recovery=record.recovery.model_copy(
+                update={"speech_segments_completed": record.recovery.speech_segments_total}
+            ),
+            execution=RunExecution(
+                stage=RunStage.COMPLETED,
+                attempt_id=uuid4(),
+                owner_id="test-worker",
+                pid=1,
+                started_at=now,
+            ),
+        )
+    )
     generation_task.launching = False
     before = _snapshot(store.run_directory(RUN_ID))
 
@@ -308,7 +340,24 @@ def test_cancelled_alternative_take_releases_admission(
 
     application._finalize_alternative_take(task, "speech-0001", result["selected_take_id"])
 
-    assert _snapshot(store.run_directory(RUN_ID)) == before
+    after = _snapshot(store.run_directory(RUN_ID))
+    assert after.keys() == before.keys()
+    assert {
+        name: value
+        for name, value in after.items()
+        if name not in {"run.json", "takes/pending.json"}
+    } == {
+        name: value
+        for name, value in before.items()
+        if name not in {"run.json", "takes/pending.json"}
+    }
+    assert store.load(RUN_ID).status is RunStatus.FAILED
+    pending = SegmentTakeStore(store).pending(RUN_ID)
+    assert pending is not None and pending.phase == "failed"
+    assert pending.selected_take_id == result["selected_take_id"]
+    assert pending.error is not None and "Choose a retained take" in pending.error
+    assert not task.finalizing_take
+    assert application.audio_path(str(RUN_ID)) is None
     assert (
         application.start_model_pack_task("smoke-test", "moss-local-5b", {})["status"] == "queued"
     )
