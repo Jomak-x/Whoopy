@@ -175,7 +175,7 @@ def test_active_run_publication_honors_pending_halt(
     assert persisted["active_run_id"] == run_id
     assert persisted["halt_action"] == action
     executor.active_run_changed(None)
-    assert service._controls[key]["active_run_id"] is None
+    assert service._controls[key]["active_run_id"] == run_id
 
 
 def test_delivery_comparison_rejects_qwen_without_expressive_controls() -> None:
@@ -263,3 +263,43 @@ def test_qwen_fallback_controls_are_attested_as_rendered(
     resolved["tts"]["delivery_override"] = "sleepy"
     with pytest.raises(ValueError, match="delivery_override"):
         executor._attest_candidate_controls(request, **kwargs)
+
+
+@pytest.mark.parametrize("refuse_ownership", [False, True])
+def test_generation_persists_lab_ownership_before_launch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, refuse_ownership: bool
+) -> None:
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=Path("runs"),
+    )
+    monkeypatch.setattr(application, "_require_speech_model_ready", lambda *args, **kwargs: None)
+    owned: list[str] = []
+    launched = threading.Event()
+
+    def own(run_id: Any) -> None:
+        assert application._load_web_launch_request(str(run_id))["text"] == "Rest here."
+        owned.append(str(run_id))
+        if refuse_ownership:
+            raise OSError("fixture cannot persist ownership")
+
+    def launch(task: GenerationTask, *args: Any) -> None:
+        assert owned == [task.run_id]
+        launched.set()
+
+    monkeypatch.setattr(application, "_run_generation", launch)
+    payload = {"mode": "script", "text": "Rest here.", "tts_model": "kokoro"}
+    if refuse_ownership:
+        with pytest.raises(OSError, match="persist ownership"):
+            application.start_generation(payload, _run_created=own)
+        assert not launched.is_set()
+        assert application._tasks == {}
+        failed_run = application.run(owned[0])
+        assert failed_run is not None
+        assert failed_run["status"] == "failed"
+    else:
+        task = application.start_generation(payload, _run_created=own)
+        assert launched.wait(5)
+        assert task["run_id"] == owned[0]

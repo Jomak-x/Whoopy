@@ -56,10 +56,11 @@ Exit 0 means pass, 2 review, 1 fail. Queue timeout/absent recognition is never a
 content pass. ASR is imperfect; ambiguous cases need listening. Passing speech
 checks does not mean a voice is warm, accurate in every word, or listener-preferred.
 
-Only passed raw candidates get constant-gain audition copies at common loudness,
-constrained by true peak. Preserve gain and raw/copy hashes. Do not denoise, stretch
-or hide failures with ambience. Compare first/middle/last voice identity in longer
-sessions before promoting a default.
+The retained constant-gain audition copies were made after historical screening
+at common loudness, constrained by true peak. Copies reclassified as Review stay
+visible with their current labels and original evidence. Preserve gain and
+raw/copy hashes. Do not denoise, stretch or hide failures with ambience. Compare
+first/middle/last voice identity in longer sessions before promoting a default.
 
 ## Kokoro recovery
 
@@ -105,27 +106,46 @@ remain recorded. No accepted new sleep script/audio or human score is implied.
 
 The grounding scripts were also rendered through the same production Kokoro
 `am_michael` voice at native speed 0.8: legacy 180.204 s and new 183.511 s. Hashes
-and exact pause sequences pass. Independent narration ASR passed: legacy WER
-1.869%, ordered coverage 99.065%; new WER 0.637%, coverage 99.363%. Human listening
-remains pending.
+and exact pause sequences passed the recorded checks. Independent narration ASR
+passed the historical tolerance-based screening: legacy WER 1.869%, ordered
+coverage 99.065%; new WER 0.637%, coverage 99.363%. Under the current exact-word
+policy, both are **Review**, with four and one normalized word edits respectively.
+The [writing sidecar](../evaluations/benchmarks/2026-10-28/writing-listening-policy-v3.json)
+links the unchanged original receipts and current classifications. Human listening
+remains pending; these are reassessments of retained recognition, not new ASR runs.
 
 A separate real production High prompt-to-audio run at default Kokoro speed 0.6
 and planning rate 95 WPM completed after one holistic revision. It produced
 180.000125 s (102.500125 s speech, 77.5 s exact silence); all pauses were
 6.567–15.826 s, within the 16 s cap. Audio QC passed with no resource-guard stop.
-Independent narration ASR passed with WER 2.5% and ordered coverage 99.375%.
+Independent narration ASR passed historical tolerance-based screening with WER
+2.5% and ordered coverage 99.375%; its four normalized word edits now require
+**Review**.
 The dated `production-new-writer/integration-summary.json` and verification report
-retain the evidence and minor recognition/tokenization differences. These are
-screening passes, not word-perfect or human-quality claims. The initial sandbox
-monitor refusal is preserved separately.
+retain the evidence and recognition/tokenization differences. All three writing
+auditions are Review under the current policy, without word-perfect or
+human-quality claims. The initial sandbox monitor refusal is preserved separately.
 
 The fixed-script voice inventory has nine complete auditions and one Dots
-resource failure. Eight complete auditions qualified for content, including the
-final MLX Ryan follow-up. Native MPS Ryan failed localized content screening.
-Vox required complete independent paragraph recognition plus exact PCM assembly;
-its original full-file recognizer failure is retained. Runtime/precision/policy
-changes prevent attributing the Ryan difference to one cause. Fresh production
-Sherpa Kokoro also passed separately, with one extra recognized initial word.
+resource failure. Eight complete auditions passed historical tolerance-based
+screening, including the final MLX Ryan follow-up. Native MPS Ryan failed localized
+content screening and remains excluded. Vox is now **Review** for the retained
+full-file ASR disagreement involving 28 tail deletions. This is not proof that
+speech is missing: complete independent paragraph recognition and exact PCM
+assembly remain positive evidence. Runtime/precision/policy changes prevent
+attributing the Ryan difference to one cause. The separate production Sherpa
+Kokoro recording also passed historical screening; its one extra recognized
+initial word now requires **Review**.
+
+The current [strict voice sidecar](../evaluations/benchmarks/2026-10-28/verification/listening/manifest-policy-v3-strict.json)
+selects seven voice Pass results and two voice Reviews (production Kokoro and Vox).
+Together with the three writing Reviews, the current
+[audition page](../evaluations/benchmarks/2026-10-28/review.html) contains
+**7 Pass / 5 Review across 12 auditions**. Earlier tolerant receipts and the
+[earlier v3 sidecar](../evaluations/benchmarks/2026-10-28/verification/listening/manifest-policy-v3.json)
+remain historical evidence. Pass means no normalized word mismatches in the
+selected retained ASR evidence, not a guarantee of perfect speech. No new
+recognition or audio changes accompanied this classification update.
 The report links raw reports, gain-only matched copies and the exact license audit.
 Human listening and sustained voice quality remain pending; experimental results
 do not promote a production pack. Earlier generations are recoverably archived,

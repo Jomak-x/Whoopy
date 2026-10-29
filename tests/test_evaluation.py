@@ -1944,3 +1944,102 @@ def test_sequential_queue_never_starts_two_experiments() -> None:
 def test_automatic_combined_score_is_forbidden() -> None:
     with pytest.raises(ValidationError, match="combined scores"):
         MetricValue(name="combined_score", value=4.2, unit="points", goal="higher")
+
+
+@pytest.mark.parametrize("run_status", ["running", "completed", "interrupted"])
+@pytest.mark.parametrize("legacy_control", [False, True])
+def test_lab_restart_recovers_owned_run_without_repeating_trial(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    run_status: str,
+    legacy_control: bool,
+) -> None:
+    class SimulatedRestart(BaseException):
+        pass
+
+    definition = _definition()
+    states: dict[str, dict[str, Any]] = {}
+    starts: list[str] = []
+    resumes: list[str] = []
+
+    def start_generation(payload: dict[str, Any], *, _run_created: Any) -> dict[str, Any]:
+        run_id = str(uuid4())
+        (tmp_path / run_id).mkdir()
+        starts.append(run_id)
+        states[run_id] = {"task_id": run_id, "run_id": run_id, "status": "completed"}
+        _run_created(UUID(run_id))
+        return states[run_id]
+
+    def task(run_id: str) -> dict[str, Any]:
+        value = states[run_id].copy()
+        if value["status"] == "running":
+            states[run_id]["status"] = "completed"
+        return value
+
+    def resume_run(run_id: str) -> dict[str, Any]:
+        resumes.append(run_id)
+        states[run_id]["status"] = "completed"
+        return states[run_id]
+
+    application = SimpleNamespace(
+        runs_directory=tmp_path,
+        config_directory=Path("config"),
+        environment_status=lambda: {"system": "fixture"},
+        start_generation=start_generation,
+        task=task,
+        resume_run=resume_run,
+        run=lambda run_id: states[run_id],
+    )
+    first_executor = LocalProductionExperimentExecutor(cast(Any, application))
+    monkeypatch.setattr(first_executor, "_generation_payload", lambda request: {})
+
+    def stop_before_result(*args: Any, **kwargs: Any) -> Any:
+        assert first_executor.active_run_changed is not None
+        first_executor.active_run_changed(None)
+        raise SimulatedRestart()
+
+    monkeypatch.setattr(first_executor, "_wait_for_task", stop_before_result)
+    first = _LabApiService(application=cast(Any, application), executor=first_executor)
+    first.add_definition(definition)
+    key = (definition.experiment_id, definition.version)
+    first._save_control(key, first._new_control(definition, ("grounding-3m",)))
+    first.queue.enqueue(definition)
+    first.queue.start_next()
+    with pytest.raises(SimulatedRestart):
+        first._drain_queue(definition)
+    interrupted = first.repository.load_execution_control(experiment_id=key[0], version=key[1])
+    assert interrupted is not None
+    assert interrupted["active_run_id"] == starts[0]
+    assert interrupted["trials"] == []
+    if legacy_control:
+        interrupted.pop("active_trial_id")
+        interrupted["resumable_runs"] = {}
+        first._save_control(key, interrupted)
+    states[starts[0]]["status"] = run_status
+
+    recovered_executor = LocalProductionExperimentExecutor(cast(Any, application), poll_seconds=0)
+    monkeypatch.setattr(recovered_executor, "_generation_payload", lambda request: {})
+    recording = RecordingProductionExecutor()
+
+    def completed(request: ProductionTrialRequest, run_id: UUID, *args: Any, **kwargs: Any) -> Any:
+        return recording.execute(request).model_copy(update={"source_run_id": run_id})
+
+    monkeypatch.setattr(recovered_executor, "_completed_result", completed)
+    recovered = _LabApiService(application=cast(Any, application), executor=recovered_executor)
+    recovered.execute(experiment_id=key[0], version=key[1], case_ids=None)
+    worker = recovered._worker
+    if worker is not None:
+        worker.join(5)
+        assert not worker.is_alive()
+
+    final = recovered.repository.load_execution_control(experiment_id=key[0], version=key[1])
+    assert final is not None
+    assert final["status"] == "completed"
+    assert len(starts) == 2
+    assert resumes == ([starts[0]] if run_status == "interrupted" else [])
+    assert [trial["source_run_id"] for trial in final["trials"]] == starts
+    assert final["active_run_id"] is None
+    assert final["active_trial_id"] is None
+    assert final["resumable_runs"] == {}
+    report = recovered.repository.load_report(experiment_id=key[0], version=key[1])
+    assert report.trials[0].source_run_id == UUID(starts[0])

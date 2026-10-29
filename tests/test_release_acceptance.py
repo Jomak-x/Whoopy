@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+import psutil
 import pytest
 
 from scripts.acceptance_production_case import _rounded_duration_ms
@@ -426,6 +428,76 @@ def test_soak_and_forced_interruption_generate_honest_local_report(tmp_path: Pat
     saved = json.loads(output.read_text(encoding="utf-8"))
     assert saved["target"]["target_id"] == "linux-x86_64"
     assert saved["local_v1_release_ready"] is False
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Requires POSIX session and signal behavior")
+@pytest.mark.parametrize("detached_child", [False, True])
+def test_acceptance_timeout_reaps_generation_child_before_next_case(
+    tmp_path: Path, detached_child: bool
+) -> None:
+    child_pid = tmp_path / "child.pid"
+    heartbeat = tmp_path / "heartbeat"
+    child_script = tmp_path / "generation.py"
+    child_script.write_text(
+        "import os, pathlib, signal, time\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        f"pathlib.Path({str(child_pid)!r}).write_text(str(os.getpid()))\n"
+        "while True:\n"
+        f"    pathlib.Path({str(heartbeat)!r}).write_text(str(time.monotonic_ns()))\n"
+        "    time.sleep(0.02)\n",
+        encoding="utf-8",
+    )
+    wrapper = (
+        "import subprocess, sys; "
+        "print('acceptance wrapper started', flush=True); "
+        f"child = subprocess.Popen([sys.executable, {str(child_script)!r}], "
+        "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, "
+        f"start_new_session={detached_child!r}); "
+        "child.wait(); print('generation child reaped', flush=True)"
+    )
+    next_case = (
+        "import pathlib, psutil; "
+        f"pid = int(pathlib.Path({str(child_pid)!r}).read_text()); "
+        "assert not psutil.pid_exists(pid), 'generation child survived timeout'; "
+        "print('next case has exclusive process ownership')"
+    )
+    try:
+        report = run_acceptance(
+            cases=(
+                AcceptanceCase(
+                    case_id="timed-out-generation",
+                    kind="soak",
+                    command=(sys.executable, "-c", wrapper),
+                    timeout_seconds=1,
+                ),
+                AcceptanceCase(
+                    case_id="following-generation",
+                    kind="soak",
+                    command=(sys.executable, "-c", next_case),
+                    timeout_seconds=5,
+                ),
+            ),
+            offline=_passing_offline(),
+            migrations=_passing_migrations(),
+            hardware=_hardware(),
+        )
+        assert child_pid.is_file()
+        assert heartbeat.is_file()
+        attempt = report.cases[0].attempts[0]
+        assert attempt.return_code == 124
+        assert "acceptance wrapper started" in attempt.stdout_tail
+        assert "Acceptance command timed out" in attempt.stderr_tail
+        assert report.cases[0].passed is False
+        assert report.cases[1].passed is True
+        assert not psutil.pid_exists(int(child_pid.read_text()))
+    finally:
+        if child_pid.exists():
+            try:
+                child = psutil.Process(int(child_pid.read_text()))
+                child.kill()
+                psutil.wait_procs([child], timeout=2)
+            except psutil.NoSuchProcess:
+                pass
 
 
 def test_harness_records_missing_executable_as_failure_instead_of_losing_report() -> None:

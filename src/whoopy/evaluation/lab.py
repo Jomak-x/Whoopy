@@ -193,6 +193,7 @@ class EvaluationLab:
         existing_trials: Iterable[ProductionTrialResult] = (),
         resumable_runs: dict[UUID, UUID] | None = None,
         should_halt: Callable[[], bool] | None = None,
+        trial_started: Callable[[ProductionTrialRequest], UUID | None] | None = None,
         trial_completed: Callable[[tuple[ProductionTrialResult, ...], ProductionTrialResult], None]
         | None = None,
     ) -> ExperimentReport:
@@ -258,13 +259,15 @@ class EvaluationLab:
                 if existing is not None and trial_id not in resumable:
                     result = existing
                 else:
-                    if trial_id in resumable:
+                    active_run_id = None if trial_started is None else trial_started(request)
+                    resume_run_id = resumable.get(trial_id, active_run_id)
+                    if resume_run_id is not None:
                         resume = getattr(executor, "resume", None)
                         if not callable(resume):
                             raise EvaluationExecutionError(
                                 "production executor cannot resume the interrupted Lab trial"
                             )
-                        result = resume(request, resumable[trial_id])
+                        result = resume(request, resume_run_id)
                     else:
                         result = executor.execute(request)
                     self._validate_result(request, result)

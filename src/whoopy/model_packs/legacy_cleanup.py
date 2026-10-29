@@ -618,11 +618,6 @@ class LegacyRuntimeCleanup:
                     label="cleanup purge payload",
                 )
                 if payload.exists() or payload.is_symlink():
-                    if _hash_entry(payload) != item.before:
-                        raise LegacyCleanupError(
-                            "Quarantined content failed receipt verification: "
-                            f"{item.source_relative_path}"
-                        )
                     if payload.is_dir():
                         shutil.rmtree(payload)
                     else:

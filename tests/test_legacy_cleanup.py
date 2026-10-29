@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -300,8 +301,6 @@ def test_purge_resumes_after_delete_before_receipt_update(tmp_path: Path) -> Non
     first = receipt.items[0]
     payload = service.models_root / first.quarantine_relative_path
     if payload.is_dir():
-        import shutil
-
         shutil.rmtree(payload)
     else:
         payload.unlink()
@@ -317,6 +316,73 @@ def test_purge_resumes_after_delete_before_receipt_update(tmp_path: Path) -> Non
 
     assert completed.state == "purged"
     assert all(item.purged for item in completed.items)
+
+
+def test_purge_resumes_after_partial_directory_deletion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service, root, weight, _stale = _service(tmp_path)
+    (root / "fish_speech" / "remaining.py").write_bytes(b"remaining")
+    plan = service.inspect()
+    receipt = service.apply(confirmation=plan.confirmation)
+    item = next(entry for entry in receipt.items if entry.category == "source")
+    payload = service.models_root / item.quarantine_relative_path
+    original_rmtree = shutil.rmtree
+
+    def interrupted_rmtree(path: Path) -> None:
+        if path == payload:
+            (path / "model.py").unlink()
+            raise OSError("interrupted directory deletion")
+        original_rmtree(path)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(shutil, "rmtree", interrupted_rmtree)
+        with pytest.raises(OSError, match="interrupted directory deletion"):
+            service.purge(
+                receipt.receipt_id,
+                confirmation=service.purge_confirmation(receipt.receipt_id),
+            )
+
+    interrupted = service.receipts()[0]
+    assert interrupted.state == "purging"
+    assert not next(entry for entry in interrupted.items if entry.category == "source").purged
+    assert not (payload / "model.py").exists()
+    assert (payload / "remaining.py").read_bytes() == b"remaining"
+
+    completed = service.purge(
+        receipt.receipt_id,
+        confirmation=service.purge_confirmation(receipt.receipt_id),
+    )
+
+    assert completed.state == "purged"
+    assert completed.purged_bytes == plan.reclaimable_bytes
+    assert all(entry.purged for entry in completed.items)
+    assert all(
+        not (service.models_root / entry.quarantine_relative_path).exists()
+        for entry in completed.items
+    )
+    assert weight.read_bytes() == b"irreplaceable-checkpoint"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink creation is not generally available")
+def test_resumed_purge_refuses_redirected_payload(tmp_path: Path) -> None:
+    service, _root, weight, _stale = _service(tmp_path)
+    receipt = service.apply(confirmation=service.inspect().confirmation)
+    item = next(entry for entry in receipt.items if entry.category == "source")
+    payload = service.models_root / item.quarantine_relative_path
+    preserved = tmp_path / "preserved-source"
+    payload.replace(preserved)
+    payload.symlink_to(preserved, target_is_directory=True)
+    service._write_receipt(receipt.model_copy(update={"state": "purging"}))
+
+    with pytest.raises(LegacyCleanupError, match="symlink"):
+        service.purge(
+            receipt.receipt_id,
+            confirmation=service.purge_confirmation(receipt.receipt_id),
+        )
+
+    assert (preserved / "model.py").read_bytes() == b"source"
+    assert weight.read_bytes() == b"irreplaceable-checkpoint"
 
 
 @pytest.mark.parametrize(

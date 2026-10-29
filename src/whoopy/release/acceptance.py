@@ -6,14 +6,17 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
+import psutil
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from whoopy import __version__
@@ -697,22 +700,22 @@ def _run_forced_interruption(case: AcceptanceCase) -> AcceptanceCaseResult:
 def _run_command(command: tuple[str, ...], *, timeout_seconds: float) -> ProcessEvidence:
     resolved = _resolve_command(command)
     started = time.monotonic()
+    process = subprocess.Popen(
+        resolved,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=_offline_environment(),
+        start_new_session=os.name == "posix",
+    )
     try:
-        completed = subprocess.run(
-            resolved,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            env=_offline_environment(),
-        )
-        return_code = completed.returncode
-        stdout = completed.stdout
-        stderr = completed.stderr
-    except subprocess.TimeoutExpired as error:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+        return_code = process.returncode
+    except subprocess.TimeoutExpired:
+        _stop_acceptance_command(process)
+        stdout, stderr = process.communicate(timeout=5)
         return_code = 124
-        stdout = _decode_timeout_output(error.stdout)
-        stderr = _decode_timeout_output(error.stderr) + "\nAcceptance command timed out."
+        stderr += "\nAcceptance command timed out."
     return ProcessEvidence(
         return_code=return_code,
         duration_seconds=round(time.monotonic() - started, 3),
@@ -862,10 +865,25 @@ def _load_stage_marker(
     return marker, None
 
 
-def _decode_timeout_output(value: bytes | str | None) -> str:
-    if value is None:
-        return ""
-    return value.decode(errors="replace") if isinstance(value, bytes) else value
+def _stop_acceptance_command(process: subprocess.Popen[str]) -> None:
+    try:
+        descendants = psutil.Process(process.pid).children(recursive=True)
+    except psutil.NoSuchProcess:
+        descendants = []
+    for child in reversed(descendants):
+        with suppress(psutil.NoSuchProcess):
+            child.terminate()
+    _, alive = psutil.wait_procs(descendants, timeout=2)
+    for child in alive:
+        with suppress(psutil.NoSuchProcess):
+            child.kill()
+    psutil.wait_procs(alive, timeout=2)
+    if os.name == "posix":
+        with suppress(ProcessLookupError):
+            cast(Any, os).killpg(process.pid, signal.SIGKILL)
+    elif process.poll() is None:
+        process.kill()
+    process.wait(timeout=5)
 
 
 def _fsync_directory(directory: Path) -> None:

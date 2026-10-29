@@ -1538,6 +1538,7 @@ class LocalWebApplication:
         payload: Any,
         *,
         _resume_run_id: str | None = None,
+        _run_created: Callable[[UUID], None] | None = None,
     ) -> dict[str, Any]:
         """Validate a browser request and start it without blocking HTTP."""
 
@@ -1853,6 +1854,14 @@ class LocalWebApplication:
                     resumed_web_launch=True,
                 )
             self._tasks[run_id] = task
+        if _run_created is not None:
+            try:
+                _run_created(record.run_id)
+            except Exception:
+                with self._task_lock:
+                    self._tasks.pop(run_id, None)
+                self._persist_process_failure(run_id, "Could not persist generation ownership.")
+                raise
         thread = threading.Thread(
             target=self._run_generation,
             args=(

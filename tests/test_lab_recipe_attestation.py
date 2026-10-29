@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -28,9 +29,13 @@ class CompletedGenerationApplication:
         self.tasks: dict[str, dict[str, Any]] = {}
         self.payloads: list[dict[str, Any]] = []
 
-    def start_generation(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def start_generation(
+        self, payload: dict[str, Any], *, _run_created: Callable[[UUID], None] | None = None
+    ) -> dict[str, Any]:
         self.payloads.append(payload)
         run_id = uuid4()
+        if _run_created is not None:
+            _run_created(run_id)
         root = self.runs_directory / str(run_id)
         root.mkdir()
         recipe = payload["writing_method"] == "recipe_whole_session"

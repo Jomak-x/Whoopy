@@ -37,6 +37,7 @@ from whoopy.evaluation import (
     ExperimentReport,
     HumanRating,
     ProductionExperimentExecutor,
+    ProductionTrialRequest,
     ProductionTrialResult,
     PromotionDecision,
     SequentialExperimentQueue,
@@ -405,7 +406,6 @@ class _LabApiService:
                 if control.get("status") in {"queued", "running"}:
                     control["status"] = "paused"
                     control["halt_action"] = None
-                    control["active_run_id"] = None
                     control["updated_at"] = datetime.now(UTC).isoformat()
                     self.repository.save_execution_control(
                         experiment_id=definition.experiment_id,
@@ -430,6 +430,7 @@ class _LabApiService:
             "trials": [],
             "resumable_runs": {},
             "active_run_id": None,
+            "active_trial_id": None,
             "halt_action": None,
             "failure": None,
             "created_at": now,
@@ -444,13 +445,18 @@ class _LabApiService:
         self._controls[key] = control
 
     def _active_run_changed(self, run_id: UUID | None) -> None:
+        if run_id is None:
+            return
         cancel_run_id = None
         with self._control_lock:
             for key, control in self._controls.items():
                 if control.get("status") == "running":
-                    control["active_run_id"] = None if run_id is None else str(run_id)
+                    control["active_run_id"] = str(run_id)
+                    trial_id = control.get("active_trial_id")
+                    if trial_id is not None:
+                        control.setdefault("resumable_runs", {})[trial_id] = str(run_id)
                     self._save_control(key, control)
-                    if run_id is not None and control.get("halt_action") in {"pause", "cancel"}:
+                    if control.get("halt_action") in {"pause", "cancel"}:
                         cancel_run_id = str(run_id)
                     break
         if cancel_run_id is not None:
@@ -714,6 +720,27 @@ class _LabApiService:
                             "cancel",
                         }
 
+                def trial_started(
+                    request: ProductionTrialRequest,
+                    control_key: tuple[str, int] = key,
+                ) -> UUID | None:
+                    with self._control_lock:
+                        current_control = self._controls[control_key]
+                        active_run_id = current_control.get("active_run_id")
+                        active_trial_id = current_control.get("active_trial_id")
+                        if active_run_id is not None and active_trial_id not in {
+                            None,
+                            str(request.trial_id),
+                        }:
+                            raise EvaluationExecutionError("Another Lab trial owns the active run.")
+                        current_control["active_trial_id"] = str(request.trial_id)
+                        if active_run_id is not None:
+                            current_control.setdefault("resumable_runs", {})[
+                                str(request.trial_id)
+                            ] = active_run_id
+                        self._save_control(control_key, current_control)
+                        return None if active_run_id is None else UUID(active_run_id)
+
                 def trial_completed(
                     trials: tuple[ProductionTrialResult, ...],
                     completed: ProductionTrialResult,
@@ -726,10 +753,16 @@ class _LabApiService:
                         ]
                         resumable = current_control.setdefault("resumable_runs", {})
                         run = self.application.run(str(completed.source_run_id))
-                        if run is not None and run.get("status") == "interrupted":
+                        if run is not None and run.get("status") in {
+                            "queued",
+                            "running",
+                            "interrupted",
+                        }:
                             resumable[str(completed.trial_id)] = str(completed.source_run_id)
                         else:
                             resumable.pop(str(completed.trial_id), None)
+                        current_control["active_run_id"] = None
+                        current_control["active_trial_id"] = None
                         self._save_control(control_key, current_control)
 
                 environment = self.application.environment_status()
@@ -743,6 +776,7 @@ class _LabApiService:
                     existing_trials=existing_trials,
                     resumable_runs=resumable_runs,
                     should_halt=should_halt,
+                    trial_started=trial_started,
                     trial_completed=trial_completed,
                 )
                 self.repository.save_report(report)
@@ -763,7 +797,6 @@ class _LabApiService:
                     action = control.get("halt_action")
                     control["status"] = "cancelled" if action == "cancel" else "paused"
                     control["halt_action"] = None
-                    control["active_run_id"] = None
                     self._save_control(key, control)
                 self.queue.finish(
                     experiment_id=current.experiment_id,
@@ -775,7 +808,6 @@ class _LabApiService:
                     if "key" in locals() and key in self._controls:
                         control = self._controls[key]
                         control["status"] = "incomplete"
-                        control["active_run_id"] = None
                         control["failure"] = f"{type(error).__name__}: {error}"[:2_000]
                         self._save_control(key, control)
                 self.queue.finish(

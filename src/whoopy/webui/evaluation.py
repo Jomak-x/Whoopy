@@ -220,7 +220,7 @@ class LocalProductionExperimentExecutor:
         except (OSError, ValueError) as error:
             return self._durable_failure(request, started_at, str(error))
         try:
-            task = self.application.start_generation(payload)
+            task = self.application.start_generation(payload, _run_created=self.active_run_changed)
         except (OSError, ValueError) as error:
             return self._durable_failure(request, started_at, str(error))
 
@@ -233,7 +233,7 @@ class LocalProductionExperimentExecutor:
         )
 
     def resume(self, request: ProductionTrialRequest, run_id: UUID) -> ProductionTrialResult:
-        """Resume one ordinary interrupted run and preserve its trial identity."""
+        """Recover an existing run and preserve its trial identity."""
 
         started_at = datetime.now(UTC)
         started_clock = time.monotonic()
@@ -243,7 +243,9 @@ class LocalProductionExperimentExecutor:
                 pinned_source, _timeline = self._capture_canonical_source(
                     request.controlled_source_run_id
                 )
-            task = self.application.resume_run(str(run_id))
+            task = self.application.task(str(run_id))
+            if task is not None and task["status"] == "interrupted":
+                task = self.application.resume_run(str(run_id))
         except (OSError, ValueError) as error:
             return self._failed_result(
                 request,
@@ -282,10 +284,11 @@ class LocalProductionExperimentExecutor:
         while True:
             state = self.application.task(task_id)
             if state is None:
-                result = self._durable_failure(
+                result = self._failed_result(
                     request,
-                    started_at,
-                    "The durable production task disappeared before completion.",
+                    source_run_id=initial_run_id,
+                    started_at=started_at,
+                    failure="The durable production task disappeared before completion.",
                 )
                 if self.active_run_changed is not None:
                     self.active_run_changed(None)

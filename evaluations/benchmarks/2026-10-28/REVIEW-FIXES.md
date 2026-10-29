@@ -62,3 +62,46 @@ R51 speed behavior and REVIEW-07 prebuilt runtime behavior remain unchanged whil
 awaiting owner decisions. Frontend trees remain at the original base. Whoopy's
 source license remains **UNDECIDED**, and the full runtime-bundle GPL
 redistribution review remains incomplete.
+
+## Review fixes after b67a27d
+
+This subsequent review phase addresses only the selected findings below. The
+earlier validation results above belong to the previous phase. No historical
+audio, inference report, or ASR receipt is regenerated or replaced.
+
+| Finding | Root cause and fix | Focused verification |
+| --- | --- | --- |
+| REVIEW-08 | The acceptance timeout owned only the wrapper process. The command boundary now terminates and waits for descendants, including a detached child, before reaping the wrapper and continuing. | Disposable-process regression in `tests/test_release_acceptance.py`, including a child that ignores termination. |
+| REVIEW-09 | Lab restart discarded the run association before trial completion was durable. Trial/run ownership is now persisted before launch and retained through result persistence; resume reconciles the existing run instead of starting a new trial. | Restart and completion regressions in the Lab/evaluation tests. |
+| REVIEW-11 | A durable purge transaction incorrectly required the original digest after destructive progress. Retry now uses its persisted authorization; initial integrity and receipt/path safety checks remain. | `tests/test_legacy_cleanup.py`: partial directory deletion and redirected-payload refusal, using disposable fixtures only. |
+| REVIEW-12 | The baseline guide presented earlier tolerant screening as current qualification. It now links strict voice/writing sidecars and reports 7 Pass / 5 Review across 12 auditions, retaining earlier results as historical. | Compare parsed strict-sidecar classifications and guide links. |
+| AUDIT_MATRIX_SCOPE | The Kokoro matrix described primary code/model terms without its known runtime dependencies. It now records eSpeak/phonemizer evidence, incomplete desktop redistribution/source closure, and separate source/model/runtime rights. | Parse matrix semantics; preserve declared primary-code/model license IDs and unrelated candidate rows. |
+
+The matrix uses the existing local audit's owner-supplied dependency observations.
+The pinned [eSpeak 1.52.0 README](https://raw.githubusercontent.com/espeak-ng/espeak-ng/1.52.0/README.md)
+and [GPL text](https://raw.githubusercontent.com/espeak-ng/espeak-ng/1.52.0/COPYING)
+were rechecked for license identification and the distinction between running,
+network interaction, and conveying copies. This is not new installed-wheel
+source-closure verification or legal clearance. Whoopy source remains UNDECIDED.
+
+Focused verification passed **179 tests** across `test_release_acceptance.py`,
+`test_legacy_cleanup.py`, `test_evaluation.py`, `test_lab_execution_boundaries.py`,
+`test_lab_recipe_attestation.py`, `test_legacy_api_contract.py`, and
+`test_webui_review_boundaries.py`. This includes both inherited-session and
+detached-child timeout cases, six live/completed/interrupted restart scenarios,
+two prelaunch ownership cases, and disposable partial-purge/path-safety fixtures.
+The only warning was the existing Starlette/httpx deprecation.
+
+Parsed strict sidecars confirmed seven voice Pass results, two voice Reviews,
+three writing Reviews, the writing edit counts, and Vox's 28-word disagreement.
+The guide's classification total and local links matched those retained records.
+Parsed matrix checks confirmed incomplete desktop redistribution/source closure,
+UNDECIDED Whoopy licensing, unchanged declared model/primary-code license fields,
+and unchanged unrelated candidate rows. Changed Python files were formatted;
+`git diff --check` passed. Frontend trees match the original base, and no raw
+audio, model payloads, or verification receipts changed in this phase.
+
+Final repository test/lint/type and GitHub CI gates remain pending with the outer
+executor. No new model or ASR inference was performed.
+R51 speed, REVIEW-10 explicit pause priority, and REVIEW-07 prebuilt-mode behavior
+remain unchanged while awaiting owner decisions.
