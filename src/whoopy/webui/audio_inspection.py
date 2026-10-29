@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import array
 import hashlib
+import re
 import sys
 import wave
 from io import BytesIO
@@ -176,9 +177,17 @@ def section_descriptors(
             draft = DraftedSection.model_validate_json(
                 (draft_sections_path / f"{planned.id}.json").read_text(encoding="utf-8")
             )
+            script = (
+                "\n\n".join(
+                    f"{paragraph}\n\n[pause: 1000ms]"
+                    for paragraph in re.split(r"\n\s*\n", draft.text.strip())
+                )
+                if plan.recipe_sha256 is not None
+                else pace_section(draft.text, section_pause_ms=planned.pause_after_ms)
+            )
             expected = build_script_timeline(
                 run_id=timeline.run_id,
-                script=pace_section(draft.text, section_pause_ms=planned.pause_after_ms),
+                script=script,
                 created_at=timeline.created_at,
                 source="generated_prompt",
             )
@@ -192,7 +201,9 @@ def section_descriptors(
         end_index = start_index + len(expected.segments)
         actual = timeline.segments[start_index:end_index]
         actual_speech = [segment.text for segment in actual if isinstance(segment, SpeechSegment)]
-        if len(actual) != len(expected.segments) or actual_speech != expected_speech:
+        if [segment.type for segment in actual] != [
+            segment.type for segment in expected.segments
+        ] or actual_speech != expected_speech:
             raise AudioInspectionError(
                 "The active script no longer aligns with its reviewed plan; "
                 "section audition is unavailable until the plan is regenerated."

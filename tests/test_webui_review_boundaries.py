@@ -10,7 +10,7 @@ from whoopy.audio.exports import ExportArtifact, ExportManifest, ExportMetadata
 from whoopy.meditation import MeditationPlan, PlannedSection
 from whoopy.pipeline import RunExecution, RunStage, RunStatus, RunStore
 from whoopy.timeline import build_script_timeline
-from whoopy.webui.server import LocalWebApplication
+from whoopy.webui.server import GenerationTask, LocalWebApplication
 
 
 def _application(tmp_path: Path) -> LocalWebApplication:
@@ -64,8 +64,9 @@ def _plan() -> MeditationPlan:
 
 
 @pytest.mark.parametrize("operation", ["plan", "resume", "regenerate-segment"])
-def test_generation_recovery_waits_for_active_model_operation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+@pytest.mark.parametrize("blocker", ["model", "generation"])
+def test_generation_recovery_waits_for_active_operation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str, blocker: str
 ) -> None:
     application = _application(tmp_path)
     store = RunStore(application.runs_directory)
@@ -98,10 +99,18 @@ def test_generation_recovery_waits_for_active_model_operation(
         }
     )
     monkeypatch.setattr("whoopy.webui.server.threading.Thread.start", lambda _thread: None)
-    smoke = application.start_model_pack_task("smoke-test", "moss-local-5b", {})
-    assert smoke["status"] == "queued"
+    if blocker == "model":
+        smoke = application.start_model_pack_task("smoke-test", "moss-local-5b", {})
+        assert smoke["status"] == "queued"
+        expected = "active model or runtime operation"
+    else:
+        other = store.create("Another meditation is generating.")
+        other_id = str(other.run_id)
+        application._tasks[other_id] = GenerationTask(task_id=other_id, run_id=other_id)
+        expected = "generation worker is already active"
+    initial_tasks = dict(application._tasks)
 
-    with pytest.raises(ValueError, match="active model or runtime operation"):
+    with pytest.raises(ValueError, match=expected):
         if operation == "plan":
             application.edit_run(run_id, {"plan": requested.model_dump(mode="json")})
         elif operation == "resume":
@@ -109,18 +118,24 @@ def test_generation_recovery_waits_for_active_model_operation(
         else:
             application.regenerate_segment(run_id, timeline.segments[0].id)
 
-    assert application._tasks == {}
+    assert application._tasks == initial_tasks
     assert not (application.runs_directory / run_id / "history" / "editor-inputs").exists()
     assert store.load(run_id).status is RunStatus.INTERRUPTED
 
 
-def test_cancel_recovery_remains_available_during_model_operation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("blocker", ["model", "generation"])
+def test_cancel_recovery_remains_available_during_active_operation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, blocker: str
 ) -> None:
     application = _application(tmp_path)
     record = RunStore(application.runs_directory).create("Cancel this meditation.")
     monkeypatch.setattr("whoopy.webui.server.threading.Thread.start", lambda _thread: None)
-    application.start_model_pack_task("smoke-test", "moss-local-5b", {})
+    if blocker == "model":
+        application.start_model_pack_task("smoke-test", "moss-local-5b", {})
+    else:
+        other = RunStore(application.runs_directory).create("Another meditation is generating.")
+        other_id = str(other.run_id)
+        application._tasks[other_id] = GenerationTask(task_id=other_id, run_id=other_id)
 
     result = application._launch_recovery_command(str(record.run_id), "cancel", prevalidated=True)
 
@@ -129,9 +144,7 @@ def test_cancel_recovery_remains_available_during_model_operation(
 
 
 @pytest.mark.parametrize("change", ["replace", "remove"])
-def test_export_listing_and_download_reject_stale_narration(
-    tmp_path: Path, change: str
-) -> None:
+def test_export_listing_and_download_reject_stale_narration(tmp_path: Path, change: str) -> None:
     application = _application(tmp_path)
     store = RunStore(application.runs_directory)
     record = store.create("A quiet moment.")

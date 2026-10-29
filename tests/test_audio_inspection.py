@@ -8,8 +8,16 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.test_recipe_whole_session import FixtureDraft, WholeSessionAdapter
 from whoopy.audio import TimelineWaveRenderer
-from whoopy.meditation import DraftedSection, MeditationPlan, PlannedSection
+from whoopy.meditation import (
+    DraftedSection,
+    GenerationWorkspace,
+    LocalMeditationGenerator,
+    MeditationPlan,
+    PlannedSection,
+    load_prompt_bundle,
+)
 from whoopy.meditation.pacing import pace_section
 from whoopy.pipeline import RunStore
 from whoopy.timeline import BreathSegment, SpeechSegment, Timeline, build_script_timeline
@@ -270,6 +278,69 @@ def test_section_audition_refuses_stale_plan_alignment(tmp_path: Path) -> None:
             plan_path=plan,
             draft_sections_path=drafts,
         )
+
+
+def test_whole_session_sections_follow_paragraphs_and_reject_stale_text(tmp_path: Path) -> None:
+    def add_sentence_boundaries(draft: FixtureDraft) -> None:
+        for section in draft["sections"]:
+            for index, paragraph in enumerate(section["paragraphs"]):
+                words = paragraph.split()
+                middle = len(words) // 2
+                section["paragraphs"][index] = (
+                    " ".join(words[:middle]) + ". " + " ".join(words[middle:])
+                )
+
+    store = RunStore(tmp_path / "runs")
+    store.create("A steady moment.", run_id=RUN_ID)
+    result = LocalMeditationGenerator(
+        WholeSessionAdapter(add_sentence_boundaries),
+        load_prompt_bundle(Path("config/prompts")),
+        workspace=GenerationWorkspace(store.run_directory(RUN_ID)),
+    ).generate(
+        prompt="Steady me before a meeting",
+        duration_seconds=180,
+        run_id=RUN_ID,
+        created_at=NOW,
+        writing_method="recipe_whole_session",
+    )
+    rendered = TimelineWaveRenderer().render(result.timeline)
+    store.draft_sections_path(RUN_ID).mkdir()
+    for section in result.sections:
+        (store.draft_sections_path(RUN_ID) / f"{section.section_id}.json").write_text(
+            section.model_dump_json()
+        )
+    store.audio_path(RUN_ID).write_bytes(rendered.wave_bytes)
+    store.audio_manifest_path(RUN_ID).write_text(rendered.manifest.model_dump_json())
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=store.root,
+    )
+
+    descriptors = application.sections(str(RUN_ID))
+    waveform = application.waveform(str(RUN_ID), points=100)
+    assert descriptors is not None and waveform is not None
+    assert [item["section_id"] for item in descriptors] == [
+        section.id for section in result.plan.sections
+    ]
+    assert len(waveform["sections"]) == len(result.plan.sections)
+    assert descriptors[0]["start_frame"] == 0
+    assert descriptors[-1]["end_frame"] == rendered.manifest.total_frames
+    for descriptor in descriptors:
+        payload = application.section_audition(str(RUN_ID), descriptor["section_id"])
+        assert payload is not None
+        with wave.open(__import__("io").BytesIO(payload), "rb") as source:
+            assert source.getnframes() == descriptor["end_frame"] - descriptor["start_frame"]
+
+    draft_path = store.draft_sections_path(RUN_ID) / f"{result.sections[0].section_id}.json"
+    draft_path.write_text(
+        result.sections[0]
+        .model_copy(update={"text": "This no longer matches.", "word_count": 4})
+        .model_dump_json()
+    )
+    with pytest.raises(AudioInspectionError, match="no longer aligns"):
+        application.sections(str(RUN_ID))
 
 
 def test_waveform_refuses_same_length_pcm_corruption(tmp_path: Path) -> None:

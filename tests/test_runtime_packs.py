@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
@@ -19,9 +20,9 @@ from whoopy.model_packs import (
     RuntimePackState,
     load_runtime_pack_manifest,
 )
+from whoopy.model_packs.runtime import RuntimeBundleBuildRecord
 from whoopy.model_packs.runtime_builder import (
     RuntimeBuildRecipe,
-    RuntimeBundleBuildRecord,
     build_runtime_bundle,
     bundle_manifest_snippet,
     load_runtime_build_recipes,
@@ -392,7 +393,7 @@ def test_runtime_recipe_rejects_unsafe_release_inputs() -> None:
         )
 
 
-def test_locked_wheelhouse_install_creates_venv_at_permanent_path(
+def test_locked_wheelhouse_install_without_builder_dependencies_creates_permanent_venv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     wheel = b"reviewed-wheel"
@@ -473,6 +474,8 @@ def test_locked_wheelhouse_install_creates_venv_at_permanent_path(
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setitem(sys.modules, "whoopy.model_packs.runtime_builder", None)
+    monkeypatch.setitem(sys.modules, "packaging", None)
     status = service.install(
         "test-runtime",
         offline_directory=tmp_path,

@@ -423,7 +423,8 @@ class LocalWorker:
         memory = PeakProcessTreeMemory()
         memory.start()
         load_elapsed_seconds: float | None = None
-        load_unavailable_reason = "adapter does not expose a separate load-complete signal"
+        load_unavailable_reason = "all speech segments were restored from cache or checkpoints"
+        model_prepared = False
         inference_elapsed_seconds = 0.0
         inference_calls = 0
         inference_audio_seconds = 0.0
@@ -446,19 +447,6 @@ class LocalWorker:
                     ),
                 )
             heartbeat.start()
-            prepare = getattr(self.synthesizer, "prepare", None)
-            if callable(prepare):
-                running = self._save_running_progress(
-                    running,
-                    recovery,
-                    stage=RunStage.MODEL_STARTUP,
-                    message="Loading and validating the speech model.",
-                )
-                load_unavailable_reason = "model load did not complete successfully"
-                load_started = time.perf_counter()
-                prepared = prepare()
-                if prepared is not False:
-                    load_elapsed_seconds = time.perf_counter() - load_started
             timeline = self._load_or_build_timeline(running)
             speech_segments = [
                 segment for segment in timeline.segments if isinstance(segment, SpeechSegment)
@@ -539,6 +527,31 @@ class LocalWorker:
                             stage=RunStage.SYNTHESIZING,
                             current_segment_id=segment.id,
                         )
+                        if not model_prepared:
+                            prepare = getattr(self.synthesizer, "prepare", None)
+                            load_unavailable_reason = (
+                                "adapter does not expose a separate load-complete signal"
+                            )
+                            if callable(prepare):
+                                running = self._save_running_progress(
+                                    running,
+                                    recovery,
+                                    stage=RunStage.MODEL_STARTUP,
+                                    current_segment_id=segment.id,
+                                    message="Loading and validating the speech model.",
+                                )
+                                load_unavailable_reason = "model load did not complete successfully"
+                                load_started = time.perf_counter()
+                                prepared = prepare()
+                                if prepared is not False:
+                                    load_elapsed_seconds = time.perf_counter() - load_started
+                            model_prepared = True
+                            running = self._save_running_progress(
+                                running,
+                                recovery,
+                                stage=RunStage.SYNTHESIZING,
+                                current_segment_id=segment.id,
+                            )
                         inference_started = time.perf_counter()
                         try:
                             audio = self._synthesize_with_retry(

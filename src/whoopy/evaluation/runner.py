@@ -24,6 +24,7 @@ from whoopy.meditation import (
     LocalMeditationGenerator,
     PromptBundle,
 )
+from whoopy.meditation.blueprints import BlueprintLibrary
 from whoopy.meditation.models import MeditationKind, RawGenerationAttempt
 from whoopy.ports import ScriptGenerator
 
@@ -101,11 +102,13 @@ class BakeoffRunner:
         evaluation_set: EvaluationSet,
         prompts: PromptBundle,
         output_directory: Path,
+        blueprints: BlueprintLibrary | None = None,
         seed: int = 42,
         writing_method: WritingMethod = "plan_first",
     ) -> None:
         self.evaluation_set = evaluation_set
         self.prompts = prompts
+        self.blueprints = blueprints
         self.output_directory = output_directory
         self.seed = seed
         self.writing_method = writing_method
@@ -133,6 +136,7 @@ class BakeoffRunner:
                     generated = LocalMeditationGenerator(
                         adapter,
                         self.prompts,
+                        blueprints=self.blueprints,
                         workspace=workspace,
                     ).generate(
                         prompt=case.prompt,

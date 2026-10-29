@@ -7,7 +7,7 @@ merely because the project version did not change.
 ## Before starting
 
 1. Confirm no Codex agent or developer is still editing the tree.
-2. Finish the frontend build and run the complete quality gate.
+2. Run the complete quality gate.
 3. Confirm no generation, model smoke, corpus, or other heavyweight process is running. MOSS,
    Qwen, Fish, Kokoro, and LLM acceptance must run sequentially.
 4. Preserve failed or superseded evidence under a noncanonical name. Only replace a canonical
@@ -34,9 +34,6 @@ report and rating hashes.
 Run from the repository root:
 
 ```bash
-npm --prefix web ci
-npm --prefix web run check
-npm --prefix web run build
 uv run --extra dev python scripts/check.py
 uv run --extra dev pytest -q \
   tests/test_offline_app_bundle.py \

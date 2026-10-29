@@ -220,11 +220,16 @@ class ManagedModelPacks:
                 " Checkpoint bytes are installed, but the matching isolated runtime "
                 "is still required before this pack can become ready."
             )
-            if self.runtime_packs is not None:
-                runtime_status = self.runtime_packs.inspect(
-                    self.registry.get(pack_id).runtime.runtime_id
-                )
+            runtime_id = self.registry.get(pack_id).runtime.runtime_id
+            if self.runtime_packs is not None and any(
+                runtime.runtime_id == runtime_id for runtime in self.runtime_packs.manifest.runtimes
+            ):
+                runtime_status = self.runtime_packs.inspect(runtime_id)
                 message += f" {runtime_status.message} {runtime_status.remedy or ''}".rstrip()
+            elif runtime_id == "sherpa-onnx":
+                message += (
+                    " Install its pinned runtime with `whoopy models install --profile basic`."
+                )
         return PackOperationReport(
             action="verify",
             pack_id=pack_id,

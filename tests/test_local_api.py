@@ -1312,7 +1312,7 @@ def _delivery_experiment(*, change_voice_identity: bool = False) -> dict[str, ob
     assert isinstance(candidates, list)
     fixed_voice = {
         "configuration_id": "qwen-serena",
-        "model_id": "qwen3-custom-voice-0.6b",
+        "model_id": "qwen3-custom-voice-1.7b",
         "voice_id": "Serena",
         "voice_mode": "preset",
         "language": "English",

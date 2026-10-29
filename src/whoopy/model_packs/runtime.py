@@ -47,6 +47,25 @@ class RuntimePackState(StrEnum):
     INCOMPATIBLE = "incompatible"
 
 
+class RuntimeBundleBuildRecord(BaseModel):
+    """Machine-readable provenance embedded in and emitted beside a bundle."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    runtime_id: str
+    revision: str
+    upstream_repository: str
+    upstream_revision: str
+    target: str
+    python_version: str
+    source_tree_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    requirements_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    wheelhouse: dict[str, str]
+    import_modules: tuple[str, ...]
+    excluded_submodules: dict[str, str] = Field(default_factory=dict)
+
+
 class RuntimeBundleSpec(BaseModel):
     """One immutable release archive for one exact desktop target."""
 
@@ -699,8 +718,6 @@ class ManagedRuntimePacks:
         python_executable: Path | None,
     ) -> None:
         """Create a new venv from a bundle's complete hash-locked wheelhouse."""
-
-        from whoopy.model_packs.runtime_builder import RuntimeBundleBuildRecord
 
         build_root = staging / "_whoopy_bundle"
         descriptor_path = build_root / "build.json"

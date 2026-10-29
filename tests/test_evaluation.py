@@ -190,18 +190,21 @@ def test_bakeoff_keeps_individual_metrics_without_total_score(tmp_path: Path) ->
 def test_peak_memory_sampling_falls_back_to_current_process_when_children_are_hidden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    sampled = threading.Event()
+
     class RestrictedProcess:
         def children(self, *, recursive: bool) -> list[object]:
             assert recursive is True
             raise PermissionError("sandbox denied process enumeration")
 
         def memory_info(self) -> SimpleNamespace:
+            sampled.set()
             return SimpleNamespace(rss=12_345)
 
     monkeypatch.setattr("whoopy.evaluation.runner.psutil.Process", RestrictedProcess)
 
     with _PeakProcessTree() as memory:
-        time.sleep(0.05)
+        assert sampled.wait(2)
 
     assert memory.peak_bytes == 12_345
 
@@ -994,7 +997,7 @@ def test_voice_axis_keeps_delivery_fixed_and_delivery_axis_accepts_typed_route()
                                 update={
                                     "voice": candidate.condition.voice.model_copy(
                                         update={
-                                            "model_id": "qwen3-custom-voice-0.6b",
+                                            "model_id": "qwen3-custom-voice-1.7b",
                                             "voice_id": "Serena",
                                             "configuration_id": "qwen-serena",
                                         }

@@ -171,7 +171,7 @@ class LocalProductionExperimentExecutor:
             backend = cls.VOICE_BACKENDS.get(voices[0].model_id.casefold())
             expressive = backend is not None and (
                 backend.startswith("moss-")
-                or backend.startswith("qwen3-custom-voice-")
+                or backend == "qwen3-custom-voice-1.7b"
                 or backend == "qwen3-voice-design-1.7b"
             )
             if not expressive:
@@ -362,6 +362,18 @@ class LocalProductionExperimentExecutor:
                     ) from error
                 time.sleep(self.poll_seconds)
 
+    FALLBACK_DELIVERY_BACKENDS = frozenset(
+        {"qwen3-custom-voice-0.6b", "qwen3-base-clone-0.6b", "qwen3-base-clone-1.7b"}
+    )
+
+    @classmethod
+    def _effective_delivery(
+        cls, backend: str | None, delivery: str, intensity: str
+    ) -> tuple[str, str]:
+        if backend in cls.FALLBACK_DELIVERY_BACKENDS:
+            return "neutral", "subtle"
+        return delivery, intensity
+
     def _generation_payload(self, request: ProductionTrialRequest) -> dict[str, Any]:
         condition = request.condition
         llm = condition.llm_model_id.casefold()
@@ -420,6 +432,7 @@ class LocalProductionExperimentExecutor:
             ) from error
         speed = pacing_profile.speech_speed
         kind = request.case.category
+        delivery, intensity = self._effective_delivery(backend, voice.delivery, voice.intensity)
         payload: dict[str, Any] = {
             "surface": "lab",
             "writing_method": condition.writing_method,
@@ -431,20 +444,13 @@ class LocalProductionExperimentExecutor:
             "speed": speed,
             "pacing_profile_id": pacing_profile.profile_id,
             "meditation_kind": kind,
-            "delivery": voice.delivery,
-            "intensity": voice.intensity,
+            "delivery": delivery,
+            "intensity": intensity,
             "seed": request.seed,
             "profile": profile,
         }
-        if backend in {
-            "qwen3-custom-voice-0.6b",
-            "qwen3-base-clone-0.6b",
-            "qwen3-base-clone-1.7b",
-        }:
-            # These adapters expose the typed fallback only. Persist the
-            # effective controls in the trial rather than sending an
-            # unsupported shared Lab direction which would fail at synthesis.
-            payload.update({"delivery": "neutral", "intensity": "subtle", "pace": "natural"})
+        if backend in self.FALLBACK_DELIVERY_BACKENDS:
+            payload["pace"] = "natural"
         if (
             request.experiment_type in {"voice", "delivery", "pacing"}
             and request.controlled_source_run_id is not None
@@ -887,8 +893,11 @@ class LocalProductionExperimentExecutor:
         expect(
             "tts.speed", tts.get("speed"), expected_speed if expected_backend == "kokoro" else 1.0
         )
-        expect("tts.delivery_override", tts.get("delivery_override"), voice.delivery)
-        expect("tts.intensity_override", tts.get("intensity_override"), voice.intensity)
+        delivery, intensity = self._effective_delivery(
+            expected_backend, voice.delivery, voice.intensity
+        )
+        expect("tts.delivery_override", tts.get("delivery_override"), delivery)
+        expect("tts.intensity_override", tts.get("intensity_override"), intensity)
         expect("tts.voice_mode", tts.get("voice_mode"), voice.voice_mode)
 
         if expected_backend == "kokoro":
@@ -936,11 +945,11 @@ class LocalProductionExperimentExecutor:
                 request.case.duration_seconds,
                 meditation_kind=cast(MeditationKind, request.case.category),
             ).recipe
+            expect("source.plan.blueprint_id", source_plan.get("blueprint_id"), recipe.versioned_id)
             expect(
-                "source.plan.blueprint_id", source_plan.get("blueprint_id"), recipe.versioned_id
-            )
-            expect(
-                "source.plan.blueprint_version", source_plan.get("blueprint_version"), recipe.version
+                "source.plan.blueprint_version",
+                source_plan.get("blueprint_version"),
+                recipe.version,
             )
         elif request.case.blueprint_id is not None:
             expect(

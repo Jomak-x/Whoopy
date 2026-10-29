@@ -23,6 +23,7 @@ from packaging.utils import canonicalize_name, parse_wheel_filename
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from whoopy.model_packs.operations import ModelPackOperationError
+from whoopy.model_packs.runtime import RuntimeBundleBuildRecord
 
 
 class RuntimeBuildRecipe(BaseModel):
@@ -110,25 +111,6 @@ class RuntimeBuildRecipes(BaseModel):
         if len(identifiers) != len(set(identifiers)):
             raise ValueError("runtime build recipe IDs must be unique")
         return self
-
-
-class RuntimeBundleBuildRecord(BaseModel):
-    """Machine-readable provenance embedded in and emitted beside a bundle."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    schema_version: Literal[1] = 1
-    runtime_id: str
-    revision: str
-    upstream_repository: str
-    upstream_revision: str
-    target: str
-    python_version: str
-    source_tree_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    requirements_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    wheelhouse: dict[str, str]
-    import_modules: tuple[str, ...]
-    excluded_submodules: dict[str, str] = Field(default_factory=dict)
 
 
 class RuntimeBundleBuildResult(BaseModel):

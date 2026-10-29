@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
+from whoopy.model_packs import ManagedRuntimePacks, ModelPackManifest, ModelPackRegistry
 from whoopy.model_packs.manager import ManagedModelPacks, SmokeResult
 from whoopy.model_packs.operations import (
     AcceleratorUsage,
@@ -569,6 +570,44 @@ def test_same_process_contention_is_also_refused(tmp_path: Path) -> None:
         assert time.monotonic() - started < 1
     finally:
         first.release()
+
+
+@pytest.mark.parametrize(
+    ("runtime_id", "remedy"),
+    [
+        ("sherpa-onnx", "whoopy models install --profile basic"),
+        ("fish-speech", "runtime install fish-speech"),
+    ],
+)
+def test_verify_missing_runtime_preserves_matching_installer_remedy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runtime_id: str, remedy: str
+) -> None:
+    monkeypatch.setattr("whoopy.model_packs.runtime.current_runtime_target", lambda: "darwin-arm64")
+    service, offline = _managed_service(tmp_path)
+    service.install("test-pack", offline_directory=offline, allow_network=False)
+    pack = service.registry.get("test-pack")
+    runtime_directory = service.registry.runtime_directory(pack)
+    assert runtime_directory is not None
+    (runtime_directory / "python").unlink()
+    pack = pack.model_copy(
+        update={"runtime": pack.runtime.model_copy(update={"runtime_id": runtime_id})}
+    )
+    service.registry = ModelPackRegistry(
+        ModelPackManifest(schema_version=1, packs=[pack]), service.models_root
+    )
+    service.runtime_packs = ManagedRuntimePacks.from_path(
+        Path("config/runtime_packs.yaml"), models_root=service.models_root
+    )
+
+    verified = service.verify("test-pack")
+
+    assert verified.state == "installed"
+    assert verified.status is not None
+    assert any(
+        check.check == "isolated_runtime_files" and not check.passed
+        for check in verified.status.checks
+    )
+    assert remedy in verified.message
 
 
 def test_managed_facade_installs_offline_verifies_and_restores(tmp_path: Path) -> None:

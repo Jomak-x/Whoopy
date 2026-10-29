@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import signal
 import socket
 from datetime import UTC, datetime, timedelta
@@ -608,7 +609,9 @@ class _InterruptOnceDraft(_DraftFixture):
         return super().generate(request)
 
 
+@pytest.mark.parametrize("configuration", ["checkout", "installed", "explicit"])
 def test_draft_command_persists_validated_local_generation(
+    configuration: str,
     tmp_path: Path,
     capsys: CaptureFixture[str],
     monkeypatch: MonkeyPatch,
@@ -629,12 +632,29 @@ def test_draft_command_persists_validated_local_generation(
         classmethod(lambda _cls, **_kwargs: _DraftFixture()),
     )
     output_dir = tmp_path / "drafts"
+    config_args: list[str] = []
+    if configuration != "checkout":
+        installed_prefix = tmp_path / "installed"
+        installed_config = installed_prefix / "share" / "whoopy" / "config"
+        shutil.copytree(Path("config"), installed_config)
+        monkeypatch.setattr("sys.prefix", str(installed_prefix))
+        if configuration == "explicit":
+            selected_config = tmp_path / "selected-config"
+            shutil.copytree(installed_config, selected_config)
+            blueprint_path = selected_config / "meditation_blueprints.yaml"
+            library = yaml.safe_load(blueprint_path.read_text())
+            for blueprint in library["blueprints"]:
+                blueprint["version"] = 9
+            blueprint_path.write_text(yaml.safe_dump(library))
+            config_args = ["--config-dir", str(selected_config)]
+        monkeypatch.chdir(tmp_path)
 
     assert (
         main(
             [
                 "draft",
                 "A gentle grounding pause.",
+                *config_args,
                 "--minutes",
                 "1",
                 "--profile",
@@ -652,6 +672,8 @@ def test_draft_command_persists_validated_local_generation(
     output = json.loads(capsys.readouterr().out)
     draft = output_dir / output["draft_id"]
     assert output["sections"] == 3
+    plan = json.loads((draft / "plan.json").read_text())
+    assert plan["blueprint_id"] == f"grounding@{9 if configuration == 'explicit' else 1}"
     assert (draft / "request.json").is_file()
     assert (draft / "plan.json").is_file()
     assert (draft / "script.md").is_file()

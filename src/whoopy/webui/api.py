@@ -9,7 +9,7 @@ import re
 import tempfile
 import threading
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, TypeVar
@@ -657,10 +657,13 @@ class _LabApiService:
             control["halt_action"] = action
             active_run_id = control.get("active_run_id")
             if control.get("status") == "queued":
-                with suppress(EvaluationExecutionError):
+                try:
                     self.queue.cancel(experiment_id=experiment_id, experiment_version=version)
-                control["status"] = target
-                control["halt_action"] = None
+                except EvaluationExecutionError:
+                    pass
+                else:
+                    control["status"] = target
+                    control["halt_action"] = None
             self._save_control(key, control)
         if isinstance(active_run_id, str):
             self.application.cancel_task(active_run_id)
@@ -769,10 +772,12 @@ class _LabApiService:
                     experiment_version=current.version,
                     failure=f"{type(error).__name__}: {error}"[:2_000],
                 )
-            entry = self.queue.start_next()
-            if entry is None:
-                return
-            current = self.definition(entry.experiment_id, entry.experiment_version)
+            with self._worker_lock:
+                entry = self.queue.start_next()
+                if entry is None:
+                    self._worker = None
+                    return
+                current = self.definition(entry.experiment_id, entry.experiment_version)
 
     def _evaluation_set(self, definition: ExperimentDefinition) -> EvaluationSet:
         return self.evaluation_set_by_id(

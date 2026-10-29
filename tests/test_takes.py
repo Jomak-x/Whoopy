@@ -280,3 +280,78 @@ def test_incompatible_takes_do_not_replace_checkpoint_or_selection(
     }
     assert after == before
     assert takes.selected(RUN_ID, "speech-0001") == original.take_id
+
+
+@pytest.mark.parametrize("change", ["text", "delivery"])
+def test_alternative_generation_retains_current_audio_after_an_edit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    store, _audio = _completed_run(tmp_path / "runs")
+    takes = SegmentTakeStore(store)
+    stale = takes.capture_active(RUN_ID, "speech-0001", source="original")
+    request = (
+        RevisionRequest(script=SCRIPT.replace("Welcome.", "Settle into your chair."))
+        if change == "text"
+        else RevisionRequest(timeline=TimelineEdit(delivery={"speech-0001": "warm"}))
+    )
+    RevisionStore(store).create(RUN_ID, request)
+    segment = next(
+        segment
+        for segment in store.load_timeline(RUN_ID).segments
+        if segment.id == "speech-0001" and segment.type == "SPEECH"
+    )
+    checkpoints = SegmentCheckpointStore(store)
+    current_audio = PcmAudio(b"\x40\x00" * 480, 24_000)
+    current_checkpoint = checkpoints.completed_checkpoint(
+        run_id=RUN_ID,
+        segment_id=segment.id,
+        cache_key=cache_key_for(segment, ProcessedSpeechSynthesizer(FixtureSpeechSynthesizer())),
+        audio=current_audio,
+        attempt_count=2,
+        cache_hit=False,
+        started_at=NOW,
+        completed_at=NOW,
+    )
+    checkpoints.save(current_checkpoint, audio=current_audio)
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=Path("runs"),
+    )
+    alternative_audio = PcmAudio(b"\x50\x00" * 480, 24_000)
+
+    def regenerate(run_id: str, segment_id: str) -> dict[str, str]:
+        selected = takes.selected(run_id, segment_id)
+        assert selected is not None and selected != stale.take_id
+        selected_manifest = next(
+            take for take in takes.list(run_id, segment_id) if take.take_id == selected
+        )
+        assert selected_manifest.cache_key == current_checkpoint.cache_key
+        checkpoints.save(
+            checkpoints.completed_checkpoint(
+                run_id=RUN_ID,
+                segment_id=segment.id,
+                cache_key=current_checkpoint.cache_key,
+                audio=alternative_audio,
+                attempt_count=3,
+                cache_hit=False,
+                started_at=NOW,
+                completed_at=NOW,
+            ),
+            audio=alternative_audio,
+        )
+        return {"run_id": run_id}
+
+    monkeypatch.setattr(application, "regenerate_segment", regenerate)
+    monkeypatch.setattr("whoopy.webui.server.threading.Thread.start", lambda _thread: None)
+    result = application.generate_alternative_take(str(RUN_ID), segment.id)
+    assert result is not None
+    selected = result["selected_take_id"]
+    takes.capture_active(
+        RUN_ID, segment.id, source="production_regeneration", select_if_unset=False
+    )
+    takes.choose(RUN_ID, segment.id, selected, action="restore")
+    assert checkpoints.audio_path(RUN_ID, segment.id).read_bytes() == current_audio.pcm_s16le
+    assert takes.selected(RUN_ID, segment.id) == selected
+    assert len(takes.list(RUN_ID, segment.id)) == 3

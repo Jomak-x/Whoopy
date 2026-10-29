@@ -8,6 +8,7 @@ from typing import Literal, get_args
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from whoopy.locations import default_config_directory
 from whoopy.meditation.models import (
     BreathMode,
     EndingBehavior,
@@ -95,8 +96,9 @@ class BlueprintLoadError(ValueError):
 
 
 def load_blueprint_library(
-    path: Path = Path("config/meditation_blueprints.yaml"),
+    path: Path | None = None,
 ) -> BlueprintLibrary:
+    path = path if path is not None else default_config_directory() / "meditation_blueprints.yaml"
     try:
         return BlueprintLibrary.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
     except (OSError, ValidationError, yaml.YAMLError) as error:

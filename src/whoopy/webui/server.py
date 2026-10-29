@@ -390,6 +390,12 @@ class LocalWebApplication:
                     raise ValueError(
                         "Wait for the active model or runtime operation before generating."
                     )
+            with self._task_lock:
+                if any(task.active for task in self._tasks.values()):
+                    raise ValueError(
+                        "One local generation worker is already active. "
+                        "Wait, cancel it, or resume later."
+                    )
             yield
 
     @contextmanager
@@ -1788,11 +1794,6 @@ class LocalWebApplication:
         # Allocating the UUID and record before the child begins means the UI
         # can follow this run through planning and even after a web restart.
         with self._admit_generation(), self._task_lock:
-            if any(active.active for active in self._tasks.values()):
-                raise ValueError(
-                    "One local generation worker is already active. "
-                    "Wait, cancel it, or resume later."
-                )
             store = RunStore(self.runs_directory)
             if _resume_run_id is None:
                 record = store.create(text, audience=durable_audience)
@@ -2054,11 +2055,10 @@ class LocalWebApplication:
         if self._record(run_id) is None:
             return None
         takes = SegmentTakeStore(RunStore(self.runs_directory))
-        existing = takes.list(run_id, segment_id)
-        original = (
-            existing[0] if existing else takes.capture_active(run_id, segment_id, source="original")
+        original = takes.capture_active(
+            run_id, segment_id, source="original", select_if_unset=False
         )
-        selected = takes.selected(run_id, segment_id) or original.take_id
+        selected = takes.choose(run_id, segment_id, original.take_id).selected_take_id
         task = self.regenerate_segment(run_id, segment_id)
         if task is None:
             return None
@@ -2326,8 +2326,6 @@ class LocalWebApplication:
     ) -> dict[str, Any]:
         task = GenerationTask(task_id=run_id, run_id=run_id, mode="plan_regeneration")
         with self._admit_generation(), self._task_lock:
-            if any(active.active for active in self._tasks.values()):
-                raise ValueError("One local generation worker is already active.")
             self._tasks[run_id] = task
         input_root = self.runs_directory / run_id / "history" / "editor-inputs"
         input_root.mkdir(parents=True, exist_ok=True)

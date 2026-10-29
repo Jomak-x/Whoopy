@@ -14,7 +14,7 @@ from whoopy.audio.models import PcmAudio
 from whoopy.audio.processing import SpeechProcessingSettings
 from whoopy.audio.synthesis import TransientSynthesisError
 from whoopy.pipeline.generation import RunModelMetadata, ScriptRunConfig, TTSRunSettings
-from whoopy.pipeline.runs import RunStage, RunStatus, RunStore
+from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore
 from whoopy.pipeline.worker import (
     LocalWorker,
     RetryPolicy,
@@ -429,3 +429,49 @@ def test_directory_flush_failure_preserves_committed_progress(
     )
     assert saved.execution is not None
     assert saved.execution.stage is RunStage.ASSEMBLING
+
+
+@pytest.mark.parametrize("reuse", ["checkpoint", "shared_cache"])
+def test_worker_prepares_only_when_speech_needs_synthesis(tmp_path: Path, reuse: str) -> None:
+    events: list[str] = []
+
+    class LazySynthesizer(FixtureSpeechSynthesizer):
+        unavailable = False
+
+        def prepare(self) -> None:
+            events.append("prepare")
+            if self.unavailable:
+                raise RuntimeError("model cannot fit in memory")
+
+        def synthesize(self, segment: SpeechSegment) -> PcmAudio:
+            events.append(segment.id)
+            return super().synthesize(segment)
+
+    store = RunStore(tmp_path / "runs")
+    store.create("Breathe slowly.", run_id=RUN_ID, created_at=START)
+    synthesizer = LazySynthesizer()
+    completed = LocalWorker(store, synthesizer=synthesizer).process(RUN_ID)
+    assert events == ["prepare", "speech-0001", "speech-0002"]
+    events.clear()
+    synthesizer.unavailable = True
+    worker = LocalWorker(store, synthesizer=synthesizer)
+    if reuse == "checkpoint":
+        store.save(
+            completed.transition(
+                RunStatus.INTERRUPTED,
+                updated_at=datetime.now(UTC),
+                execution=RunExecution(
+                    stage=RunStage.ASSEMBLING, interruption_kind="test_reassembly"
+                ),
+            )
+        )
+        result = worker.resume(RUN_ID)
+        assert result.recovery is not None
+        assert result.recovery.checkpoint_reuses == 2
+    else:
+        other = store.create("Breathe slowly.", created_at=START)
+        result = worker.process(other.run_id)
+        assert result.recovery is not None
+        assert result.recovery.cache_hits == 2
+    assert result.status is RunStatus.COMPLETED
+    assert events == []

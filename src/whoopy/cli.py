@@ -60,6 +60,7 @@ from whoopy.meditation import (
     GenerationWorkspace,
     LocalMeditationGenerator,
     MeditationPlan,
+    load_blueprint_library,
     load_prompt_bundle,
 )
 from whoopy.meditation.models import MeditationKind
@@ -2141,6 +2142,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             generated = LocalMeditationGenerator(
                 adapter,
                 load_prompt_bundle(args.config_dir / "prompts"),
+                blueprints=load_blueprint_library(args.config_dir / "meditation_blueprints.yaml"),
                 max_parallel_sections=args.parallel_sections,
                 workspace=workspace,
             ).generate(
@@ -2195,6 +2197,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             runner = BakeoffRunner(
                 evaluation_set=evaluation_set,
                 prompts=prompts,
+                blueprints=load_blueprint_library(args.config_dir / "meditation_blueprints.yaml"),
                 output_directory=args.output_dir,
                 seed=args.seed,
                 writing_method=args.writing_method,
@@ -2731,6 +2734,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                             generated = LocalMeditationGenerator(
                                 llm,
                                 prompts,
+                                blueprints=load_blueprint_library(
+                                    args.config_dir / "meditation_blueprints.yaml"
+                                ),
                                 max_parallel_sections=args.parallel_sections,
                                 # Kokoro's speech rate scales approximately with this input.
                                 articulation_words_per_minute=_planning_words_per_minute(
@@ -3066,6 +3072,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             generated = LocalMeditationGenerator(
                 llm,
                 prompts,
+                blueprints=load_blueprint_library(blueprint_path),
                 max_parallel_sections=pending.max_parallel_sections,
                 articulation_words_per_minute=base_plan.words_per_minute,
                 workspace=workspace,

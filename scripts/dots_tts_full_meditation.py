@@ -21,8 +21,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-import numpy as np  # type: ignore[import-not-found]
-import soundfile as sf  # type: ignore[import-not-found]
+if TYPE_CHECKING:
+    import numpy as np  # type: ignore[import-not-found]
 
 if TYPE_CHECKING or __package__:
     from scripts.raw_voice_bakeoff import Event, parse_script
@@ -49,6 +49,8 @@ def sha256(path: Path) -> str:
 def load_inputs(
     *, script: Path, reference: Path, reference_report: Path
 ) -> tuple[list[Event], str, dict[str, object]]:
+    import soundfile as sf  # type: ignore[import-not-found]
+
     events = parse_script(script.read_text(encoding="utf-8"))
     speech_count = sum(event.kind == "speech" for event in events)
     silence_count = sum(event.kind == "silence" for event in events)
@@ -126,6 +128,8 @@ def plan_document(
 
 
 def validate_raw_waveform(waveform: np.ndarray, *, speech_id: str) -> tuple[float, float]:
+    import numpy as np  # type: ignore[import-not-found]
+
     if waveform.ndim != 1 or waveform.size == 0:
         raise RuntimeError(f"{speech_id}: invalid waveform shape {waveform.shape}")
     if not np.isfinite(waveform).all():
@@ -143,6 +147,9 @@ def assemble_float_wave(
     *, events: list[Event], speech_dir: Path, output: Path
 ) -> dict[str, object]:
     """Copy float32 samples and insert exact authored zeros, without DSP."""
+
+    import numpy as np  # type: ignore[import-not-found]
+    import soundfile as sf  # type: ignore[import-not-found]
 
     output.parent.mkdir(parents=True, exist_ok=True)
     speech_number = 0
@@ -217,11 +224,14 @@ def run_heavyweight(
     output_dir: Path,
     enroll_only: bool,
 ) -> None:
+    try:
+        output_dir.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as error:
+        raise SystemExit("Evidence already exists; use a new output directory.") from error
+
     import mlx.core as mx  # type: ignore[import-not-found]
     from dots_tts_mlx.loader import from_pretrained  # type: ignore[import-not-found]
-    from dots_tts_mlx.profile import SpeakerProfile  # type: ignore[import-not-found]
 
-    output_dir.mkdir(parents=True, exist_ok=True)
     plan_path = output_dir / "plan.json"
     plan_path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     profile_dir = output_dir / "voxcpm2-deep-male.dtprofile"
@@ -229,22 +239,12 @@ def run_heavyweight(
     load_started = time.perf_counter()
     model = from_pretrained(model_path, dtype=mx.bfloat16).model
     load_seconds = time.perf_counter() - load_started
-    if profile_dir.exists():
-        profile = SpeakerProfile.load(profile_dir)
-        compat_hash = getattr(model, "_compat_hash", None)
-        if not compat_hash:
-            raise RuntimeError("loaded dots.tts model exposes no compatibility hash")
-        profile.check_compat(compat_hash)
-        enrolled = False
-        enrollment_seconds = 0.0
-    else:
-        enrollment_started = time.perf_counter()
-        profile = model.enroll(
-            str(reference), reference_text, speaker_scale=float(cast(float, plan["speaker_scale"]))
-        )
-        profile.save(profile_dir)
-        enrollment_seconds = time.perf_counter() - enrollment_started
-        enrolled = True
+    enrollment_started = time.perf_counter()
+    profile = model.enroll(
+        str(reference), reference_text, speaker_scale=float(cast(float, plan["speaker_scale"]))
+    )
+    profile.save(profile_dir)
+    enrollment_seconds = time.perf_counter() - enrollment_started
 
     enrollment_receipt = {
         "schema_version": SCHEMA_VERSION,
@@ -258,7 +258,7 @@ def run_heavyweight(
         "reference_sha256": sha256(reference),
         "reference_text": reference_text,
         "model_load_seconds": load_seconds,
-        "enrolled_during_this_run": enrolled,
+        "enrolled_during_this_run": True,
         "enrollment_seconds": enrollment_seconds,
         "mlx_peak_bytes": int(mx.get_peak_memory()),
     }
@@ -267,6 +267,9 @@ def run_heavyweight(
     )
     if enroll_only:
         return
+
+    import numpy as np  # type: ignore[import-not-found]
+    import soundfile as sf  # type: ignore[import-not-found]
 
     speech_dir = output_dir / "speech"
     speech_dir.mkdir(parents=True, exist_ok=True)
@@ -283,9 +286,6 @@ def run_heavyweight(
         speech_id = f"speech-{index:04d}"
         output = speech_dir / f"{speech_id}.wav"
         report_path = speech_dir / f"{speech_id}.json"
-        if output.exists() and report_path.exists():
-            # Completed raw segments are immutable checkpoints.
-            continue
         started = time.perf_counter()
         result = model.generate(
             text=event.text,

@@ -273,21 +273,19 @@ def download(names: list[str]) -> None:
         save(OUT / f"{name}-download.json", {"repo": repo, "revision": revision, "files": files})
 
 
-def run(name: str, seed: int) -> None:
+def run(name: str, seed: int, *, output_dir: Path | None = None) -> None:
+    family, settings = CANDIDATES[name]
+    settings = dict(settings)
+    folder = output_dir if output_dir is not None else OUT / name
+    try:
+        folder.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as error:
+        raise SystemExit("Evidence already exists; use a new output directory.") from error
+
     import numpy as np  # type: ignore[import-not-found]
     import psutil
     import soundfile as sf  # type: ignore[import-not-found]
 
-    family, settings = CANDIDATES[name]
-    settings = dict(settings)
-    folder = OUT / name
-    folder.mkdir(parents=True, exist_ok=True)
-    if (folder / "report.json").exists():
-        history = folder / "attempts"
-        history.mkdir(exist_ok=True)
-        (history / f"report-{time.time_ns()}.json").write_bytes(
-            (folder / "report.json").read_bytes()
-        )
     report: dict[str, Any] = {
         "candidate": name,
         "seed": seed,
@@ -644,14 +642,14 @@ def main() -> None:
     p.add_argument("action", choices=["download", "run"])
     p.add_argument("names", nargs="+")
     p.add_argument("--seed", type=int, default=20261028)
+    p.add_argument("--output-dir", type=Path, help="fresh candidate folder for a run")
     args = p.parse_args()
-    OUT.mkdir(parents=True, exist_ok=True)
     if args.action == "download":
         download(args.names)
     else:
         if len(args.names) != 1:
             p.error("run exactly one candidate per process")
-        run(args.names[0], args.seed)
+        run(args.names[0], args.seed, output_dir=args.output_dir)
 
 
 if __name__ == "__main__":

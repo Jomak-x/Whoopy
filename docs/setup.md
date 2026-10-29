@@ -33,9 +33,6 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Node 20+ is a contributor-only prerequisite for rebuilding `web/`. The bundled application under
-`src/whoopy/webui/static/` runs without Node.
-
 Platform notes:
 
 - **Windows x64:** use a native x64 PowerShell session (not WSL for Windows acceptance), install
@@ -576,15 +573,6 @@ decode evidence for every run.
 uv run --extra dev python scripts/check.py
 ```
 
-This runs Ruff lint and formatting, strict mypy, and pytest. To change the frontend:
-
-```bash
-cd web
-npm install
-npm run build
-```
-
-The build output must be copied/generated into the bundled package location by the project's build
-workflow before end users can see it. Do not run a separate Node service for product testing.
+This runs Ruff lint and formatting, strict mypy, and pytest.
 
 If setup fails, continue with [troubleshooting](troubleshooting.md).

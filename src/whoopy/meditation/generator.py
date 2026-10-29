@@ -43,12 +43,11 @@ from whoopy.ports import ScriptGenerationRequest, ScriptGenerator
 from whoopy.timeline import SilenceSegment, Timeline, build_script_timeline
 
 WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
-SLEEP_REQUEST_PATTERN = re.compile(
-    r"\b(?:bedtime|fall asleep|good[\s-]?night|insomnia|sleep|sleeping)\b",
-    re.I,
-)
 MEDITATION_KIND_PATTERNS: tuple[tuple[MeditationKind, re.Pattern[str]], ...] = (
-    ("sleep", re.compile(r"\b(?:bedtime|sleep|good[\s-]?night|insomnia)\b", re.I)),
+    (
+        "sleep",
+        re.compile(r"\b(?:bedtime|fall asleep|good[\s-]?night|insomnia|sleep|sleeping)\b", re.I),
+    ),
     ("body_scan", re.compile(r"\bbody[\s-]?scan\b", re.I)),
     ("self_compassion", re.compile(r"\bself[\s-]?compassion\b", re.I)),
     ("loving_kindness", re.compile(r"\b(?:loving[\s-]?kindness|goodwill)\b", re.I)),
@@ -519,9 +518,7 @@ def _validate_plan_for_request(
     if plan.sections[0].technique != "arrival":
         raise ValueError("the first section technique must be 'arrival'")
     expected_ending = (
-        "sleep_transition"
-        if meditation_kind == "sleep" or SLEEP_REQUEST_PATTERN.search(prompt)
-        else "return"
+        "sleep_transition" if _kind_for_request(prompt, meditation_kind) == "sleep" else "return"
     )
     if plan.sections[-1].technique != expected_ending:
         raise ValueError(
@@ -704,12 +701,7 @@ def _allocate_plan(
                 maximum_words=max(8, round(target_words * 1.35)),
             )
         )
-    if meditation_kind is None:
-        meditation_kind = "focused_attention"
-        for candidate, pattern in MEDITATION_KIND_PATTERNS:
-            if pattern.search(prompt):
-                meditation_kind = candidate
-                break
+    meditation_kind = _kind_for_request(prompt, meditation_kind)
     blueprint = (blueprints or load_blueprint_library()).for_kind(meditation_kind)
     beat_sequences: dict[int, tuple[str, ...]] = {
         3: ("arrival", "practice", "ending"),
@@ -746,6 +738,7 @@ class LocalMeditationGenerator:
         adapter: ScriptGenerator,
         prompts: PromptBundle,
         *,
+        blueprints: BlueprintLibrary | None = None,
         max_validation_attempts: int = 3,
         max_parallel_sections: int = 1,
         articulation_words_per_minute: int = 123,
@@ -760,6 +753,7 @@ class LocalMeditationGenerator:
             raise ValueError("articulation_words_per_minute must be between 80 and 220")
         self.adapter = adapter
         self.prompts = prompts
+        self.blueprints = blueprints
         self.max_validation_attempts = max_validation_attempts
         self.max_parallel_sections = max_parallel_sections
         self.articulation_words_per_minute = articulation_words_per_minute
@@ -900,6 +894,7 @@ class LocalMeditationGenerator:
                 proposed = _blueprint_proposal(
                     prompt=prompt,
                     meditation_kind=meditation_kind,
+                    blueprints=self.blueprints,
                 )
             elif writing_method == "three_candidate_structural_selection":
                 candidates = [
@@ -943,6 +938,7 @@ class LocalMeditationGenerator:
                 focused_proposal,
                 duration_seconds,
                 articulation_words_per_minute=self.articulation_words_per_minute,
+                blueprints=self.blueprints,
                 prompt=prompt,
                 meditation_kind=meditation_kind,
             )

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -31,7 +33,7 @@ from whoopy.meditation.generator import (
     _repair_overlong_sentence_boundaries,
     _validate_plan_for_request,
 )
-from whoopy.meditation.models import ProposedPlan
+from whoopy.meditation.models import MeditationKind, ProposedPlan
 from whoopy.meditation.pacing import sentence_word_count, split_sentences
 from whoopy.meditation.prompts import PromptLoadError
 from whoopy.meditation.safety import ContentSafetyError, validate_meditation_text
@@ -1157,3 +1159,45 @@ def test_duration_fitting_can_compress_sentence_rests_without_invalid_section_pa
     ]
     assert all(section.pause_after_ms >= 1_000 for section in fitted_plan.sections)
     assert type(plan).model_validate_json(fitted_plan.model_dump_json()) == fitted_plan
+
+
+@pytest.mark.parametrize("explicit_kind", ["body_scan", "grounding", "breath_awareness"])
+def test_explicit_daytime_kind_controls_validation_and_allocation(explicit_kind: str) -> None:
+    prompt = "I struggle with sleep but want a daytime body scan"
+    kind = cast(MeditationKind, explicit_kind)
+    proposed = _validate_plan_for_request(json.loads(_plan()), prompt=prompt, meditation_kind=kind)
+    plan = _allocate_plan(proposed, 60, prompt=prompt, meditation_kind=kind)
+
+    assert plan.meditation_kind == kind
+    assert plan.ending_behavior == "daytime_reorientation"
+    assert plan.sections[-1].technique == "return"
+    wrong_ending = json.loads(_plan())
+    wrong_ending["sections"][-1]["technique"] = "sleep_transition"
+    with pytest.raises(ValueError, match="final section technique must be 'return'"):
+        _validate_plan_for_request(wrong_ending, prompt=prompt, meditation_kind=kind)
+
+
+@pytest.mark.parametrize("prompt", ["Help me fall asleep", "A sleeping meditation", "Bedtime"])
+def test_inferred_sleep_kind_agrees_with_plan_validation(prompt: str) -> None:
+    value = json.loads(_plan())
+    value["sections"][-1]["technique"] = "sleep_transition"
+    proposed = _validate_plan_for_request(value, prompt=prompt)
+    plan = _allocate_plan(proposed, 60, prompt=prompt)
+
+    assert plan.meditation_kind == "sleep"
+    assert plan.ending_behavior == "sleep_taper"
+
+
+def test_plan_allocation_uses_installed_blueprints_outside_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installed_prefix = tmp_path / "installed"
+    installed_config = installed_prefix / "share" / "whoopy" / "config"
+    shutil.copytree(Path("config"), installed_config)
+    monkeypatch.setattr("sys.prefix", str(installed_prefix))
+    monkeypatch.chdir(tmp_path)
+
+    plan = _allocate_plan(ProposedPlan.model_validate_json(_plan()), 60, prompt="grounding")
+
+    assert plan.blueprint_id == "grounding@1"
+    assert plan.ending_behavior == "daytime_reorientation"

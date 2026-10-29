@@ -1,21 +1,27 @@
-# Whoopy Local V1 requirement-by-requirement audit
+# Historical Whoopy Local V1 requirement-by-requirement audit
 
 Generated 2026-08-05 against authoritative plan SHA-256
 `84bc74e856d96b2769cfc29b9587912aa5e2930939dff5eb5b2a4b66665046d3`.
 
-This is an implementation audit, not a release waiver. `Proven` means current source plus the named
-test or durable receipt proves the requirement on the development Mac. `Implemented` means the
-product path exists but its full platform, hardware, visual, or human scope is not independently
-proven. `External gate` means product code cannot manufacture the required observation. `Model
-gate` means model/runtime acquisition or compatible hardware is still required. The fail-closed
-release authority remains `acceptance-reports/local-v1-status-current.json`.
+This is a retained historical snapshot, not current release certification. Every state and evidence
+reference below describes the 2026-08-05 implementation only. The clean-slate cleanup archived its
+active generation and acceptance receipts, including its consolidated status report, UI QA, offline
+bundle, lifecycle, soak, and interruption evidence. References below to `current` describe their old
+filenames and status at that time, not the current branch.
+
+At the time, `Proven` meant the then-current source plus the named test or durable receipt proved the
+requirement on the development Mac. `Implemented` meant the product path existed but its full
+platform, hardware, visual, or human scope was not independently proven. `External gate` meant
+product code could not manufacture the required observation. `Model gate` meant model/runtime
+acquisition or compatible hardware was still required. There is no active consolidated release
+report now, so the current status fails closed and `local_v1_release_ready` remains false.
 
 ## Product architecture
 
-| ID | Requirement | State | Authoritative evidence or exact gap |
+| ID | Requirement | State | Historical evidence or exact gap |
 |---|---|---|---|
 | ARCH-01 | Permanent Studio and Lab in one local browser product | Proven | `web/src/routes/+page.svelte`, `tests/test_local_api.py::test_fastapi_is_versioned_and_serves_the_bundled_product` |
-| ARCH-02 | Bundled SvelteKit static frontend served by versioned FastAPI | Proven | `src/whoopy/webui/static/`, `/api/v1`, `tests/test_frontend_bundle.py`, `tests/test_local_api.py` |
+| ARCH-02 | Bundled SvelteKit static frontend served by versioned FastAPI | Proven | archived bundled UI and package evidence plus `/api/v1` and local API tests |
 | ARCH-03 | Runs/checkpoints/manifests authoritative; SQLite rebuildable | Proven | `src/whoopy/pipeline/`, `src/whoopy/webui/catalog.py`, and catalog/API tests; durable `studio`/`lab`/`system` ownership survives creation, promotion, resume, trash, and restore, while version-keyed experiment/rating/decision rows rebuild from authoritative Lab JSON and schema migration preserves settings |
 | ARCH-04 | Reuse worker, heartbeat, locks, resume, cancel, cache; no second queue stack | Proven | `src/whoopy/pipeline/worker.py`, `locks.py`, `cache.py`; dependency audit shows no Redis/Huey/Postgres/Docker workflow engine |
 | ARCH-05 | `whoopy app` starts API, worker supervision, reconciliation, UI, browser | Proven | `src/whoopy/cli.py`, app/recovery tests, and the lifecycle receipt; startup now reconciles abandoned queued placeholders, and new browser requests persist a checksum-bound launch envelope before worker creation so true pre-launch interruptions can resume with the original validated settings |
@@ -30,7 +36,7 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
 
 ## Canonical meditation plan and pacing
 
-| ID | Requirement | State | Authoritative evidence or exact gap |
+| ID | Requirement | State | Historical evidence or exact gap |
 |---|---|---|---|
 | PLAN-01 | Versioned plan with kind, outcome, blueprint ID/version | Proven | `src/whoopy/meditation/models.py`, `blueprints.py`, `tests/test_meditation.py::test_v2_plan_derives_kind_ending_delivery_and_deterministic_silence` |
 | PLAN-02 | Arrival, development, ending beats and purpose per block | Proven | Blueprint schema/config and meditation tests |
@@ -43,7 +49,7 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
 
 ## Typed timeline and expressive delivery
 
-| ID | Requirement | State | Authoritative evidence or exact gap |
+| ID | Requirement | State | Historical evidence or exact gap |
 |---|---|---|---|
 | TIME-01 | Clean speech text with typed delivery values and intensity | Proven | `src/whoopy/timeline/models.py`, `test_delivery_controls_are_typed_and_never_enter_spoken_text` |
 | TIME-02 | Typed language, preset/reference/designed mode, pronunciation, neutral pace | Proven | timeline/ports models and adapter contract tests |
@@ -57,7 +63,7 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
 
 ## PR 15 — real selectable model output
 
-| ID | Requirement | State | Authoritative evidence or exact gap |
+| ID | Requirement | State | Historical evidence or exact gap |
 |---|---|---|---|
 | P15-01 | Reproduce MOSS failure with logs, memory, output, stage | Implemented | structured worker/smoke evidence paths exist; current Mac is resource-blocked, so compatible-hardware reproduction remains a model gate |
 | P15-02 | Separate installed files, runtime probe, current-revision playable synthesis | Proven | model-pack state/schema and readiness tests; consolidated status correctly fails Fish/MOSS |
@@ -71,7 +77,7 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
 
 ## PR 16 — production model system
 
-| ID | Requirement | State | Authoritative evidence or exact gap |
+| ID | Requirement | State | Historical evidence or exact gap |
 |---|---|---|---|
 | P16-01 | Clean pinned resumable isolated Fish/MOSS/Qwen installers | Model gate | deterministic builder/installer plus Studio runtime list/install/resume/verify APIs and UI exist; reviewed per-target locks/wheelhouses and approved Qwen revision remain absent |
 | P16-02 | Qwen 0.6B/1.7B CustomVoice | Implemented | registry, adapter and integration contracts; release runtime evidence missing |
@@ -87,7 +93,7 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
 
 ## PR 17 — Meditation Engine V2
 
-| ID | Requirement | State | Authoritative evidence or exact gap |
+| ID | Requirement | State | Historical evidence or exact gap |
 |---|---|---|---|
 | P17-01 | Eleven original reviewed blueprints | Proven | `config/meditation_blueprints.yaml`, bundled loader, exact-set test |
 | P17-02 | Arrival → instruction → quiet → reminder → deeper quiet → ending | Proven | blueprint validation and corpus structural receipts |
@@ -102,7 +108,7 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
 
 ## PR 18 — permanent Studio
 
-| ID | Requirement | State | Authoritative evidence or exact gap |
+| ID | Requirement | State | Historical evidence or exact gap |
 |---|---|---|---|
 | P18-01 | First-run hardware/model setup | Proven | setup card, hardware/readiness endpoints, UI tests/checker |
 | P18-02 | Prompt and authored-script creation | Proven | generation API and lifecycle receipt |
@@ -118,7 +124,7 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
 
 ## PR 19 — editor and finished workflow
 
-| ID | Requirement | State | Authoritative evidence or exact gap |
+| ID | Requirement | State | Historical evidence or exact gap |
 |---|---|---|---|
 | P19-01 | Separate Plan/Script/Timeline/Delivery/Listen views | Proven | Svelte run-detail tabs and artifact endpoints |
 | P19-02 | Immutable revisions, compare/restore | Proven | `revisions.py`, revision API/UI/tests |
@@ -135,7 +141,7 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
 
 ## PR 20 — Evaluation Lab
 
-| ID | Requirement | State | Authoritative evidence or exact gap |
+| ID | Requirement | State | Historical evidence or exact gap |
 |---|---|---|---|
 | P20-01 | `/lab` uses production APIs/adapters/artifacts | Proven | shared FastAPI control plane and `LocalProductionExperimentExecutor` tests; Lab production runs retain durable `lab` ownership through queued/active promotion and resume, stay out of Studio, and remain directly inspectable/recoverable |
 | P20-02 | Controlled LLM comparison | Proven | production report plus frozen-control/provenance tests |
@@ -156,7 +162,7 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
 
 ## PR 21 — cross-platform release and acceptance
 
-| ID | Requirement | State | Authoritative evidence or exact gap |
+| ID | Requirement | State | Historical evidence or exact gap |
 |---|---|---|---|
 | P21-01 | One documented install/launch path on five desktop targets | Implemented | setup/native-portability docs, portable `{python}` acceptance commands, and five-target CI workflow; the final darwin-arm64 bundle installs and launches outside the checkout, while other targets remain independently unobserved |
 | P21-02 | Bundled frontend; no end-user Node process | Proven | wheel/package freshness gate, frontend bundle tests, and the fresh-installed lifecycle receipt |
@@ -171,7 +177,7 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
 
 ## Acceptance gates
 
-| ID | Gate | Current result | Exact remaining action |
+| ID | Gate | Historical result | Exact remaining action |
 |---|---|---|---|
 | GATE-01 | Every Studio-selectable model produces real output where declared | Failed | Complete Fish's reviewed isolated runtime and current production smoke. Kokoro passes; MOSS is disabled with a proven, actionable resource incompatibility on this Mac |
 | GATE-02 | MOSS cannot be ready from files/history alone | Passed in implementation | Three-part current-machine/current-revision readiness is enforced and tested |
@@ -205,4 +211,5 @@ release authority remains `acceptance-reports/local-v1-status-current.json`.
    targets. The development macOS ARM64 final bundle already has renewed digest-bound desktop and
    390x844 QA after the model-role UI change.
 
-Until all five groups are evidenced, `local_v1_release_ready` must remain false.
+The historical status was already fail-closed. The current branch also remains fail-closed until all
+required evidence is regenerated from the current implementation.
