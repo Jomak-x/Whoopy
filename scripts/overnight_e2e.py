@@ -37,6 +37,40 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 
+def freeze_writer_inputs(plan: dict[str, Any], config: Path) -> dict[str, Any]:
+    """Freeze an explicit experimental lock without editing source configuration."""
+    from whoopy.artifacts import load_artifact_lock
+
+    effective_lock = config / "artifacts.yaml"
+    requested_lock = plan.get("writer_artifact_lock")
+    original_lock = None
+    if requested_lock is not None:
+        original_lock = Path(requested_lock).absolute()
+        if original_lock.is_symlink() or not original_lock.is_file():
+            raise ValueError("writer_artifact_lock must name an existing regular file")
+        original_sha256 = digest(original_lock)
+        temporary = config / f".writer-artifacts-{uuid4().hex}.yaml"
+        try:
+            shutil.copyfile(original_lock, temporary)
+            if digest(temporary) != original_sha256 or digest(original_lock) != original_sha256:
+                raise ValueError("writer_artifact_lock changed while being frozen")
+            load_artifact_lock(temporary)
+            temporary.replace(effective_lock)
+        finally:
+            temporary.unlink(missing_ok=True)
+    else:
+        load_artifact_lock(effective_lock)
+    models_dir = Path(plan.get("writer_models_dir", Path(plan["assets"]) / "models/managed"))
+    if "writer_models_dir" in plan and not models_dir.is_dir():
+        raise ValueError("writer_models_dir must name an existing installed artifact store")
+    return {
+        "writer_artifact_lock_original_path": str(original_lock) if original_lock else None,
+        "writer_artifact_lock_effective_path": str(effective_lock),
+        "writer_artifact_lock_sha256": digest(effective_lock),
+        "writer_models_dir": str(models_dir.resolve()),
+    }
+
+
 def inventory(root: Path) -> dict[str, dict[str, Any]]:
     return {
         str(p.relative_to(root)): {"bytes": p.stat().st_size, "sha256": digest(p)}
@@ -412,6 +446,9 @@ def main() -> int:
     config = output / "config"
     shutil.copytree(source / "config", config, ignore=shutil.ignore_patterns("local.yaml"))
     try:
+        manifest["writer_inputs"] = freeze_writer_inputs(PLAN, config)
+        effective_models_dir = Path(manifest["writer_inputs"]["writer_models_dir"])
+        save(output / "manifest.json", manifest)
         help_result = subprocess.run(
             [str(python), "-m", "whoopy", "generate", "--help"],
             cwd=output,
@@ -533,7 +570,7 @@ def main() -> int:
                 "--artifact-lock",
                 config / "artifacts.yaml",
                 "--models-dir",
-                Path(PLAN["assets"]) / "models/managed",
+                effective_models_dir,
                 "--tts-model",
                 "kokoro"
                 if kokoro
