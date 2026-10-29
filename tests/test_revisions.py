@@ -866,6 +866,52 @@ def test_generated_pause_edit_renders_and_restores_exact_timing(tmp_path: Path) 
     assert restored_manifest["pcm_sha256"] == manifest["pcm_sha256"]
 
 
+def test_wording_edit_preserves_accepted_generated_pause_timing(tmp_path: Path) -> None:
+    generated = _generated(
+        _plan(), middle_text="Notice the support beneath you and let attention settle here."
+    )
+    first_silence = next(
+        segment for segment in generated.timeline.segments if isinstance(segment, SilenceSegment)
+    )
+    store = _completed_generated_run(tmp_path / "runs", generated)
+    revisions = RevisionStore(store)
+    pause_revision = revisions.create(
+        RUN_ID,
+        RevisionRequest(timeline=TimelineEdit(silence_duration_ms={first_silence.id: 1_000})),
+    )
+    worker = LocalWorker(store)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    pause_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    script = store.load_script(RUN_ID).replace(
+        f"[pause: {first_silence.duration_ms}ms]", "[pause: 1000ms]", 1
+    )
+    edited = revisions.create(
+        RUN_ID,
+        RevisionRequest(script=script.replace("steady support", "comfortable steady support", 1)),
+    )
+    assert edited.change_kind == "script"
+    assert edited.affected_speech_segment_ids == ("speech-0001",)
+    expected = store.load_timeline(RUN_ID)
+    assert expected.preserve_timing is True
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == expected
+    manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    silence_span = next(s for s in manifest["segments"] if s["segment_id"] == first_silence.id)
+    assert silence_span["requested_duration_ms"] == 1_000
+    assert silence_span["actual_duration_ms"] == 1_000
+    with wave.open(str(store.audio_path(RUN_ID)), "rb") as audio:
+        assert manifest["duration_ms"] == pytest.approx(
+            audio.getnframes() * 1_000 / audio.getframerate()
+        )
+    assert manifest["duration_ms"] < 300_000
+    assert manifest["pcm_sha256"] != pause_manifest["pcm_sha256"]
+    revisions.restore(RUN_ID, pause_revision.revision_id)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    assert restored_manifest["duration_ms"] == pause_manifest["duration_ms"]
+    assert restored_manifest["pcm_sha256"] == pause_manifest["pcm_sha256"]
+
+
 def test_pace_edit_resynthesizes_only_changed_speech(tmp_path: Path) -> None:
     synthesized: list[str] = []
 

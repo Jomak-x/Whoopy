@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -68,6 +69,50 @@ def _service(tmp_path: Path, executor: RefusingExecutor) -> _LabApiService:
         environment_status=lambda: {"system": "fixture"},
     )
     return _LabApiService(application=cast(Any, application), executor=executor)
+
+
+def test_windows_control_persistence_allows_lab_worker_to_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from whoopy.evaluation import storage
+    from whoopy.pipeline import runs
+
+    file_flushes: list[int] = []
+    directory_opens: list[Path] = []
+
+    def flush(descriptor: int) -> None:
+        file_flushes.append(descriptor)
+        os.fsync(descriptor)
+
+    def open_directory(path: Path, flags: int) -> int:
+        directory_opens.append(path)
+        raise PermissionError("Windows cannot open a directory with os.open")
+
+    windows = SimpleNamespace(**(vars(os) | {"name": "nt", "open": open_directory, "fsync": flush}))
+    monkeypatch.setattr(storage, "os", windows)
+    monkeypatch.setattr(runs, "os", windows)
+    executor = RefusingExecutor()
+    service = _service(tmp_path, executor)
+    definition = _definition()
+    service.add_definition(definition)
+
+    accepted = service.execute(experiment_id=definition.experiment_id, version=1, case_ids=None)
+    worker = service._worker
+    if worker is not None:
+        worker.join(5)
+        assert not worker.is_alive()
+
+    assert accepted["accepted"] is True
+    assert executor.calls == 1
+    assert directory_opens == []
+    assert len(file_flushes) >= 3
+    persisted = service.repository.load_execution_control(
+        experiment_id=definition.experiment_id, version=1
+    )
+    assert persisted is not None
+    assert persisted["status"] == "incomplete"
+    assert persisted["failure"] == "RuntimeError: fixture refuses inference"
+    assert not list(service.repository.root.rglob("*.tmp"))
 
 
 def test_new_execution_starts_while_idle_worker_thread_is_exiting(

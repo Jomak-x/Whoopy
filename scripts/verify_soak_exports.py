@@ -38,9 +38,12 @@ def verify(receipts_directory: Path, runs_directory: Path) -> dict[str, Any]:
                 raise ValueError("production receipt did not pass quality")
             run_directory = runs_directory / run_id
             narration = run_directory / "narration.wav"
+            narration_sha256 = _sha256(narration)
+            if receipt["artifacts"]["audio"]["sha256"] != narration_sha256:
+                raise ValueError("production receipt audio hash does not match narration.wav")
             manifest_path = run_directory / "exports" / "export-manifest.json"
             manifest = load_export_manifest(manifest_path)
-            if manifest.source_sha256 != _sha256(narration):
+            if manifest.source_sha256 != narration_sha256:
                 raise ValueError("export manifest source hash does not match narration.wav")
             artifacts = {artifact.kind: artifact for artifact in manifest.artifacts}
             if set(artifacts) != REQUIRED_KINDS or len(manifest.artifacts) != 4:

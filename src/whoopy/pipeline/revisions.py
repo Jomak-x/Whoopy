@@ -229,7 +229,7 @@ class RevisionStore:
                             Literal["script_file", "generated_prompt"],
                             old_timeline.source,
                         ),
-                    )
+                    ).model_copy(update={"preserve_timing": old_timeline.preserve_timing})
                     change_kind = "script"
                     changed = True
                     old_speech = {

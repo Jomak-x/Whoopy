@@ -18,6 +18,7 @@ from whoopy.evaluation.models import (
     HumanRating,
     PromotionDecision,
 )
+from whoopy.pipeline.runs import RunStore
 
 
 class EvaluationStorageError(RuntimeError):
@@ -218,11 +219,7 @@ class EvaluationRepository:
             with temporary.open("rb") as stream:
                 os.fsync(stream.fileno())
             temporary.replace(path)
-            directory_descriptor = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_descriptor)
-            finally:
-                os.close(directory_descriptor)
+            RunStore._fsync_directory(path.parent)
         except OSError as error:
             temporary.unlink(missing_ok=True)
             message = f"Could not save Lab execution state {path}: {error}"

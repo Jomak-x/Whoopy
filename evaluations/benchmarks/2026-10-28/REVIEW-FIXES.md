@@ -139,3 +139,21 @@ benchmark receipt or media changed, and no model inference or real-data purge
 was performed. Frontend trees match the original base and source licensing
 remains UNDECIDED. Final repository test/lint/type and GitHub CI gates belong to
 the outer executor.
+
+## Review fixes after 1d000c8
+
+| Finding | Root cause and fix | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-16 | Script compilation reset the persisted explicit-timing policy. Wording revisions now inherit that policy from the previous timeline. | `tests/test_revisions.py`: accepted 1,000 ms pause, wording edit, rerender, WAV/manifest duration agreement, and prior revision restoration. |
+| REVIEW-17 | Mutable Lab control storage duplicated directory-fsync logic without Windows support. It now uses `RunStore._fsync_directory`, retaining file flush and atomic replacement. | `tests/test_lab_execution_boundaries.py`: simulated Windows directory-open refusal still permits durable state updates and worker dispatch. |
+| REVIEW-18 | Soak verification bound exports to current narration but not to the qualified recording. It now also requires the production receipt's audio SHA-256 before counting a case. | `tests/test_soak_exports.py`: intact 20-case synthetic corpus, replaced audio with matching exports, missing/null hashes, and byte-identical retained receipts. |
+
+The focused batch passed **115 tests** in `test_revisions.py`,
+`test_lab_execution_boundaries.py`, `test_lab_evidence.py`, `test_evaluation.py`,
+and `test_soak_exports.py`. It emitted one existing Starlette/httpx deprecation
+warning. Windows directory-open behavior was simulated; this was not a native
+Windows run. Tests used synthetic audio or disposable fixtures; no real
+inference, purge, or historical evidence replacement was performed.
+`git diff --check` passed, and frontend trees still match the original base.
+Source licensing remains unchanged. Final repository test/lint/type and GitHub
+CI gates remain with the outer executor.
