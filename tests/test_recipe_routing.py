@@ -105,6 +105,14 @@ def test_negated_box_breathing_request_routes_natural_breathing(negation: str) -
         "Avoid breath focus or square breathing",
         "Don’t use breath focus or box breathing",
         "No box breathing; no breath focus either",
+        "No box breathing or breath focus, please",
+        "No box breathing and breath focus, please",
+        "No box breathing, or breath focus, please",
+        "No breath focus, or box breathing, please",
+        "No box breathing, breath focus, or breath counting, please",
+        "Don’t use square breathing or breath focus",
+        "Do not use box breathing or breath focus; use contact instead",
+        "Avoid box breathing or breath focus, but include surrounding sounds",
     ],
 )
 def test_compound_breath_exclusions_preserve_external_anchor(prompt: str) -> None:
@@ -112,6 +120,40 @@ def test_compound_breath_exclusions_preserve_external_anchor(prompt: str) -> Non
 
     assert session.breath_excluded
     assert session.anchor == "sound"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "No box breathing, use natural breathing",
+        "No box breathing. Use natural breathing",
+        "No box breathing but use natural breathing",
+        "Don’t use box breathing; use natural breathing",
+        "Don’t use square breathing, but natural breathing is fine",
+        "Avoid box breathing; instead use natural breathing",
+        "No box breathing and use natural breathing",
+        "No box breathing, and focus on natural breathing",
+    ],
+)
+def test_box_only_exclusion_does_not_extend_into_positive_clause(prompt: str) -> None:
+    session = route_session(prompt, 180)
+
+    assert not session.breath_excluded
+    assert session.anchor == "natural_breath"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "No breath focus, but use box breathing",
+        "No box breathing; instead use box breathing",
+        "Don’t use breath focus. Use square breathing",
+        "No breath focus and use box breathing",
+    ],
+)
+def test_positive_box_breathing_after_exclusion_is_still_unsupported(prompt: str) -> None:
+    with pytest.raises(ValueError, match="Box breathing is not supported"):
+        route_session(prompt, 180)
 
 
 @pytest.mark.parametrize(

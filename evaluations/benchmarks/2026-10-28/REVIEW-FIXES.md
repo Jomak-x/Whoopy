@@ -345,3 +345,23 @@ whole-session and cross-process ownership batch passed **227 tests in 2.77
 seconds**. The remaining 217 tests passed in the initial batch. Touched Python
 files were formatted; full repository test/lint/type gates and native
 Linux/Windows execution remain with the outer executor.
+
+## Review fixes after f443aad
+
+All four selected findings were confirmed against current source before editing.
+
+| Finding | Root cause and correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-REPEATED-MARKER-CONTROL-LOSS | Marker matching depended on paragraph topology or unique values. Ordered authored-marker alignment now preserves only unambiguous correspondence, including repeated equal values when another marker changes. | `test_revisions.py`: repeated markers with combined prose/control edits, explicit resets and ambiguity, plus exhaustive short-stream comparison with all optimal alignments. |
+| REVIEW-COMPOUND-BREATH-EXCLUSION-ORDER | Stripping the first negative item discarded negation for later coordinated items. Routing now evaluates independent breath exclusions within original clauses while separating contrastive positive requests. | `test_recipe_routing.py` and `test_recipe_whole_session.py`: both item orders, coordinated punctuation, typographic apostrophes, positive natural-breath clauses and unsupported positive box-breathing requests. |
+| REVIEW-PLAN-REGENERATION-OWNERSHIP | CLI regeneration owned only the final commit, leaving reads and draft persistence exposed to deletion. The shared stable lock now covers reads, drafting and revision activation; the commit implementation accepts existing ownership without nested acquisition. | `test_plan_regeneration_ownership.py`: real CLI with a deterministic generator, spawned deletion contender at read/persistence/activation boundaries, existing-owner refusal and deletion-before-regeneration without path recreation. |
+| REVIEW-ORIGINAL-AUDIO-BINDING | Voice cards verified only the listening copy, despite linking original audio. Both independently hash-bound files must now exist and match before page generation. | `test_listening_review.py`: original/copy replacement, removal and missing hashes reject rebuilding while retaining receipts, remaining audio and the prior page bytes. |
+
+This review phase does not perform live inference, external evidence
+reconciliation, UI/source-license changes, publication or outer pipeline gates.
+Focused verification: **372 passed in 32.87 seconds** across revisions, timeline
+compilation, plan-regeneration ownership, deletion/restoration, admission, recipe
+routing, whole-session generation and listening-page evidence. The ordered-marker
+oracle additionally checked 1,600 pairs of short streams against independently
+enumerated optimal matchings. Touched Python files were formatted. No full
+repository test/lint/type gate, native Linux/Windows run or CI phase ran here.

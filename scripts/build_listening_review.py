@@ -64,9 +64,15 @@ def build(root: Path, *, manifest_path: Path | None = None, output: Path | None 
     random.Random(42).shuffle(records)
     cards = []
     for index, record in enumerate(records):
+        for field, label in (("input", "Original audio"), ("output", "Listening copy")):
+            artifact = local_path(record[field], root)
+            if not artifact.is_file():
+                raise ValueError(f"{label} missing: {artifact}")
+            if not record.get(f"{field}_sha256"):
+                raise ValueError(f"{label} hash missing: {artifact}")
+            if hashlib.sha256(artifact.read_bytes()).hexdigest() != record[f"{field}_sha256"]:
+                raise ValueError(f"{label} changed: {artifact}")
         audio = local_path(record["output"], root)
-        if hashlib.sha256(audio.read_bytes()).hexdigest() != record["output_sha256"]:
-            raise ValueError(f"Listening copy changed: {audio}")
         key = html.escape(record["candidate"], quote=True)
         label = f"Voice {chr(65 + index)}"
         proof = evidence_links(record["original_raw_verification"], record["verification"], root)

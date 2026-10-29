@@ -72,12 +72,16 @@ def benchmark(tmp_path: Path) -> Path:
     for status in ("pass", "review", "fail"):
         audio = listening / f"{status}.wav"
         audio.write_bytes(status.encode())
+        raw = root / "voices" / status / "raw.wav"
+        raw.parent.mkdir(parents=True)
+        raw.write_bytes(f"original {status}".encode())
         records.append(
             {
                 "candidate": f"candidate-{status}",
                 "output": f"{prefix}/verification/listening/{status}.wav",
                 "output_sha256": hashlib.sha256(audio.read_bytes()).hexdigest(),
                 "input": f"{prefix}/voices/{status}/raw.wav",
+                "input_sha256": hashlib.sha256(raw.read_bytes()).hexdigest(),
                 "original_raw_verification": f"{prefix}/verification/original.json",
                 "verification": f"{prefix}/verification/policy-v3/{status}.json",
                 "status": status,
@@ -147,13 +151,45 @@ def test_page_preserves_statuses_and_raw_proof_links(
     assert "Exact paragraph recognition and PCM assembly remain positive evidence" in vox.text
 
 
-def test_page_refuses_changed_listening_copy(benchmark: Path) -> None:
-    (benchmark / "verification/listening/review.wav").write_bytes(b"changed")
+@pytest.mark.parametrize(
+    ("field", "relative_path", "label"),
+    [
+        ("input", "voices/review/raw.wav", "Original audio"),
+        ("output", "verification/listening/review.wav", "Listening copy"),
+    ],
+)
+@pytest.mark.parametrize("damage", ["changed", "missing", "unbound"])
+def test_page_refuses_damaged_voice_audio_and_preserves_evidence(
+    benchmark: Path, field: str, relative_path: str, label: str, damage: str
+) -> None:
+    output = build(benchmark)
+    existing_page = output.read_bytes()
+    audio = benchmark / relative_path
+    manifest = benchmark / "verification/listening/manifest-policy-v3-strict.json"
+    if damage == "changed":
+        audio.write_bytes(b"replacement audio")
+    elif damage == "missing":
+        audio.unlink()
+    else:
+        payload = json.loads(manifest.read_text())
+        record = next(record for record in payload["records"] if record["status"] == "review")
+        del record[f"{field}_sha256"]
+        manifest.write_text(json.dumps(payload))
+    evidence = {
+        path: path.read_bytes()
+        for path in benchmark.rglob("*")
+        if path.is_file() and path != output
+    }
 
-    with pytest.raises(ValueError, match="Listening copy changed"):
+    with pytest.raises(ValueError, match=label):
         build(benchmark)
 
-    assert not (benchmark / "review.html").exists()
+    assert output.read_bytes() == existing_page
+    assert {
+        path: path.read_bytes()
+        for path in benchmark.rglob("*")
+        if path.is_file() and path != output
+    } == evidence
 
 
 @pytest.mark.parametrize("damage", ["changed", "missing"])

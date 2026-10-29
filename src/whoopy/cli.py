@@ -3189,96 +3189,99 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "run" and args.run_command == "regenerate-plan":
         try:
             store = _run_store(args)
-            existing = store.load(args.run_id)
-            if existing.status in (RunStatus.QUEUED, RunStatus.RUNNING):
-                raise RevisionError("Wait for generation to stop before editing the plan.")
-            if existing.source_kind != "generated_prompt":
-                raise RevisionError("Only prompt-generated meditations have drafting context.")
-            revisions = RevisionStore(store)
-            base_revision_id = revisions.active_revision_id(existing.run_id)
-            base_plan = MeditationPlan.model_validate_json(
-                store.plan_path(existing.run_id).read_text(encoding="utf-8")
-            )
-            requested_plan = MeditationPlan.model_validate_json(
-                args.plan_file.read_text(encoding="utf-8")
-            )
-            blueprint_path = args.config_dir / "meditation_blueprints.yaml"
-            normalized_plan = validate_semantic_plan_edit(
-                base_plan,
-                requested_plan,
-                blueprint_path=blueprint_path,
-            )
-            pending = store.load_generation_request(existing.run_id)
-            result, target, artifact_store, _artifacts = _model_plan(
-                args,
-                requested_profile=pending.profile,
-            )
-            if not result.supported or result.selected_profile is None:
-                raise RevisionError("The original local LLM profile is not safe to load now.")
-            if target != pending.target:
-                raise RevisionError("The current machine differs from the saved drafting target.")
-            prompts = load_prompt_bundle(args.config_dir / "prompts")
-            if (
-                prompts.plan.prompt_id != pending.plan_prompt_id
-                or prompts.plan.version != pending.plan_prompt_version
-                or prompts.section.prompt_id != pending.section_prompt_id
-                or prompts.section.version != pending.section_prompt_version
-            ):
-                raise RevisionError(
-                    "Prompt revisions changed since this run; create a new meditation "
-                    "instead of silently mixing drafting contexts."
+            with _interruptible_sigterm(), RunLock(store.run_directory(args.run_id)):
+                existing = store.load(args.run_id)
+                if existing.status in (RunStatus.QUEUED, RunStatus.RUNNING):
+                    raise RevisionError("Wait for generation to stop before editing the plan.")
+                if existing.source_kind != "generated_prompt":
+                    raise RevisionError("Only prompt-generated meditations have drafting context.")
+                revisions = RevisionStore(store)
+                base_revision_id = revisions.active_revision_id(existing.run_id)
+                base_plan = MeditationPlan.model_validate_json(
+                    store.plan_path(existing.run_id).read_text(encoding="utf-8")
                 )
-            artifact_lock = load_artifact_lock(_artifact_lock_path(args))
-            llm = LlamaCppScriptGenerator.from_artifact_store(
-                artifact_lock=artifact_lock,
-                store=artifact_store,
-                profile_name=pending.profile,
-                target=target,
-                device=",".join(result.snapshot.accelerators),
-                settings=_llm_settings_for_writing_method(pending.writing_method),
-            )
-            if llm.metadata != pending.model_metadata.llm:
-                raise RevisionError(
-                    "The local LLM revision or runtime differs from the original run."
+                requested_plan = MeditationPlan.model_validate_json(
+                    args.plan_file.read_text(encoding="utf-8")
                 )
-            regeneration_id = uuid4()
-            workspace = GenerationWorkspace(
-                store.run_directory(existing.run_id)
-                / "history"
-                / "plan-regeneration"
-                / str(regeneration_id)
-            )
-            workspace.save_plan(normalized_plan)
-            generated = LocalMeditationGenerator(
-                llm,
-                prompts,
-                blueprints=load_blueprint_library(blueprint_path),
-                recipes=(
-                    load_recipe_library(args.config_dir / "session_recipes.yaml")
-                    if pending.writing_method == "recipe_whole_session"
-                    else None
-                ),
-                max_parallel_sections=pending.max_parallel_sections,
-                articulation_words_per_minute=base_plan.words_per_minute,
-                workspace=workspace,
-            ).generate(
-                prompt=existing.prompt,
-                duration_seconds=pending.duration_seconds,
-                run_id=existing.run_id,
-                created_at=datetime.now(UTC),
-                seed=pending.seed,
-                meditation_kind=normalized_plan.meditation_kind,
-                writing_method=pending.writing_method,
-            )
-            revision = revisions.create_semantic_plan_revision(
-                existing.run_id,
-                base_plan=base_plan,
-                base_revision_id=base_revision_id,
-                requested_plan=normalized_plan,
-                generated=generated,
-                note=args.note,
-                blueprint_path=blueprint_path,
-            )
+                blueprint_path = args.config_dir / "meditation_blueprints.yaml"
+                normalized_plan = validate_semantic_plan_edit(
+                    base_plan,
+                    requested_plan,
+                    blueprint_path=blueprint_path,
+                )
+                pending = store.load_generation_request(existing.run_id)
+                result, target, artifact_store, _artifacts = _model_plan(
+                    args,
+                    requested_profile=pending.profile,
+                )
+                if not result.supported or result.selected_profile is None:
+                    raise RevisionError("The original local LLM profile is not safe to load now.")
+                if target != pending.target:
+                    raise RevisionError(
+                        "The current machine differs from the saved drafting target."
+                    )
+                prompts = load_prompt_bundle(args.config_dir / "prompts")
+                if (
+                    prompts.plan.prompt_id != pending.plan_prompt_id
+                    or prompts.plan.version != pending.plan_prompt_version
+                    or prompts.section.prompt_id != pending.section_prompt_id
+                    or prompts.section.version != pending.section_prompt_version
+                ):
+                    raise RevisionError(
+                        "Prompt revisions changed since this run; create a new meditation "
+                        "instead of silently mixing drafting contexts."
+                    )
+                artifact_lock = load_artifact_lock(_artifact_lock_path(args))
+                llm = LlamaCppScriptGenerator.from_artifact_store(
+                    artifact_lock=artifact_lock,
+                    store=artifact_store,
+                    profile_name=pending.profile,
+                    target=target,
+                    device=",".join(result.snapshot.accelerators),
+                    settings=_llm_settings_for_writing_method(pending.writing_method),
+                )
+                if llm.metadata != pending.model_metadata.llm:
+                    raise RevisionError(
+                        "The local LLM revision or runtime differs from the original run."
+                    )
+                regeneration_id = uuid4()
+                workspace = GenerationWorkspace(
+                    store.run_directory(existing.run_id)
+                    / "history"
+                    / "plan-regeneration"
+                    / str(regeneration_id)
+                )
+                workspace.save_plan(normalized_plan)
+                generated = LocalMeditationGenerator(
+                    llm,
+                    prompts,
+                    blueprints=load_blueprint_library(blueprint_path),
+                    recipes=(
+                        load_recipe_library(args.config_dir / "session_recipes.yaml")
+                        if pending.writing_method == "recipe_whole_session"
+                        else None
+                    ),
+                    max_parallel_sections=pending.max_parallel_sections,
+                    articulation_words_per_minute=base_plan.words_per_minute,
+                    workspace=workspace,
+                ).generate(
+                    prompt=existing.prompt,
+                    duration_seconds=pending.duration_seconds,
+                    run_id=existing.run_id,
+                    created_at=datetime.now(UTC),
+                    seed=pending.seed,
+                    meditation_kind=normalized_plan.meditation_kind,
+                    writing_method=pending.writing_method,
+                )
+                revision = revisions.create_semantic_plan_revision_locked(
+                    existing.run_id,
+                    base_plan=base_plan,
+                    base_revision_id=base_revision_id,
+                    requested_plan=normalized_plan,
+                    generated=generated,
+                    note=args.note,
+                    blueprint_path=blueprint_path,
+                )
             worker = _worker_for_record(
                 store,
                 store.load(existing.run_id),
@@ -3297,6 +3300,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             OSError,
             PromptLoadError,
             RevisionError,
+            RunLockUnavailable,
             RunStoreError,
             ValueError,
             WorkerError,

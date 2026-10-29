@@ -192,3 +192,24 @@ processes and actual worker resume and directory moves on this host. Native
 Linux/Windows execution and full repository test/lint/type/CI gates remain with
 the outer executor. No new live inference or external evidence reconciliation
 was performed; historical model results retain their actual producer revisions.
+
+
+## Follow-up review corrections after f443aad
+
+Four selected findings were corrected: repeated authored-marker correspondence,
+compound breath exclusions in either item order, shared ownership throughout CLI
+plan regeneration, and independent original/listening-copy audio hash checks.
+The [review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-f443aad)
+records the finding IDs and executable regressions.
+
+The single focused batch passed **372 tests in 32.87 seconds** across revisions,
+timeline compilation, regeneration/deletion ownership, admission, recipe routing,
+whole-session generation and listening-page evidence. The marker oracle checked
+1,600 short-stream pairs against all optimal ordered alignments. Ownership tests
+used spawned processes and actual CLI/revision/worker boundaries with deterministic
+generation fixtures. Touched Python files were formatted.
+
+No live inference, raw-evidence publication, external receipt reconciliation or
+full repository test/lint/type/CI gate was performed in this review phase. Native
+Linux/Windows checks and final Document/PR reconciliation remain with the outer
+executor; historical model evidence retains its actual producer revisions.

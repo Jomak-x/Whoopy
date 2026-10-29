@@ -45,46 +45,71 @@ class RevisionError(RunStoreError):
     """Raised when an edit cannot safely replace the active revision."""
 
 
+def _ordered_control_alignment(
+    previous: list[str], requested: list[str], *, prefer_late: bool
+) -> set[tuple[int, int]]:
+    matches: set[tuple[int, int]] = set()
+
+    def lengths(old_indices: range, new_indices: range) -> list[int]:
+        row = [0] * (len(new_indices) + 1)
+        for old in old_indices:
+            diagonal = 0
+            for column, new in enumerate(new_indices, start=1):
+                above = row[column]
+                row[column] = (
+                    diagonal + 1 if previous[old] == requested[new] else max(above, row[column - 1])
+                )
+                diagonal = above
+        return row
+
+    def align(old_start: int, old_end: int, new_start: int, new_end: int) -> None:
+        if old_start == old_end or new_start == new_end:
+            return
+        if old_end - old_start == 1:
+            columns = range(new_start, new_end)
+            for column in reversed(columns) if prefer_late else columns:
+                if previous[old_start] == requested[column]:
+                    matches.add((old_start, column))
+                    return
+            return
+        middle = (old_start + old_end) // 2
+        prefix = lengths(range(old_start, middle), range(new_start, new_end))
+        suffix = lengths(range(old_end - 1, middle - 1, -1), range(new_end - 1, new_start - 1, -1))
+        width = new_end - new_start
+        crossing = max(
+            range(width + 1),
+            key=lambda column: (
+                prefix[column] + suffix[width - column],
+                column if prefer_late else -column,
+            ),
+        )
+        del prefix, suffix
+        align(old_start, middle, new_start, new_start + crossing)
+        align(middle, old_end, new_start + crossing, new_end)
+
+    align(0, len(previous), 0, len(requested))
+    return matches
+
+
 def _control_correspondence(
     previous: ScriptControls, requested: ScriptControls
 ) -> dict[str, dict[tuple[int, int], tuple[int, int]]]:
-    previous_counts = Counter(previous.paragraphs)
-    requested_counts = Counter(requested.paragraphs)
-    paragraphs: dict[int, int] = {}
-    matcher = SequenceMatcher(a=previous.paragraphs, b=requested.paragraphs, autojunk=False)
-    for operation, old_start, old_end, new_start, new_end in matcher.get_opcodes():
-        if operation == "equal" or (
-            operation == "replace" and old_end - old_start == new_end - new_start
-        ):
-            for new, old in zip(range(new_start, new_end), range(old_start, old_end), strict=True):
-                if (
-                    previous_counts[previous.paragraphs[old]] == 1
-                    and requested_counts[requested.paragraphs[new]] == 1
-                ):
-                    paragraphs[new] = old
     correspondence: dict[str, dict[tuple[int, int], tuple[int, int]]] = {}
     for name, requested_markers in requested.markers.items():
         previous_markers = previous.markers.get(name, {})
         if list(previous_markers.values()) == list(requested_markers.values()):
             correspondence[name] = dict(zip(requested_markers, previous_markers, strict=True))
             continue
-        matched = correspondence[name] = {}
-        previous_value_counts = Counter(previous_markers.values())
-        requested_value_counts = Counter(requested_markers.values())
-        unique_previous = {
-            value: origin
-            for origin, value in previous_markers.items()
-            if previous_value_counts[value] == 1
+        previous_values = list(previous_markers.values())
+        requested_values = list(requested_markers.values())
+        mandatory = _ordered_control_alignment(
+            previous_values, requested_values, prefer_late=False
+        ) & _ordered_control_alignment(previous_values, requested_values, prefer_late=True)
+        previous_origins = list(previous_markers)
+        requested_origins = list(requested_markers)
+        correspondence[name] = {
+            requested_origins[new]: previous_origins[old] for old, new in mandatory
         }
-        for origin, value in requested_markers.items():
-            if value in unique_previous and requested_value_counts[value] == 1:
-                matched[origin] = unique_previous[value]
-                continue
-            old_paragraph = paragraphs.get(origin[0])
-            if old_paragraph is not None:
-                old_origin = (old_paragraph, origin[1])
-                if previous_markers.get(old_origin) == value:
-                    matched[origin] = old_origin
     return correspondence
 
 
@@ -478,87 +503,107 @@ class RevisionStore:
         parsed = self.store.parse_run_id(run_id)
         try:
             with RunLock(self.store.run_directory(parsed)):
-                record = self.store.load(parsed)
-                if record.status in (RunStatus.QUEUED, RunStatus.RUNNING):
-                    raise RevisionError("Wait for generation to stop before editing the plan.")
-                if record.source_kind != "generated_prompt":
-                    raise RevisionError("Only prompt-generated meditations have drafting context.")
-                if self.active_revision_id(parsed) != base_revision_id:
-                    raise RevisionError(
-                        "The active revision changed while its replacement was drafting; "
-                        "review the newer revision before trying again."
-                    )
-                current_plan = self._load_plan(parsed)
-                if current_plan != base_plan:
-                    raise RevisionError(
-                        "The active plan changed while its replacement was drafting; "
-                        "review the newer revision before trying again."
-                    )
-                normalized = validate_semantic_plan_edit(
-                    base_plan,
-                    requested_plan,
+                return self.create_semantic_plan_revision_locked(
+                    parsed,
+                    base_plan=base_plan,
+                    base_revision_id=base_revision_id,
+                    requested_plan=requested_plan,
+                    generated=generated,
+                    note=note,
                     blueprint_path=blueprint_path,
                 )
-                expected_generated_plan = normalized.model_copy(
-                    update={
-                        "silence_budget_seconds": generated.plan.silence_budget_seconds,
-                    }
-                )
-                if generated.plan != expected_generated_plan:
-                    raise RevisionError(
-                        "The production draft does not match the reviewed edited plan."
-                    )
-                rendered_silence_seconds = round(
-                    sum(
-                        segment.duration_ms
-                        for segment in generated.timeline.segments
-                        if isinstance(segment, SilenceSegment)
-                    )
-                    / 1_000
-                )
-                if generated.plan.silence_budget_seconds != rendered_silence_seconds:
-                    raise RevisionError(
-                        "The production plan silence budget differs from its canonical timeline."
-                    )
-                if generated.timeline.run_id != parsed:
-                    raise RevisionError("The production draft belongs to another run.")
-                current = self._ensure_initial(parsed)
-                old_speech = {
-                    segment.id: segment
-                    for segment in self.store.load_timeline(parsed).segments
-                    if isinstance(segment, SpeechSegment)
-                }
-                affected = {
-                    segment.id
-                    for segment in generated.timeline.segments
-                    if isinstance(segment, SpeechSegment) and old_speech.get(segment.id) != segment
-                }
-                # Deleted speech checkpoints cannot be reused either. Including
-                # their IDs preserves an honest selective invalidation record.
-                affected.update(
-                    set(old_speech) - {segment.id for segment in generated.timeline.segments}
-                )
-                manifest = self._write_revision(
-                    parsed,
-                    parent=current.revision_id,
-                    script=generated.script,
-                    timeline=generated.timeline,
-                    plan=generated.plan,
-                    note=note,
-                    change_kind="plan",
-                    affected=affected,
-                    generated=generated,
-                )
-                self._activate(
-                    parsed,
-                    manifest,
-                    script=generated.script,
-                    timeline=generated.timeline,
-                )
-                self._mark_for_render(record, manifest)
-                return manifest
         except RunLockUnavailable as error:
             raise RevisionError(f"Run {parsed} is owned by an active worker.") from error
+
+    def create_semantic_plan_revision_locked(
+        self,
+        run_id: UUID | str,
+        *,
+        base_plan: MeditationPlan,
+        base_revision_id: str | None,
+        requested_plan: MeditationPlan,
+        generated: MeditationGenerationResult,
+        note: str,
+        blueprint_path: Path = Path("config/meditation_blueprints.yaml"),
+    ) -> RevisionManifest:
+        """Commit a redrafted plan while the caller holds the run lock."""
+
+        parsed = self.store.parse_run_id(run_id)
+        record = self.store.load(parsed)
+        if record.status in (RunStatus.QUEUED, RunStatus.RUNNING):
+            raise RevisionError("Wait for generation to stop before editing the plan.")
+        if record.source_kind != "generated_prompt":
+            raise RevisionError("Only prompt-generated meditations have drafting context.")
+        if self.active_revision_id(parsed) != base_revision_id:
+            raise RevisionError(
+                "The active revision changed while its replacement was drafting; "
+                "review the newer revision before trying again."
+            )
+        current_plan = self._load_plan(parsed)
+        if current_plan != base_plan:
+            raise RevisionError(
+                "The active plan changed while its replacement was drafting; "
+                "review the newer revision before trying again."
+            )
+        normalized = validate_semantic_plan_edit(
+            base_plan,
+            requested_plan,
+            blueprint_path=blueprint_path,
+        )
+        expected_generated_plan = normalized.model_copy(
+            update={
+                "silence_budget_seconds": generated.plan.silence_budget_seconds,
+            }
+        )
+        if generated.plan != expected_generated_plan:
+            raise RevisionError("The production draft does not match the reviewed edited plan.")
+        rendered_silence_seconds = round(
+            sum(
+                segment.duration_ms
+                for segment in generated.timeline.segments
+                if isinstance(segment, SilenceSegment)
+            )
+            / 1_000
+        )
+        if generated.plan.silence_budget_seconds != rendered_silence_seconds:
+            raise RevisionError(
+                "The production plan silence budget differs from its canonical timeline."
+            )
+        if generated.timeline.run_id != parsed:
+            raise RevisionError("The production draft belongs to another run.")
+        current = self._ensure_initial(parsed)
+        old_speech = {
+            segment.id: segment
+            for segment in self.store.load_timeline(parsed).segments
+            if isinstance(segment, SpeechSegment)
+        }
+        affected = {
+            segment.id
+            for segment in generated.timeline.segments
+            if isinstance(segment, SpeechSegment) and old_speech.get(segment.id) != segment
+        }
+        # Deleted speech checkpoints cannot be reused either. Including
+        # their IDs preserves an honest selective invalidation record.
+        affected.update(set(old_speech) - {segment.id for segment in generated.timeline.segments})
+        manifest = self._write_revision(
+            parsed,
+            parent=current.revision_id,
+            script=generated.script,
+            timeline=generated.timeline,
+            plan=generated.plan,
+            note=note,
+            change_kind="plan",
+            affected=affected,
+            generated=generated,
+        )
+        self._activate(
+            parsed,
+            manifest,
+            script=generated.script,
+            timeline=generated.timeline,
+        )
+        self._mark_for_render(record, manifest)
+        return manifest
 
     def restore(self, run_id: UUID | str, revision_id: str) -> RevisionManifest:
         parsed = self.store.parse_run_id(run_id)

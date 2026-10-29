@@ -181,6 +181,7 @@ def test_sleep_reflection_has_all_prior_and_future_beats_in_single_prompt() -> N
     [
         "Help me sleep while sitting, no breath focus please",
         "Help me sleep while sitting. No breath focus or box breathing, please",
+        "Help me sleep while sitting. No box breathing or breath focus, please",
     ],
 )
 def test_no_breath_focus_routes_sound_and_preserves_explicit_sitting(need: str) -> None:

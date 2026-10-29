@@ -95,8 +95,14 @@ NEGATED_SLEEP = re.compile(
 BOX_BREATHING = re.compile(r"\b(?:box|square)\s+breathing\b", re.I)
 NEGATED_BOX_BREATHING = re.compile(
     r"\b(?:no|without|avoid|skip|don['\u2019]t|do not|rather not)\b"
-    r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?,;\n]){0,35}"
+    r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?;\n]){0,35}"
     r"\b(?:box|square)\s+breathing\b",
+    re.I,
+)
+BREATH_CLAUSE_BOUNDARY = re.compile(
+    r"[.!?;\n]+|,(?!\s*(?:and\b|or\b|breath\b|breathing\b|box\b|square\b))|"
+    r"\b(?:but|however|yet|instead)\b|"
+    r"\band\s+(?=(?:please\s+)?(?:use|try|include|allow|focus|concentrate|guide|help)\b)",
     re.I,
 )
 REFLECTION = re.compile(r"\b(?:reflect\w*|review the day|busy day|good[ -]?night)\b", re.I)
@@ -112,12 +118,11 @@ def route_session(
 ) -> RoutedSession:
     """Use need and explicit constraints before selecting the hidden grammar."""
 
-    negated_box_requests = list(NEGATED_BOX_BREATHING.finditer(prompt))
-    excluded = any(
-        NO_BREATH.search(BOX_BREATHING.sub("", match.group())) for match in negated_box_requests
-    )
-    breath_constraints = NEGATED_BOX_BREATHING.sub("", prompt)
-    if BOX_BREATHING.search(breath_constraints):
+    breath_clauses = BREATH_CLAUSE_BOUNDARY.split(prompt)
+    excluded = any(NO_BREATH.search(BOX_BREATHING.sub("", clause)) for clause in breath_clauses)
+    if any(
+        BOX_BREATHING.search(NEGATED_BOX_BREATHING.sub("", clause)) for clause in breath_clauses
+    ):
         raise ValueError(
             "Box breathing is not supported by a reviewed holding protocol. "
             "Request natural breathing or gentle no-hold breathing instead."
@@ -133,7 +138,6 @@ def route_session(
             posture = "sitting"
         else:
             posture = "lying_down" if sleep else "sitting"
-    excluded = excluded or bool(NO_BREATH.search(breath_constraints))
     if excluded or re.search(r"\b(?:sound|listen|noise|overstimulat|panic)\w*\b", prompt, re.I):
         anchor: Anchor = "sound"
     elif re.search(r"\b(?:body|contact|ground|support)\w*\b", prompt, re.I):

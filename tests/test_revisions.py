@@ -4,6 +4,7 @@ import json
 import threading
 import wave
 from datetime import UTC, datetime
+from itertools import combinations, product
 from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
@@ -42,6 +43,7 @@ from whoopy.pipeline.revisions import (
     RevisionRequest,
     RevisionStore,
     TimelineEdit,
+    _control_correspondence,
     validate_semantic_plan_edit,
 )
 from whoopy.pipeline.runs import (
@@ -64,6 +66,7 @@ from whoopy.timeline import (
     Timeline,
     build_script_timeline,
 )
+from whoopy.timeline.compiler import ScriptControls
 from whoopy.webui.server import LocalWebApplication
 
 RUN_ID = UUID("99999999-9999-4999-8999-999999999999")
@@ -1323,3 +1326,115 @@ def test_paragraph_split_with_other_marker_change_preserves_controls(
     assert store.load_timeline(RUN_ID) == accepted
     restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
     assert restored_manifest["pcm_sha256"] == accepted_manifest["pcm_sha256"]
+
+
+@pytest.mark.parametrize(
+    "marker_edit, expected_paces",
+    [
+        ("later-replacement", ("very_slow", "very_slow")),
+        ("insert-duplicate", ("slow", "slow")),
+        ("delete-duplicate", ("slow", "slow")),
+        ("insert-default", ("very_slow", "natural")),
+    ],
+)
+def test_repeated_marker_stream_survives_split_and_other_marker_change(
+    tmp_path: Path, marker_edit: str, expected_paces: tuple[str, str]
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    first = "Settle into the support beneath you. Let your attention arrive here."
+    later = (
+        "Notice the weight of your body resting here.",
+        "Listen to the quiet sounds around you.",
+    )
+    ending = "Finish whenever you are ready."
+    script = "\n\n".join(
+        ["[pace: slow]", first, later[0], "[pace: slow]", later[1], "[pace: natural]", ending]
+    )
+    revisions.create(RUN_ID, RevisionRequest(script=script))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    controlled_ids = [
+        segment.id
+        for segment in store.load_timeline(RUN_ID).segments
+        if isinstance(segment, SpeechSegment) and segment.text in (*later, ending)
+    ]
+    accepted_revision = revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            timeline=TimelineEdit(pace={segment_id: "very_slow" for segment_id in controlled_ids})
+        ),
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    accepted = store.load_timeline(RUN_ID)
+    accepted_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    edited = script.replace(first, first.replace(". Let", ".\n\nLet"), 1).replace(
+        "[pace: natural]", "[pace: unhurried]"
+    )
+    if marker_edit == "insert-duplicate":
+        edited = edited.replace("[pace: slow]", "[pace: slow]\n[pace: slow]", 1)
+    elif marker_edit == "delete-duplicate":
+        edited = edited.replace(f"[pace: slow]\n\n{later[1]}", later[1])
+    elif marker_edit == "insert-default":
+        edited = edited.replace(later[1], f"[pace: natural]\n\n{later[1]}")
+
+    revisions.create(RUN_ID, RevisionRequest(script=edited))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    rendered = store.load_timeline(RUN_ID)
+    assert len(rendered.segments) == len(accepted.segments) + 1
+    later_speeches = [
+        segment
+        for segment in rendered.segments
+        if isinstance(segment, SpeechSegment) and segment.text in later
+    ]
+    assert [segment.text for segment in later_speeches] == list(later)
+    assert tuple(segment.pace for segment in later_speeches) == expected_paces
+    final = rendered.segments[-1]
+    assert isinstance(final, SpeechSegment)
+    assert final.text == ending
+    assert final.pace == "unhurried"
+
+    revisions.restore(RUN_ID, accepted_revision.revision_id)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == accepted
+    restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    assert restored_manifest["pcm_sha256"] == accepted_manifest["pcm_sha256"]
+
+
+def test_control_correspondence_matches_every_optimal_ordered_alignment() -> None:
+    streams = [
+        values
+        for length in range(4)
+        for values in product(("slow", "natural", "unhurried"), repeat=length)
+    ]
+    for previous_values in streams:
+        for requested_values in streams:
+            candidates: list[set[tuple[int, int]]] = []
+            for size in range(min(len(previous_values), len(requested_values)), -1, -1):
+                candidates = [
+                    set(zip(old_indices, new_indices, strict=True))
+                    for old_indices in combinations(range(len(previous_values)), size)
+                    for new_indices in combinations(range(len(requested_values)), size)
+                    if all(
+                        previous_values[old] == requested_values[new]
+                        for old, new in zip(old_indices, new_indices, strict=True)
+                    )
+                ]
+                if candidates:
+                    break
+            mandatory = set.intersection(*candidates)
+            previous = ScriptControls(
+                origins={},
+                markers={
+                    "pace": {(2 * index + 1, 1): v for index, v in enumerate(previous_values)}
+                },
+                paragraphs=[],
+            )
+            requested = ScriptControls(
+                origins={},
+                markers={"pace": {(3 * index, 1): v for index, v in enumerate(requested_values)}},
+                paragraphs=[],
+            )
+            assert _control_correspondence(previous, requested) == {
+                "pace": {(3 * new, 1): (2 * old + 1, 1) for old, new in mandatory}
+            }, (previous_values, requested_values)
