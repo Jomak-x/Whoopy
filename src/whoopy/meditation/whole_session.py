@@ -425,11 +425,19 @@ def _validate_session(
         if not re.search(r"\b(?:rest\w*|sleep\w*|quiet\w*)\b", ending, re.I):
             errors.append("taper: permit quiet rest without a new task")
     else:
-        if not re.search(r"\b(?:room|surround\w*|sound\w*)\b", ending, re.I) or not re.search(
+        if not re.search(
+            r"\b(?:hear(?:ing)?|listen(?:ing)?)\b|"
+            r"\b(?:notice|noticing|check in with|attend to|return to|become aware of)\b"
+            r"[^.!?;\n]{0,60}\bsounds?\b",
+            ending,
+            re.I,
+        ) or not re.search(
             r"\b(?:move|moving|stretch(?:ing)?|lift(?:ing)?|shift(?:ing)?|"
             r"wiggl(?:e|ing)|flex(?:ing)?|curl(?:ing)?)\s+"
-            r"(?:(?:your|the)\s+)?"
-            r"(?:fingers?|toes?|hands?|arms?|feet|foot|legs?|body|weight|position|posture)\b",
+            r"(?:(?:your|the|a|an|one|both)\s+)?"
+            r"(?:fingers?|toes?|hands?|arms?|feet|foot|legs?|body|weight|position|posture)\b|"
+            r"\bstretch(?:ing)?(?:\s+(?:a little|gently|slightly))?"
+            r"(?=\s*(?:[.!?,;]|$|if you (?:wish|like|want)\b))",
             ending,
             re.I,
         ):

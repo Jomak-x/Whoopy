@@ -1133,7 +1133,7 @@ def test_new_script_controls_override_accepted_controls(
         ("[pace: natural]", "", "natural"),
         ("[pace: slow]\n[pace: slow]", "", "slow"),
         ("", "", "natural"),
-        ("[pace: slow]", "Notice the sounds around you.\n\n", "slow"),
+        ("[pace: slow]", "Notice the sounds around you.\n\n", "very_slow"),
         ("[pace: slow]", "Notice the support beneath you.\n\n", "slow"),
     ],
     ids=[
@@ -1182,3 +1182,77 @@ def test_shifted_control_marker_preserves_only_corresponding_accepted_controls(
     assert store.load_timeline(RUN_ID) == accepted
     restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
     assert restored_manifest["pcm_sha256"] == accepted_manifest["pcm_sha256"]
+
+
+@pytest.mark.parametrize("marker_before_expansion", [False, True])
+@pytest.mark.parametrize("duplicate_prose", [False, True])
+@pytest.mark.parametrize("marker_change", ["none", "delivery", "later-pace", "duplicate-markers"])
+def test_expanded_paragraph_preserves_later_control_scopes(
+    tmp_path: Path, marker_before_expansion: bool, duplicate_prose: bool, marker_change: str
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    expanded = "Let your attention settle on this moment."
+    later = (
+        "Notice the weight of your body resting here.",
+        "Listen to the quiet sounds around you.",
+        "Allow this moment to be as it is.",
+    )
+    blocks = ["Welcome to this practice."] * (2 if duplicate_prose else 1)
+    blocks.append("[delivery: warm]")
+    if marker_before_expansion:
+        blocks.extend(["[pace: slow]", expanded])
+    else:
+        blocks.extend([expanded, "[pace: slow]"])
+    blocks.extend(later[:2])
+    if marker_change == "duplicate-markers":
+        blocks.append("[pace: slow]")
+    blocks.extend([later[2], "[pace: natural]", "Finish whenever you are ready."])
+    script = "\n\n".join(blocks)
+    revisions.create(RUN_ID, RevisionRequest(script=script))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    target_ids = [
+        segment.id
+        for segment in store.load_timeline(RUN_ID).segments
+        if isinstance(segment, SpeechSegment) and segment.text in later
+    ]
+    assert len(target_ids) == len(later)
+    accepted_revision = revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            timeline=TimelineEdit(
+                pace={segment_id: "very_slow" for segment_id in target_ids},
+                delivery={segment_id: "compassionate" for segment_id in target_ids},
+                intensity={segment_id: "moderate" for segment_id in target_ids},
+            )
+        ),
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    accepted = store.load_timeline(RUN_ID)
+    edited = script.replace(expanded, " ".join([expanded] * 25), 1)
+    if marker_change == "delivery":
+        edited = edited.replace("[delivery: warm]", "[delivery: neutral]")
+    elif marker_change == "later-pace":
+        edited = edited.replace("[pace: natural]", "[pace: unhurried]")
+    revisions.create(RUN_ID, RevisionRequest(script=edited))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    rendered = store.load_timeline(RUN_ID)
+    assert len(rendered.segments) > len(accepted.segments)
+    actual = [
+        segment
+        for segment in rendered.segments
+        if isinstance(segment, SpeechSegment) and segment.text in later
+    ]
+    assert [segment.text for segment in actual] == list(later)
+    for segment in actual:
+        assert segment.pace == "very_slow"
+        assert segment.intensity == "moderate"
+        assert segment.delivery == ("neutral" if marker_change == "delivery" else "compassionate")
+    if marker_change == "later-pace":
+        ending = rendered.segments[-1]
+        assert isinstance(ending, SpeechSegment)
+        assert ending.pace == "unhurried"
+    revisions.restore(RUN_ID, accepted_revision.revision_id)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == accepted

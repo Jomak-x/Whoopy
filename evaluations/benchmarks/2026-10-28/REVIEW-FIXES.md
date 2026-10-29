@@ -299,3 +299,28 @@ whole-session generation, revisions, MLX worker/integration, publication contrac
 and validation privacy. The first invocation contained a nonexistent test target
 and ran no tests; the corrected batch passed. Touched Python files were formatted;
 full test/lint/type gates and CI were not run in this review phase.
+
+
+## Review fixes after fe1ca3f
+
+All six selected findings were checked against current source before editing.
+
+| Finding | Root cause and correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-CONTROL-ANCHOR-SPLIT | Marker provenance depended on the first compiled speech chunk in its scope. Correspondence now uses authored paragraph/control provenance independently of chunk boundaries, retaining explicit changes and conservative scope handling. | `test_revisions.py`: controls before/after expansion, multiple later paragraphs, independent control changes, duplicate content/markers and explicit resets. |
+| REVIEW-MOVEMENT-ARTICLE-REGRESSION | The action/object grammar excluded ordinary articles and intransitive stretching. It now accepts physical invitations such as wiggle a finger, lift an arm, move both hands and stretch a little, while excluding bare nouns and metaphorical objects. | `test_recipe_whole_session.py`: accepted prose remains exact; invalid endings still exhaust only the permitted two attempts. |
+| REVIEW-ENDING-SOUND-BYPASS | Room/surroundings nouns substituted for auditory practice. The ending now requires hearing/listening or an explicit attention-to-sound cue. | `test_recipe_whole_session.py`: room-only, visual surroundings and adjective-only sound examples fail. |
+| REVIEW-LAB-VOICEDESIGN-IDENTITY | Launch and attestation independently derived a voice identity from delivery. The redundant mapping was removed; both consume the requested preset. | `test_evaluation.py`: warm and grounded presets retain distinct identities under identical calm delivery; wrong recorded preset/name fails attestation. |
+| REVIEW-EXPORT-LONG-PROMPT | The unbounded prompt was passed into bounded display metadata. Export now derives a whitespace-normalized title capped at 300 characters, preserving the full run prompt and record. | `test_exports.py`: real four-format exports at 300, 301 and 20,000 prompt characters, verified embedded titles and unchanged records. |
+| REVIEW-TIMEOUT-STREAM-RETENTION | Timeout evidence was frozen before reader draining. Timeout exceptions now capture streams after bounded joins and record per-stream incompleteness when draining fails. | `test_llama_timeout_capture.py`: deterministic trailing output, blocked readers and reader errors persisted through the real capture boundary. |
+
+This assigned review phase does not run live inference, publish raw evidence,
+change UI/source licensing, invoke pipeline controls or execute the outer gates.
+The final external campaign summary remains an input for the later Document/PR
+phase, bound to the actual producer revisions rather than this source update.
+
+
+Focused verification: **345 passed in 28.99 seconds** across revisions, timeline
+compilation, whole-session generation, Lab evaluation, real exports, timeout
+capture, adapters and benchmark attempt retention. Touched Python files were
+formatted. No full test/lint/type or CI gate ran in this review phase.

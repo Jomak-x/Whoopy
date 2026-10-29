@@ -673,6 +673,13 @@ def test_adapter_receives_dynamic_exact_order_response_schema(
         ("return", "Listen to surrounding sounds. You may wiggle your toes gently."),
         ("return", "Listen to surrounding sounds. You may flex your fingers gently."),
         ("return", "Listen to surrounding sounds. You may curl your toes gently."),
+        ("return", "Listen to surrounding sounds. You may gently wiggle a finger."),
+        ("return", "Listen to surrounding sounds. You may lift an arm gently."),
+        ("return", "Listen to surrounding sounds. You may move both hands gently."),
+        ("return", "Listen to surrounding sounds. You may stretch a little."),
+        ("return", "Listen around you. You may stretch a little if you wish."),
+        ("return", "Hear the room around you. You may move your hands gently."),
+        ("return", "Notice the sounds around you. You may gently wiggle a finger."),
     ],
 )
 def test_concrete_contact_and_physical_return_cues_preserve_authored_prose(
@@ -753,6 +760,26 @@ def test_concrete_contact_and_physical_return_cues_preserve_authored_prose(
         (
             "return",
             "Listen to surrounding sounds and notice your body resting on the chair.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+        (
+            "return",
+            "Look around the room, then wiggle your toes if you wish.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+        (
+            "return",
+            "Notice your surroundings, then gently wiggle a finger if you wish.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+        (
+            "return",
+            "Listen to surrounding sounds and stretch a little into your day.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+        (
+            "return",
+            "These words sound reassuring. You may gently wiggle a finger.",
             "return: include surrounding sound and an optional small movement",
         ),
     ],

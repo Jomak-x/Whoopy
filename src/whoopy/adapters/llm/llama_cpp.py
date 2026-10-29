@@ -89,6 +89,9 @@ class CapturingProcessRunner:
                 value = getattr(error, stream, None)
                 if isinstance(value, str | bytes):
                     save(f"{stream}.txt", value)
+                    incomplete_reason = getattr(error, f"{stream}_incomplete_reason", None)
+                    if isinstance(incomplete_reason, str):
+                        receipt[f"{stream}_incomplete_reason"] = incomplete_reason
                 else:
                     receipt[f"{stream}_unavailable_reason"] = (
                         "Process runner did not return this stream on failure."
@@ -155,17 +158,21 @@ def _run_process(
     load_elapsed_seconds: float | None = None
     output_chunks: list[str] = []
     error_chunks: list[str] = []
+    stream_errors: dict[str, str] = {}
 
-    def read_stream(stream: Any, chunks: list[str], *, watch_startup: bool) -> None:
+    def read_stream(stream: Any, chunks: list[str], *, name: str) -> None:
         nonlocal load_elapsed_seconds
-        for line in iter(stream.readline, ""):
-            chunks.append(line)
-            if (
-                watch_startup
-                and load_elapsed_seconds is None
-                and ("available commands:" in line or line.lstrip().startswith("> "))
-            ):
-                load_elapsed_seconds = max(0.0, time.monotonic() - started)
+        try:
+            for line in iter(stream.readline, ""):
+                chunks.append(line)
+                if load_elapsed_seconds is None and (
+                    "available commands:" in line or line.lstrip().startswith("> ")
+                ):
+                    load_elapsed_seconds = max(0.0, time.monotonic() - started)
+        except (OSError, UnicodeError) as error:
+            stream_errors[name] = f"Stream reader failed with {type(error).__name__}."
+        finally:
+            stream.close()
 
     def sample_process_tree() -> None:
         nonlocal peak_bytes, memory_error
@@ -200,29 +207,25 @@ def _run_process(
     stdout_reader = threading.Thread(
         target=read_stream,
         args=(process.stdout, output_chunks),
-        kwargs={"watch_startup": True},
+        kwargs={"name": "stdout"},
         name="whoopy-llama-stdout-reader",
         daemon=True,
     )
     stderr_reader = threading.Thread(
         target=read_stream,
         args=(process.stderr, error_chunks),
-        kwargs={"watch_startup": True},
+        kwargs={"name": "stderr"},
         name="whoopy-llama-stderr-reader",
         daemon=True,
     )
     stdout_reader.start()
     stderr_reader.start()
+    timeout_error: subprocess.TimeoutExpired | None = None
     try:
         process.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired as error:
+        timeout_error = error
         _stop_process_tree(process)
-        raise subprocess.TimeoutExpired(
-            command,
-            timeout_seconds,
-            output="".join(output_chunks),
-            stderr="".join(error_chunks),
-        ) from error
     except BaseException:
         _stop_process_tree(process)
         raise
@@ -231,6 +234,24 @@ def _run_process(
         sampler.join(timeout=1)
         stdout_reader.join(timeout=1)
         stderr_reader.join(timeout=1)
+    if timeout_error is not None:
+        incomplete_reasons: dict[str, str] = {}
+        for name, reader in (("stdout", stdout_reader), ("stderr", stderr_reader)):
+            if reader.is_alive():
+                incomplete_reasons[name] = (
+                    "Stream reader did not finish within the bounded drain period."
+                )
+            elif name in stream_errors:
+                incomplete_reasons[name] = stream_errors[name]
+        failure = subprocess.TimeoutExpired(
+            command,
+            timeout_seconds,
+            output="".join(output_chunks),
+            stderr="".join(error_chunks),
+        )
+        for name, reason in incomplete_reasons.items():
+            setattr(failure, f"{name}_incomplete_reason", reason)
+        raise failure from timeout_error
     completed = subprocess.CompletedProcess(
         command, process.returncode, "".join(output_chunks), "".join(error_chunks)
     )

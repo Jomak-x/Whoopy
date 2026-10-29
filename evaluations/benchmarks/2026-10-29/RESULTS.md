@@ -156,3 +156,20 @@ was performed here. The owner's completed live
 campaign results remain bound to `c31d4e3` / `2e13ae4`; the outer Document/PR
 phase must consume the final evidence summary and replace earlier pending states
 without relabeling these historical receipts as final-pipeline inference.
+
+
+## Follow-up review corrections after fe1ca3f
+
+Six further findings were corrected: marker provenance across chunk expansion,
+ordinary movement phrasing, required ending sound cues, requested VoiceDesign
+identity, bounded export titles for detailed prompts, and timeout stream draining.
+The [review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-fe1ca3f)
+retains each finding and its regression coverage. The single focused verification
+batch passed **345 tests in 28.99 seconds** across `test_revisions.py`,
+`test_timeline.py`, `test_recipe_whole_session.py`, `test_evaluation.py`,
+`test_exports.py`, `test_llama_timeout_capture.py`, `test_adapters.py`, and
+`test_benchmark_attempt_retention.py`. The long-prompt cases exercised actual
+four-format FFmpeg exports. Touched Python files were formatted.
+No new live inference or external evidence reconciliation was performed in this
+review phase; full test/lint/type/CI gates and final Document/PR reconciliation
+remain with the outer executor.

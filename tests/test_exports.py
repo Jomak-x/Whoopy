@@ -18,7 +18,7 @@ from whoopy.audio import (
     load_export_manifest,
 )
 from whoopy.audio.exports import ExportArtifact, ExportKind, ExportManifest
-from whoopy.pipeline.runs import RunStore
+from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore
 from whoopy.webui.server import LocalWebApplication
 
 
@@ -54,6 +54,51 @@ def test_export_metadata_rejects_blank_and_naive_values() -> None:
             model="kokoro",
             created_at=datetime(2026, 8, 5, 12, 30),
         )
+
+
+@pytest.mark.skipif(
+    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
+    reason="FFmpeg is not installed on this test machine",
+)
+@pytest.mark.parametrize("length", [300, 301, 20_000])
+def test_completed_detailed_prompt_exports_bounded_title_without_changing_run(
+    tmp_path: Path, length: int
+) -> None:
+    application = LocalWebApplication(
+        project_root=Path.cwd(),
+        config_directory=Path.cwd() / "config",
+        models_directory=tmp_path / "models",
+        runs_directory=tmp_path / "runs",
+    )
+    prompt = ("A detailed grounding request with room for reflection. " * 400)[:length]
+    store = RunStore(application.runs_directory)
+    record = store.create(prompt)
+    assert record.recovery is not None
+    record = record.transition(
+        RunStatus.COMPLETED,
+        updated_at=record.created_at,
+        timeline_artifact="timeline.json",
+        audio_artifact="narration.wav",
+        audio_manifest_artifact="audio-manifest.json",
+        quality_artifact="quality.json",
+        recovery=record.recovery.model_copy(update={"process_attempts": 1}),
+        execution=RunExecution(stage=RunStage.COMPLETED),
+    )
+    store.save(record)
+    _write_narration(store.audio_path(record.run_id))
+    original_record = store.record_path(record.run_id).read_bytes()
+
+    result = application.export_run(str(record.run_id))
+
+    assert result is not None
+    manifest = ExportManifest.model_validate(result)
+    expected_title = " ".join(prompt.split())[:300].strip()
+    assert manifest.metadata.title == expected_title
+    assert all(artifact.embedded_tags["title"] == expected_title for artifact in manifest.artifacts)
+    assert {artifact.kind for artifact in manifest.artifacts} == {"wav", "flac", "aac", "opus"}
+    assert application.export_path(str(record.run_id), "wav") is not None
+    assert store.load(record.run_id).prompt == prompt.strip()
+    assert store.record_path(record.run_id).read_bytes() == original_record
 
 
 def test_discovery_has_actionable_missing_ffmpeg_error(monkeypatch: pytest.MonkeyPatch) -> None:

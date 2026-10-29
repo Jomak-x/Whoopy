@@ -356,7 +356,7 @@ def test_kokoro_lab_payload_excludes_other_adapter_controls() -> None:
             VoiceConfiguration(
                 configuration_id="qwen-design",
                 model_id="qwen3-voice-design-1.7b",
-                voice_id="reviewed-design",
+                voice_id="sleep_meditation",
                 voice_mode="designed",
                 delivery="sleepy",
                 language="English",
@@ -2043,3 +2043,69 @@ def test_lab_restart_recovers_owned_run_without_repeating_trial(
     assert final["resumable_runs"] == {}
     report = recovered.repository.load_report(experiment_id=key[0], version=key[1])
     assert report.trials[0].source_run_id == UUID(starts[0])
+
+
+@pytest.mark.parametrize("preset", ["warm_meditation", "grounded_meditation"])
+def test_lab_voice_design_launch_and_attestation_preserve_requested_preset(preset: str) -> None:
+    evaluation = load_evaluation_set(Path("config/evaluation/local-v1.yaml"))
+    voice = VoiceConfiguration(
+        configuration_id=preset,
+        model_id="qwen3-voice-design-1.7b",
+        voice_id=preset,
+        voice_mode="designed",
+        delivery="calm",
+    )
+    request = ProductionTrialRequest(
+        experiment_id="design-identity",
+        experiment_version=1,
+        trial_id=uuid4(),
+        case=evaluation.cases[0],
+        candidate_id=preset,
+        condition=_condition(method="plan_first").model_copy(update={"voice": voice}),
+        seed=42,
+    )
+    executor = LocalProductionExperimentExecutor(cast(Any, object()))
+    payload = GenerationRequest.model_validate(executor._generation_payload(request))
+    assert payload.qwen_voice_design_preset == preset
+    resolved = {
+        "mode": "generated_prompt",
+        "profile": "standard",
+        "tts": {
+            "backend": voice.model_id,
+            "voice_name": preset,
+            "qwen_voice_design_preset": preset,
+            "speed": 1.0,
+            "language": voice.language,
+            "seed": request.seed,
+            "delivery_override": voice.delivery,
+            "intensity_override": voice.intensity,
+            "voice_mode": voice.voice_mode,
+        },
+    }
+    source_resolved = {
+        "generation": {
+            "seed": request.seed,
+            "writing_method": request.condition.writing_method,
+            "duration_seconds": request.case.duration_seconds,
+            "meditation_kind": request.case.category,
+        }
+    }
+
+    def attest() -> None:
+        executor._attest_candidate_controls(
+            request,
+            resolved=resolved,
+            model_metadata={"llm": {"versioned_model_id": "Qwen3 4B Q4_K_M@reviewed"}},
+            source_resolved=source_resolved,
+            source_prompt=request.case.prompt,
+            source_plan={"blueprint_id": request.case.blueprint_id},
+        )
+
+    attest()
+    tts = cast(dict[str, Any], resolved["tts"])
+    other = "grounded_meditation" if preset == "warm_meditation" else "warm_meditation"
+    for field in ("voice_name", "qwen_voice_design_preset"):
+        tts[field] = other
+        with pytest.raises(ValueError, match=rf"tts\.{field}="):
+            attest()
+        tts[field] = preset

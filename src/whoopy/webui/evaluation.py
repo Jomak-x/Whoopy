@@ -502,7 +502,7 @@ class LocalProductionExperimentExecutor:
             payload.update(
                 {
                     "qwen_language": voice.language,
-                    "qwen_voice_design_preset": self._qwen_design_preset(voice.delivery),
+                    "qwen_voice_design_preset": voice.voice_id,
                 }
             )
         elif backend.startswith("qwen3-base-clone-"):
@@ -639,14 +639,6 @@ class LocalProductionExperimentExecutor:
     def _moss_instruction(delivery: str, intensity: str) -> str:
         strength = "gently" if intensity == "subtle" else "clearly"
         return f"Speak {strength}, with a {delivery} meditative delivery."
-
-    @staticmethod
-    def _qwen_design_preset(delivery: str) -> str:
-        if delivery == "sleepy":
-            return "sleep_meditation"
-        if delivery in {"grounded", "encouraging"}:
-            return "grounded_meditation"
-        return "warm_meditation"
 
     def _validate_managed_reference(self, requested_reference_id: str) -> None:
         # The versioned reference manager is the production boundary used by
@@ -943,9 +935,12 @@ class LocalProductionExperimentExecutor:
             if expected_backend.startswith("qwen3-custom-voice-"):
                 expect("tts.voice_name", tts.get("voice_name"), voice.voice_id)
             elif expected_backend == "qwen3-voice-design-1.7b":
-                preset = self._qwen_design_preset(voice.delivery)
-                expect("tts.voice_name", tts.get("voice_name"), preset)
-                expect("tts.qwen_voice_design_preset", tts.get("qwen_voice_design_preset"), preset)
+                expect("tts.voice_name", tts.get("voice_name"), voice.voice_id)
+                expect(
+                    "tts.qwen_voice_design_preset",
+                    tts.get("qwen_voice_design_preset"),
+                    voice.voice_id,
+                )
             else:
                 expect("tts.reference_id", tts.get("reference_id"), voice.voice_id)
 

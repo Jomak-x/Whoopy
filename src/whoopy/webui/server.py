@@ -2515,7 +2515,7 @@ class LocalWebApplication:
             audio,
             audio.parent / "exports",
             ExportMetadata(
-                title=record.prompt.removeprefix("Render local script: "),
+                title=" ".join(record.prompt.removeprefix("Render local script: ").split())[:300],
                 model=model,
                 created_at=record.created_at,
             ),

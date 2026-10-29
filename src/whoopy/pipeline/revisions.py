@@ -33,7 +33,7 @@ from whoopy.timeline import (
     SpeechSegment,
     Timeline,
 )
-from whoopy.timeline.compiler import compile_script, rewrite_script_pauses
+from whoopy.timeline.compiler import ScriptControls, compile_script, rewrite_script_pauses
 
 REVISION_ROOT = "revisions"
 ACTIVE_REVISION = "active.json"
@@ -45,18 +45,47 @@ class RevisionError(RunStoreError):
     """Raised when an edit cannot safely replace the active revision."""
 
 
+def _control_correspondence(
+    previous: ScriptControls, requested: ScriptControls
+) -> dict[str, dict[tuple[int, int], tuple[int, int]]]:
+    previous_counts = Counter(previous.paragraphs)
+    requested_counts = Counter(requested.paragraphs)
+    paragraphs: dict[int, int] = {}
+    matcher = SequenceMatcher(a=previous.paragraphs, b=requested.paragraphs, autojunk=False)
+    for operation, old_start, old_end, new_start, new_end in matcher.get_opcodes():
+        if operation == "equal" or (
+            operation == "replace" and old_end - old_start == new_end - new_start
+        ):
+            for new, old in zip(range(new_start, new_end), range(old_start, old_end), strict=True):
+                if (
+                    previous_counts[previous.paragraphs[old]] == 1
+                    and requested_counts[requested.paragraphs[new]] == 1
+                ):
+                    paragraphs[new] = old
+    correspondence: dict[str, dict[tuple[int, int], tuple[int, int]]] = {}
+    for name, requested_markers in requested.markers.items():
+        previous_markers = previous.markers.get(name, {})
+        if list(previous_markers.values()) == list(requested_markers.values()):
+            correspondence[name] = dict(zip(requested_markers, previous_markers, strict=True))
+            continue
+        matched = correspondence[name] = {}
+        for origin, value in requested_markers.items():
+            old_paragraph = paragraphs.get(origin[0])
+            if old_paragraph is not None:
+                old_origin = (old_paragraph, origin[1])
+                if previous_markers.get(old_origin) == value:
+                    matched[origin] = old_origin
+    return correspondence
+
+
 def _same_control_origin(
     previous: tuple[int, int] | None,
     requested: tuple[int, int] | None,
-    speech_correspondence: dict[str, str],
+    correspondence: dict[tuple[int, int], tuple[int, int]],
 ) -> bool:
     if previous is None or requested is None:
         return previous is requested
-    return (
-        previous[1] == requested[1]
-        and speech_correspondence.get(f"speech-{requested[0] + 1:04d}")
-        == f"speech-{previous[0] + 1:04d}"
-    )
+    return correspondence.get(requested) == previous
 
 
 class TimelineEdit(BaseModel):
@@ -305,17 +334,9 @@ class RevisionStore:
                         for segment in requested_segments
                         if isinstance(segment, SpeechSegment)
                     )
-                    speech_correspondence: dict[str, str] = {}
-                    for new_index, old_index in correspondence.items():
-                        previous = previous_segments[old_index]
-                        requested = requested_segments[new_index]
-                        if (
-                            isinstance(previous, SpeechSegment)
-                            and isinstance(requested, SpeechSegment)
-                            and previous_speech_counts[previous.text] == 1
-                            and requested_speech_counts[requested.text] == 1
-                        ):
-                            speech_correspondence[requested.id] = previous.id
+                    control_correspondence = _control_correspondence(
+                        previous_controls, requested_controls
+                    )
                     merged_segments = []
                     for index, requested in enumerate(requested_segments):
                         previous_index = correspondence.get(index)
@@ -332,12 +353,15 @@ class RevisionStore:
                             and previous.text == current.text
                         ):
                             for name in ("delivery", "intensity", "pace", "voice_mode"):
-                                if getattr(previous, name) == getattr(
-                                    requested, name
-                                ) and _same_control_origin(
-                                    previous_controls[previous.id].get(name),
-                                    requested_controls[requested.id].get(name),
-                                    speech_correspondence,
+                                if (
+                                    previous_speech_counts[previous.text] == 1
+                                    and requested_speech_counts[requested.text] == 1
+                                    and getattr(previous, name) == getattr(requested, name)
+                                    and _same_control_origin(
+                                        previous_controls.origins[previous.id].get(name),
+                                        requested_controls.origins[requested.id].get(name),
+                                        control_correspondence.get(name, {}),
+                                    )
                                 ):
                                     updates[name] = getattr(current, name)
                             updates["language"] = current.language

@@ -155,6 +155,13 @@ class _PauseMarker:
     line_number: int
 
 
+@dataclass(frozen=True)
+class ScriptControls:
+    origins: dict[str, dict[str, tuple[int, int]]]
+    markers: dict[str, dict[tuple[int, int], str]]
+    paragraphs: list[str]
+
+
 def build_script_timeline(
     *,
     run_id: UUID,
@@ -193,7 +200,7 @@ def compile_script(
     script: str,
     created_at: datetime,
     source: Literal["script_file", "generated_prompt"],
-) -> tuple[Timeline, dict[str, list[int]], dict[str, dict[str, tuple[int, int]]]]:
+) -> tuple[Timeline, dict[str, list[int]], ScriptControls]:
     """Compile the timeline and marker origins used for non-destructive edits."""
     if len(script) > MAX_SCRIPT_CHARACTERS:
         raise ScriptCompileError(
@@ -214,7 +221,7 @@ def compile_script(
         paragraph = _plain_spoken_text(" ".join(paragraph_lines))
         paragraph_lines.clear()
         if paragraph:
-            raw_blocks.extend(_bounded_chunks(paragraph))
+            raw_blocks.append(paragraph)
 
     for line_number, raw_line in enumerate(script.splitlines()):
         line = raw_line.strip()
@@ -294,6 +301,8 @@ def compile_script(
     }
     control_origins: dict[str, dict[str, tuple[int, int]]] = {}
     active_origins: dict[str, tuple[int, int]] = {}
+    markers: dict[str, dict[tuple[int, int], str]] = {}
+    paragraphs: list[str] = []
     marker_counts: dict[tuple[str, int], int] = {}
     for block in raw_blocks:
         if isinstance(block, tuple) and len(block) == 2:
@@ -305,11 +314,10 @@ def compile_script(
                     f"Unsupported {name.replace('_', '-')} {value!r}; use {choices}."
                 )
             speech_controls[name] = value
-            # Speech position is stable across prose/whitespace edits; marker
-            # occurrence distinguishes an explicit reset to a default value.
-            marker_key = (name, speech_number)
+            marker_key = (name, len(paragraphs))
             marker_counts[marker_key] = marker_counts.get(marker_key, 0) + 1
-            active_origins[name] = (speech_number, marker_counts[marker_key])
+            active_origins[name] = (len(paragraphs), marker_counts[marker_key])
+            markers.setdefault(name, {})[active_origins[name]] = value
             continue
         if isinstance(block, tuple):
             phase, duration_ms, cycle, protocol_id = block
@@ -341,18 +349,20 @@ def compile_script(
                 )
             )
         else:
-            speech_number += 1
-            control_origins[f"speech-{speech_number:04d}"] = active_origins.copy()
-            segments.append(
-                SpeechSegment(
-                    id=f"speech-{speech_number:04d}",
-                    text=block,
-                    delivery=cast(DeliveryStyle, speech_controls["delivery"]),
-                    intensity=cast(DeliveryIntensity, speech_controls["intensity"]),
-                    pace=cast(PaceIntent, speech_controls["pace"]),
-                    voice_mode=cast(VoiceMode, speech_controls["voice_mode"]),
+            paragraphs.append(block)
+            for chunk in _bounded_chunks(block):
+                speech_number += 1
+                control_origins[f"speech-{speech_number:04d}"] = active_origins.copy()
+                segments.append(
+                    SpeechSegment(
+                        id=f"speech-{speech_number:04d}",
+                        text=chunk,
+                        delivery=cast(DeliveryStyle, speech_controls["delivery"]),
+                        intensity=cast(DeliveryIntensity, speech_controls["intensity"]),
+                        pace=cast(PaceIntent, speech_controls["pace"]),
+                        voice_mode=cast(VoiceMode, speech_controls["voice_mode"]),
+                    )
                 )
-            )
     if not any(isinstance(segment, SpeechSegment) for segment in segments):
         raise ScriptCompileError("Script must contain at least one spoken paragraph.")
     if len(segments) > MAX_SEGMENTS:
@@ -365,4 +375,4 @@ def compile_script(
         source=source,
         segments=segments,
     )
-    return timeline, pause_lines, control_origins
+    return timeline, pause_lines, ScriptControls(control_origins, markers, paragraphs)
