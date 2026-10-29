@@ -113,9 +113,11 @@ The local failure and replay receipts are the evidence for this machine.
 
 ## Verification and delivery
 
-The latest complete local source gate passed **1,346 tests**, Ruff formatting/lint,
-and strict mypy before this documentation update. The follow-up GitHub gate must
-bind its final revision and actual Linux/macOS/Windows Actions results; earlier
+The supplied historical handoff records **1,346 tests**, Ruff formatting/lint,
+and strict mypy passing before the subsequent review fixes. It does not certify
+the current source revision `2a6ccbe4890aa3256e5ec7f2fddcb733f10f37a5` or this
+documentation/lint follow-up. The final local and GitHub results must be bound
+to their tested revision, including actual Linux/macOS/Windows Actions results; earlier
 three-platform CI success at `6477f10361bdd28a38f34237e3253ddc50f87377` is historical.
 The branch is a reviewable PR, not an automatic merge or release certification.
 
@@ -151,9 +153,10 @@ Full ASR receipts are retained byte-for-byte in the ignored worktree directory
 `.whoopy-recovery/asr-publication/`; public JSON retains compact status, metrics
 and provenance with original receipt hashes. No original external-checkout
 evidence or prior Git history was changed. Human listening remains pending.
-The owner reports a fresh corrected grounding Pass; final campaign paths and
-receipts still require the outer Document/PR phase's evidence reconciliation.
-This review phase did not rerun inference or independently certify that result.
+The corrected grounding result was subsequently reconciled from the supplied
+handoff in [Retained listening sets](#retained-listening-sets), bound to its
+historical producer revision. This review phase did not rerun inference or
+independently certify that result.
 
 Focused verification ran 430 tests across the changed areas and their immediate
 callers: adapters, benchmark retention, CLI, exports, package assessment/build,

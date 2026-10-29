@@ -178,9 +178,10 @@ scenario definitions are `config/acceptance/local-v1-primary-v1.json`; use all s
 
 ## Collect the four remaining independent targets
 
-This is an operator handoff, not a CI job. Hosted CI proves that a wheel can start on a runner, but
-its receipts deliberately say `ci_portability_not_release_acceptance` and cannot satisfy either
-release gate. Run the following workflow on independently operated Windows x64, macOS Intel,
+This is an operator handoff, not a CI job. For the hosted workflow's actual scope and the separate
+manual portability tooling, see [setup](setup.md#12-release-acceptance-harness).
+Manual `ci_portability_not_release_acceptance` receipts cannot satisfy either release gate.
+Run the following workflow on independently operated Windows x64, macOS Intel,
 Linux x64, and Linux ARM64 machines. Keep the existing macOS ARM64 receipts only if they still
 match the same frozen product wheel and suite.
 
@@ -255,9 +256,8 @@ whoopy-app-<version>-<target>-py311.zip.sha256
 ```
 
 If the version differs from `0.1.0`, use the exact shared wheel version in both names. These are
-outputs of the manual native bundle-building command above. The sole GitHub workflow runs
-`scripts/check.py` and `whoopy doctor --json` on `ubuntu-latest`, `macos-14`, and `windows-latest`;
-it does not upload `offline-application-<target>` artifacts or packaging receipts. Transfer any
+outputs of the manual native bundle-building command above, not hosted workflow artifacts;
+see [setup's workflow scope](setup.md#12-release-acceptance-harness). Transfer any
 manually built bundle and its receipts explicitly, and extract the ZIP before passing its
 unpacked directory to the acceptance harness. Manual packaging, installed-application launch,
 artifact uploads and receipt aggregation remain unqualified until their actual evidence is

@@ -76,7 +76,7 @@ Experimental and incompatible evidence remains available through the versioned L
 
 Kokoro's shipped preset choices are `af_heart`, `af_bella`, `af_nicole`, and `am_michael`.
 
-## Qwen3-TTS Adapter Family
+## Native/Managed Qwen3-TTS Adapter Family
 
 Whoopy implements isolated adapter contracts for:
 
@@ -89,11 +89,14 @@ The model registry now contains only the first reviewed integration:
 `85e237c12c027371202489a0ec509ded67b5e4b5` and source revision
 `022e286b98fbec7e1e916cb940cdf532cd9f488e`. Its checksum-reviewed runtime clean-installs offline
 and passes its full import probe, but it remains **Lab-only and unavailable for Studio generation**
-until the checkpoint and current-machine real offline audio smoke exist. The other adapter variants
-remain unregistered and therefore fail closed. Hand-authored model declarations and copied
+until the checkpoint and current-machine real offline audio smoke exist. The other native adapter
+variants remain unregistered and therefore fail closed. Hand-authored model declarations and copied
 development environments cannot enable generation. Versioned Lab APIs may preserve Qwen evidence
 and human ratings; the generation boundary still rejects Studio use until a current saved decision
 matches the exact ready voice contract. Promotion never bypasses model readiness.
+
+Separately pinned experimental MLX CustomVoice and VoiceDesign variants have explicit
+[CLI-only routes](experimental-mlx-qwen.md); they do not confer managed readiness.
 
 CustomVoice and VoiceDesign translate all eight reviewed delivery styles and four pace intents.
 Base cloning declares neutral/natural delivery because cloning a voice does not prove instruction

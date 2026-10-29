@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, get_args
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from pydantic_core import ErrorType
+from pydantic_core.core_schema import ErrorType
 
 from whoopy.meditation.editorial import EditorialReport
 from whoopy.meditation.models import (

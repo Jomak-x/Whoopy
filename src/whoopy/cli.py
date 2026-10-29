@@ -119,7 +119,6 @@ from whoopy.pipeline.worker import WorkerError
 from whoopy.ports import AdapterError, SpeechSynthesizer
 from whoopy.timeline import (
     ScriptCompileError,
-    SpeechSegment,
     Timeline,
     build_script_timeline,
 )

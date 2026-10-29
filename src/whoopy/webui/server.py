@@ -2221,6 +2221,7 @@ class LocalWebApplication:
                         return None
             except RunLockUnavailable:
                 pass
+        pending = cast(PendingAlternativeTake, pending)
         with self._task_lock:
             task = self._tasks.get(run_id)
             if task is not None and (task.active or task.finalizing_take):
@@ -2856,20 +2857,18 @@ class LocalWebApplication:
                     },
                 }
             )
-        if task.mode == "plan_regeneration":
-            if task.active:
-                result.update(
-                    {
-                        "status": "running",
-                        "execution": {
-                            "stage": "drafting",
-                            "message": (
-                                "Redrafting edited plan sections through the saved "
-                                "local LLM context."
-                            ),
-                        },
-                    }
-                )
+        if task.mode == "plan_regeneration" and task.active:
+            result.update(
+                {
+                    "status": "running",
+                    "execution": {
+                        "stage": "drafting",
+                        "message": (
+                            "Redrafting edited plan sections through the saved local LLM context."
+                        ),
+                    },
+                }
+            )
         return result
 
     def _launch_recovery_command(

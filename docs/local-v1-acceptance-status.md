@@ -60,16 +60,19 @@ badge cannot bypass the current registry fingerprints.
 
 ## CI targets are not observed platforms
 
-CI portability receipts prove that a fresh wheel starts and exercises lightweight behavior on the
-declared runner target. They explicitly use the scope `ci_portability_not_release_acceptance`, do
-not prove OS network isolation, and are informational in the consolidated report:
+The manual portability tooling can record that a fresh wheel starts and exercises lightweight
+behavior on a declared target. These receipts explicitly use the scope
+`ci_portability_not_release_acceptance`, do not prove OS network isolation, and are informational
+in the consolidated report. The checked-in hosted workflow does not produce them; see
+[setup's workflow scope](setup.md#12-release-acceptance-harness).
 
 ```bash
 uv run python scripts/local_v1_acceptance_status.py \
   --ci-portability-summary portability-summary.json
 ```
 
-The five `declared_ci_targets` therefore remain separate from
+The schema's five `declared_ci_targets` are release-tooling targets, not the current hosted job
+matrix. They remain separate from
 `independently_observed_platforms`. Even a fully passing CI summary cannot change the independent
 platform or offline gates.
 

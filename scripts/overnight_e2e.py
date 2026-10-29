@@ -39,7 +39,8 @@ def digest(path: Path) -> str:
 
 def load_verification_result(report: Path, receipt: dict[str, Any]) -> dict[str, Any]:
     payload: dict[str, Any] = json.loads(report.read_text()) if report.is_file() else {}
-    expected_returncode = {"pass": 0, "review": 2, "fail": 1}.get(payload.get("status"))
+    returncodes: dict[str | None, int] = {"pass": 0, "review": 2, "fail": 1}
+    expected_returncode = returncodes.get(payload.get("status"))
     if (
         expected_returncode is not None
         and receipt.get("status") in {"completed", "nonzero"}
@@ -686,7 +687,7 @@ def main() -> int:
                             },
                         }
                     )
-                native_reports = []
+                native_reports: list[dict[str, Any]] = []
                 required_native: set[str] = set()
                 record["native_verification"] = native_reports
                 if not kokoro:

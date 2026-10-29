@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Literal, cast
 from uuid import UUID, uuid4
@@ -92,12 +93,13 @@ def _ordered_control_alignment(
         suffix = lengths(range(old_end - 1, middle - 1, -1), range(new_end - 1, new_start - 1, -1))
         width = new_end - new_start
         crossing = max(
-            range(width + 1),
-            key=lambda column: (
+            (
                 prefix[column] + suffix[width - column],
                 column if prefer_late else -column,
-            ),
-        )
+                column,
+            )
+            for column in range(width + 1)
+        )[2]
         del prefix, suffix
         align(old_start, middle, new_start, new_start + crossing)
         align(middle, old_end, new_start + crossing, new_end)
@@ -396,9 +398,7 @@ class RevisionStore:
                     split_children: dict[int, list[SpeechSegment]] = {}
                     boundaries = [(-1, -1), *sorted(mandatory)]
                     boundaries.append((len(previous_keys), len(requested_keys)))
-                    for (old_start, new_start), (old_end, new_end) in zip(
-                        boundaries, boundaries[1:], strict=False
-                    ):
+                    for (old_start, new_start), (old_end, new_end) in pairwise(boundaries):
                         old_indices = range(old_start + 1, old_end)
                         new_indices = range(new_start + 1, new_end)
                         matches = {
