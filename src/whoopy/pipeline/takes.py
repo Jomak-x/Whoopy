@@ -92,7 +92,7 @@ class SegmentTakeStore:
         parsed = self.store.parse_run_id(run_id)
         path = self.store.run_directory(parsed) / TAKES_ROOT / "pending.json"
         try:
-            pending = PendingAlternativeTake.model_validate_json(path.read_text("utf-8"))
+            pending = PendingAlternativeTake.model_validate_json(self.store._read_text(path))
         except FileNotFoundError:
             return None
         except (OSError, ValueError) as error:
@@ -117,7 +117,7 @@ class SegmentTakeStore:
             / f"{pending.operation_id}.json"
         )
         destination.parent.mkdir(parents=True, exist_ok=True)
-        source.replace(destination)
+        self.store._replace(source, destination)
 
     def list(self, run_id: UUID | str, segment_id: str) -> list[SegmentTakeManifest]:
         root = self._segment_root(run_id, segment_id)

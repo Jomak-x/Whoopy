@@ -595,6 +595,38 @@ def test_run_load_retries_a_transient_permission_error(
     assert attempts == 1
 
 
+@pytest.mark.parametrize("persistent", [False, True])
+def test_run_save_handles_windows_reader_conflicts_atomically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, persistent: bool
+) -> None:
+    store = RunStore(tmp_path)
+    original = store.create("Original request.", run_id=RUN_ID)
+    updated = original.model_copy(update={"prompt": "Updated request."})
+    original_replace = os.replace
+    attempts = 0
+
+    def denied_replace(source: Path, destination: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        # Readers must keep seeing the complete old record until replacement succeeds.
+        assert store.load(RUN_ID) == original
+        if persistent or attempts == 1:
+            raise PermissionError("Windows reader still has the record open")
+        original_replace(source, destination)
+
+    monkeypatch.setattr("whoopy.pipeline.runs.os.replace", denied_replace)
+    if persistent:
+        with pytest.raises(RunStoreError, match="reader still has the record open"):
+            store.save(updated)
+        assert attempts == 5
+        assert store.load(RUN_ID) == original
+    else:
+        store.save(updated)
+        assert attempts == 2
+        assert store.load(RUN_ID) == updated
+    assert not list(store.run_directory(RUN_ID).glob(".*.tmp"))
+
+
 def test_pending_generation_run_atomically_saves_every_resume_input(tmp_path: Path) -> None:
     store = RunStore(tmp_path)
     request = _pending_generation()

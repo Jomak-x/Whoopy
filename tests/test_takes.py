@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
@@ -141,6 +142,74 @@ def _pending_alternative(store: RunStore, selected: str) -> PendingAlternativeTa
         )
     )
     return pending
+
+
+@pytest.mark.parametrize("operation", ["read", "archive"])
+@pytest.mark.parametrize("persistent", [False, True])
+def test_pending_take_handles_windows_replacement_conflicts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str, persistent: bool
+) -> None:
+    store = RunStore(tmp_path)
+    store.create("Retain this selection.", run_id=RUN_ID)
+    takes = SegmentTakeStore(store)
+    pending = PendingAlternativeTake(
+        operation_id=uuid4(),
+        run_id=RUN_ID,
+        segment_id="speech-0001",
+        selected_take_id="t0001-0123456789",
+    )
+    takes.save_pending(pending)
+    source = store.run_directory(RUN_ID) / "takes" / "pending.json"
+    archived = (
+        store.run_directory(RUN_ID)
+        / "history"
+        / "alternative-takes"
+        / f"{pending.operation_id}.json"
+    )
+    original_bytes = source.read_bytes()
+    original_read = Path.read_text
+    original_replace = os.replace
+    attempts = 0
+
+    def deny_access() -> None:
+        nonlocal attempts
+        attempts += 1
+        if persistent or attempts == 1:
+            raise PermissionError("Windows replacement conflict")
+
+    def read(path: Path, encoding: str | None = None, errors: str | None = None) -> str:
+        if path == source:
+            deny_access()
+        return original_read(path, encoding=encoding, errors=errors)
+
+    def replace(old: Path, new: Path) -> None:
+        assert old == source and new == archived
+        deny_access()
+        original_replace(old, new)
+
+    with monkeypatch.context() as patch:
+        if operation == "read":
+            patch.setattr(Path, "read_text", read)
+            if persistent:
+                with pytest.raises(SegmentTakeError, match="unreadable"):
+                    takes.pending(RUN_ID)
+            else:
+                assert takes.pending(RUN_ID) == pending
+        else:
+            patch.setattr("whoopy.pipeline.runs.os.replace", replace)
+            if persistent:
+                with pytest.raises(PermissionError, match="replacement conflict"):
+                    takes.finish_pending(pending)
+            else:
+                takes.finish_pending(pending)
+
+    assert attempts == (5 if persistent else 2)
+    if operation == "archive" and not persistent:
+        assert takes.pending(RUN_ID) is None
+        assert archived.read_bytes() == original_bytes
+    else:
+        assert source.read_bytes() == original_bytes
+        assert not archived.exists()
 
 
 def test_production_checkpoints_become_immutable_takes_and_choices_only_reassemble(

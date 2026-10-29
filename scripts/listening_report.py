@@ -46,7 +46,7 @@ def link(root: Path, value: str | Path | None, label: str, *, directory: bool = 
 
 def load(root: Path, value: str | Path | None) -> dict[str, Any]:
     try:
-        payload: dict[str, Any] = json.loads(safe_path(root, value).read_text())
+        payload: dict[str, Any] = json.loads(safe_path(root, value).read_text(encoding="utf-8"))
         return payload
     except (ValueError, OSError, TypeError):
         return {}
@@ -172,14 +172,14 @@ def diff_page(
         )
     body += details("Expected transcript", report.get("expected_transcript"))
     body += details("Independent ASR transcript", (report.get("asr") or {}).get("text"))
-    with destination.open("x") as stream:
+    with destination.open("x", encoding="utf-8") as stream:
         stream.write(document(label, body))
     return link(root, destination, "Exact normalized word diff")
 
 
 def build(root: Path, *, output: Path | None = None) -> Path:
     root = root.resolve(strict=True)
-    manifest = json.loads((root / "manifest.json").read_text())
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     output = output or root / "review.html"
     output = output if output.is_absolute() else root / output
     output = output.absolute()
@@ -471,7 +471,7 @@ def build(root: Path, *, output: Path | None = None) -> Path:
         else "<p>No hard failure is listed in the available receipts. This is not a human quality acceptance.</p>"
     )
     body += details("Skipped jobs", manifest.get("skipped", [])) + "</section>"
-    with output.open("x") as stream:
+    with output.open("x", encoding="utf-8") as stream:
         stream.write(document("Whoopy new full-session listening report", body))
     return output
 

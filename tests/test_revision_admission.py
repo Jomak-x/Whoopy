@@ -54,7 +54,7 @@ def _mutate(
 
 def _snapshot(directory: Path) -> dict[str, bytes]:
     return {
-        str(path.relative_to(directory)): path.read_bytes()
+        path.relative_to(directory).as_posix(): path.read_bytes()
         for path in directory.rglob("*")
         if path.is_file()
     }

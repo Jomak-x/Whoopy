@@ -11,16 +11,53 @@ import pytest
 
 from tests.test_takes import RUN_ID, _alternative_take, _completed_run, _pending_alternative
 from tests.test_task_finalization import _application, _write_export
+from tests.test_webui_review_boundaries import _rendered_script_run
+from whoopy.audio import AudioManifest, AudioQualityReport
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.audio.processing import ProcessedSpeechSynthesizer
 from whoopy.pipeline.checkpoints import SegmentCheckpointStore
 from whoopy.pipeline.locks import RunLock
 from whoopy.pipeline.regeneration import SegmentRegenerationError, prepare_segment_regeneration
 from whoopy.pipeline.revisions import RevisionStore
-from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore, RunStoreError
+from whoopy.pipeline.runs import (
+    RunExecution,
+    RunRecord,
+    RunStage,
+    RunStatus,
+    RunStore,
+    RunStoreError,
+)
 from whoopy.pipeline.takes import PendingAlternativeTake, SegmentTakeStore
 from whoopy.pipeline.worker import LocalWorker, WorkerError
 from whoopy.webui.server import GenerationTask, LocalWebApplication
+
+
+def test_run_summary_keeps_audio_and_status_on_the_same_task_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    application = _application(tmp_path)
+    _store, run_id = _rendered_script_run(application)
+    task = GenerationTask(task_id=run_id, run_id=run_id)
+    application._tasks[run_id] = task
+    current_audio = application._current_audio
+
+    def finish_after_audio_read(
+        record: RunRecord, **kwargs: Any
+    ) -> tuple[Path, AudioManifest, AudioQualityReport] | None:
+        audio = current_audio(record, **kwargs)
+        with application._task_lock:
+            task.launching = False
+        return audio
+
+    monkeypatch.setattr(application, "_current_audio", finish_after_audio_read)
+    finishing = application.run(run_id)
+    assert finishing is not None
+    assert finishing["status"] == "running"
+    assert finishing["has_audio"] is False
+    completed = application.run(run_id)
+    assert completed is not None
+    assert completed["status"] == "completed"
+    assert completed["has_audio"] is True
 
 
 def _assembly_launcher(store: RunStore) -> type[Any]:

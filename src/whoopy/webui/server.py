@@ -23,7 +23,7 @@ import webbrowser
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext, suppress
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
@@ -1426,6 +1426,9 @@ class LocalWebApplication:
             return None
 
     def _run_summary(self, record: RunRecord, directory: Path) -> dict[str, Any]:
+        with self._task_lock:
+            live_task = self._tasks.get(str(record.run_id))
+            task = None if live_task is None else replace(live_task)
         duration_seconds: float | None = None
         quality_passed: bool | None = None
         tts_model: str | None = None
@@ -1463,7 +1466,11 @@ class LocalWebApplication:
                 }
             except (psutil.Error, OSError):
                 live_metrics = {"elapsed_seconds": elapsed_seconds}
-        current_audio = self._current_audio(record)
+        # Audio and status must describe the same task state even if its
+        # supervisor finishes while this response is being assembled.
+        current_audio = self._current_audio(
+            record, task_blocks_audio=task is not None and (task.active or task.finalizing_take)
+        )
         if current_audio is not None:
             _audio, manifest, quality = current_audio
             duration_seconds = round(manifest.duration_ms / 1_000, 2)
@@ -1517,8 +1524,6 @@ class LocalWebApplication:
             "execution": (execution.model_dump(mode="json") if execution is not None else None),
             "live_metrics": live_metrics,
         }
-        with self._task_lock:
-            task = self._tasks.get(str(record.run_id))
         if (
             task is not None
             and task.mode == "plan_regeneration"
@@ -3367,13 +3372,15 @@ class LocalWebApplication:
         return None if current is None else current[0]
 
     def _current_audio(
-        self, record: RunRecord
+        self, record: RunRecord, *, task_blocks_audio: bool | None = None
     ) -> tuple[Path, AudioManifest, AudioQualityReport] | None:
         run_id = str(record.run_id)
-        with self._task_lock:
-            task = self._tasks.get(run_id)
-            if task is not None and (task.active or task.finalizing_take):
-                return None
+        if task_blocks_audio is None:
+            with self._task_lock:
+                task = self._tasks.get(run_id)
+                task_blocks_audio = task is not None and (task.active or task.finalizing_take)
+        if task_blocks_audio:
+            return None
         if self._pending_take(run_id) is not None:
             return None
         if (

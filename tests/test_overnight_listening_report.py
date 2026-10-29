@@ -15,7 +15,7 @@ from scripts import listening_report as report
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value))
+    path.write_text(json.dumps(value), encoding="utf-8")
 
 
 def wav(path: Path) -> None:
@@ -186,7 +186,7 @@ class RenderChecks(unittest.TestCase):
             root = Path(tmp).resolve()
             fixture(root)
             destination = report.build(root)
-            main = destination.read_text()
+            main = destination.read_text(encoding="utf-8")
             self.assertIn("Prompt → audio", main)
             self.assertIn("Fixed-script voice comparison", main)
             self.assertIn("Shared accepted script", main)
@@ -201,7 +201,7 @@ class RenderChecks(unittest.TestCase):
             self.assertIn("&lt;script&gt;", main)
             for page in root.rglob("*.html"):
                 parsed = Links()
-                parsed.feed(page.read_text())
+                parsed.feed(page.read_text(encoding="utf-8"))
                 self.assertNotIn("script", parsed.tags)
                 self.assertNotIn("img", parsed.tags)
                 for value in parsed.links:
@@ -254,7 +254,7 @@ class RenderChecks(unittest.TestCase):
             audio = Path(data["records"][0]["attempt"]) / "production-runs/run-0/narration.wav"
             with audio.open("ab") as stream:
                 stream.write(b"changed")
-            text = report.build(root).read_text()
+            text = report.build(root).read_text(encoding="utf-8")
             self.assertIn("Final WAV hash differs", text)
             self.assertIn('sample-000" class="fail"', text)
 
@@ -262,7 +262,7 @@ class RenderChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             selected_native(root, fixture(root))
-            text = report.build(root).read_text()
+            text = report.build(root).read_text(encoding="utf-8")
             self.assertIn('sample-000" class="pass"', text)
             self.assertIn("Native attempt speech-0001: Pass", text)
 
@@ -272,11 +272,13 @@ class RenderChecks(unittest.TestCase):
             audio, _ = selected_native(root, fixture(root))
             with audio.open("ab") as stream:
                 stream.write(b"changed after native ASR")
-            text = report.build(root).read_text()
+            text = report.build(root).read_text(encoding="utf-8")
             self.assertIn('sample-000" class="fail"', text)
             self.assertIn("Native attempt speech-0001: Fail:", text)
             self.assertIn("Native WAV hash differs from retained ASR receipt", text)
-            diff = next(root.glob("review-details-*/sample-000-native-000.html")).read_text()
+            diff = next(root.glob("review-details-*/sample-000-native-000.html")).read_text(
+                encoding="utf-8"
+            )
             self.assertIn("Screening: <strong>Fail</strong>", diff)
             self.assertIn("Native WAV hash differs", diff)
 
@@ -285,7 +287,7 @@ class RenderChecks(unittest.TestCase):
             root = Path(tmp)
             audio, _ = selected_native(root, fixture(root))
             audio.unlink()
-            text = report.build(root).read_text()
+            text = report.build(root).read_text(encoding="utf-8")
             self.assertIn('sample-000" class="fail"', text)
             self.assertIn("Native attempt speech-0001: Fail:", text)
             self.assertIn("Native WAV is missing, unavailable, or outside this campaign", text)
@@ -299,10 +301,10 @@ class RenderChecks(unittest.TestCase):
             audio, sidecar = selected_native(root, fixture(root))
             outside = parent / "outside.wav"
             wav(outside)
-            metadata = json.loads(sidecar.read_text())
+            metadata = json.loads(sidecar.read_text(encoding="utf-8"))
             metadata["wav_path"] = str(outside)
             write_json(sidecar, metadata)
-            text = report.build(root).read_text()
+            text = report.build(root).read_text(encoding="utf-8")
             self.assertIn('sample-000" class="fail"', text)
             self.assertIn("Native attempt speech-0001: Fail:", text)
             self.assertNotIn('src="../outside.wav"', text)
@@ -314,7 +316,7 @@ class RenderChecks(unittest.TestCase):
             root = Path(tmp)
             _, sidecar = selected_native(root, fixture(root))
             sidecar.unlink()
-            text = report.build(root).read_text()
+            text = report.build(root).read_text(encoding="utf-8")
             self.assertIn('sample-000" class="fail"', text)
             self.assertIn("Selected native metadata is missing or outside this campaign", text)
 
@@ -325,7 +327,7 @@ class RenderChecks(unittest.TestCase):
             selected_native(root, manifest)
             del manifest["records"][0]["native_verification"][0]["verification"]["audio_sha256"]
             write_json(root / "manifest.json", manifest)
-            text = report.build(root).read_text()
+            text = report.build(root).read_text(encoding="utf-8")
             self.assertIn('sample-000" class="fail"', text)
             self.assertIn("Native WAV ASR receipt has no audio SHA256", text)
 
@@ -336,7 +338,7 @@ class RenderChecks(unittest.TestCase):
             selected_native(root, manifest)
             manifest["records"][0]["native_verification"][0]["verification"] = {}
             write_json(root / "manifest.json", manifest)
-            text = report.build(root).read_text()
+            text = report.build(root).read_text(encoding="utf-8")
             self.assertIn('sample-000" class="fail"', text)
             self.assertIn("Selected native ASR receipt is missing", text)
 
@@ -346,10 +348,12 @@ class RenderChecks(unittest.TestCase):
             manifest = fixture(root)
             run = Path(manifest["records"][0]["attempt"]) / "production-runs/run-0"
             (run / "narration.wav").unlink()
-            text = report.build(root).read_text()
+            text = report.build(root).read_text(encoding="utf-8")
             self.assertIn('sample-000" class="fail"', text)
             self.assertIn("Final WAV is missing, unavailable, or outside this campaign", text)
-            diff = next(root.glob("review-details-*/sample-000-final.html")).read_text()
+            diff = next(root.glob("review-details-*/sample-000-final.html")).read_text(
+                encoding="utf-8"
+            )
             self.assertIn("Screening: <strong>Fail</strong>", diff)
 
     def test_final_asr_without_audio_hash_cannot_pass(self) -> None:
@@ -358,7 +362,7 @@ class RenderChecks(unittest.TestCase):
             manifest = fixture(root)
             del manifest["records"][0]["final_verification"]["audio_sha256"]
             write_json(root / "manifest.json", manifest)
-            text = report.build(root).read_text()
+            text = report.build(root).read_text(encoding="utf-8")
             self.assertIn('sample-000" class="fail"', text)
             self.assertIn("Final WAV ASR receipt has no audio SHA256", text)
 

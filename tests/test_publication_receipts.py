@@ -12,14 +12,13 @@ def test_returned_native_arrays_are_excluded_from_publication() -> None:
         ".whoopy-recovery/disposable/returned-0000.npy",
     ]
     result = subprocess.run(
-        ["git", "check-ignore", "--no-index", "--stdin"],
+        ["git", "check-ignore", "--no-index", "--stdin", "-z"],
         cwd=root,
-        input="\n".join([*paths, "src/whoopy/cli.py"]) + "\n",
-        text=True,
+        input="\0".join([*paths, "src/whoopy/cli.py"]).encode() + b"\0",
         capture_output=True,
         check=True,
     )
-    assert result.stdout.splitlines() == paths
+    assert [path.decode() for path in result.stdout.split(b"\0") if path] == paths
 
 
 def _assert_compact_evidence(value: object) -> None:

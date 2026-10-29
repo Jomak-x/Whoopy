@@ -10,7 +10,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Any
+from typing import IO, Any
 
 import psutil
 import pytest
@@ -293,6 +293,21 @@ def test_writing_cli_passes_explicit_model_storage_and_keeps_both_failed_methods
     monkeypatch.setattr(LlamaCppScriptGenerator, "from_artifact_store", refuse_model)
     monkeypatch.setattr(benchmark_writing_methods, "load_artifact_lock", load_lock)
     monkeypatch.setattr(benchmark_writing_methods, "_lock_exclusively", lambda _: None)
+    original_open = Path.open
+
+    def isolated_open(
+        path: Path,
+        mode: str = "r",
+        buffering: int = -1,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> IO[Any]:
+        if path == Path("/tmp/whoopy-benchmark-gpu.lock"):
+            path = tmp_path / "gpu.lock"
+        return original_open(path, mode, buffering, encoding, errors, newline)
+
+    monkeypatch.setattr(Path, "open", isolated_open)
     monkeypatch.setattr(psutil, "swap_memory", lambda: SimpleNamespace(used=0))
     monkeypatch.setattr(
         psutil,
@@ -348,13 +363,12 @@ def test_writing_cli_passes_explicit_model_storage_and_keeps_both_failed_methods
         "fresh/grounding-3m/recipe_whole_session/raw-invocations/001/process.json",
     ]
     result = subprocess.run(
-        ["git", "-C", str(tmp_path), "check-ignore", "--no-index", "--stdin"],
-        input="\n".join([*ignored, "publishable-summary.json"]) + "\n",
+        ["git", "-C", str(tmp_path), "check-ignore", "--no-index", "--stdin", "-z"],
+        input="\0".join([*ignored, "publishable-summary.json"]).encode() + b"\0",
         capture_output=True,
-        text=True,
         check=True,
     )
-    assert result.stdout.splitlines() == ignored
+    assert [path.decode() for path in result.stdout.split(b"\0") if path] == ignored
 
 
 @pytest.fixture

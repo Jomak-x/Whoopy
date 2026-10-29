@@ -1337,21 +1337,12 @@ class RunStore:
         """Load and validate a run record from disk."""
 
         path = self.record_path(run_id)
-        for attempt in range(5):
-            try:
-                return RunRecord.model_validate_json(path.read_text(encoding="utf-8"))
-            except PermissionError as error:
-                # Windows can briefly deny a concurrent reader while another
-                # process replaces run.json. Retrying keeps the atomic record
-                # boundary observable without weakening validation.
-                if attempt == 4:
-                    raise RunStoreError(f"Could not load run record {path}: {error}") from error
-                time.sleep(0.01)
-            except FileNotFoundError as error:
-                raise RunNotFoundError(f"Run record not found: {path}") from error
-            except (OSError, ValidationError) as error:
-                raise RunStoreError(f"Could not load run record {path}: {error}") from error
-        raise AssertionError("run record retry loop did not return or raise")
+        try:
+            return RunRecord.model_validate_json(self._read_text(path))
+        except FileNotFoundError as error:
+            raise RunNotFoundError(f"Run record not found: {path}") from error
+        except (OSError, ValidationError) as error:
+            raise RunStoreError(f"Could not load run record {path}: {error}") from error
 
     def save(self, record: RunRecord) -> None:
         """Atomically replace a run record so readers never see partial JSON."""
@@ -1755,6 +1746,32 @@ class RunStore:
             raise InvalidRunIdError(f"Invalid run ID: {value}") from error
 
     @staticmethod
+    def _read_text(path: Path) -> str:
+        """Read an atomic record across brief Windows replacement conflicts."""
+
+        for attempt in range(5):
+            try:
+                return path.read_text(encoding="utf-8")
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.01)
+        raise AssertionError("record read retry loop did not return or raise")
+
+    @staticmethod
+    def _replace(source: Path, destination: Path) -> None:
+        """Allow short-lived Windows readers to close before atomic replacement."""
+
+        for attempt in range(5):
+            try:
+                os.replace(source, destination)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.01)
+
+    @staticmethod
     def _write_json(path: Path, payload: str) -> None:
         """Write beside the destination, then atomically replace it."""
 
@@ -1770,7 +1787,7 @@ class RunStore:
                 temporary_file.write(payload)
                 temporary_file.flush()
                 os.fsync(temporary_file.fileno())
-            os.replace(temporary_path, path)
+            RunStore._replace(temporary_path, path)
             RunStore._fsync_directory(path.parent)
         except OSError as error:
             raise RunStoreError(f"Could not write {path}: {error}") from error

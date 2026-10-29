@@ -176,9 +176,8 @@ def _resolve(models_root: Path, backend: str, manifest_path: Path) -> MlxQwenIns
         raise ValueError("Expected a pinned absolute Python 3.12 executable target")
     if (
         not python.is_symlink()
-        or Path(os.readlink(python)) != target
         or target.is_symlink()
-        or python.resolve(strict=True) != target
+        or python.resolve(strict=True) != target.resolve(strict=True)
     ):
         raise ValueError("Experimental Python executable target mismatch")
     _verify_file(target, runtime_spec["python_binary"])
