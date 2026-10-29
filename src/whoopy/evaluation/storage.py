@@ -190,9 +190,10 @@ class EvaluationRepository:
             raise EvaluationStorageError(f"Refusing to replace immutable Lab evidence: {path}")
         temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
         try:
-            temporary.write_text(payload, encoding="utf-8")
-            # Flush the file itself before the atomic directory entry change.
-            with temporary.open("rb") as stream:
+            # Windows requires a writable handle when flushing the file.
+            with temporary.open("w", encoding="utf-8") as stream:
+                stream.write(payload)
+                stream.flush()
                 os.fsync(stream.fileno())
             # A hard-link commit is atomic and, unlike Path.replace(), can never
             # overwrite evidence won by a concurrent request.
@@ -215,8 +216,9 @@ class EvaluationRepository:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
         try:
-            temporary.write_text(payload, encoding="utf-8")
-            with temporary.open("rb") as stream:
+            with temporary.open("w", encoding="utf-8") as stream:
+                stream.write(payload)
+                stream.flush()
                 os.fsync(stream.fileno())
             temporary.replace(path)
             RunStore._fsync_directory(path.parent)

@@ -430,6 +430,115 @@ def test_soak_and_forced_interruption_generate_honest_local_report(tmp_path: Pat
     assert saved["local_v1_release_ready"] is False
 
 
+def test_forced_interruption_accepts_stage_marker_from_child_interpreter(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "child.ready"
+    recovered = tmp_path / "child.recovered"
+    wrapper_pid_path = tmp_path / "wrapper.pid"
+    child = tmp_path / "stage_child.py"
+    child.write_text(
+        "import datetime, json, os, pathlib, time\n"
+        "value = {\n"
+        "    'schema_version': 1,\n"
+        "    'run_id': '11111111-1111-4111-8111-111111111111',\n"
+        "    'stage': 'synthesis',\n"
+        "    'process_id': os.getpid(),\n"
+        "    'observed_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),\n"
+        "    'durable_run_status': 'running',\n"
+        "    'durable_run_stage': 'synthesizing',\n"
+        "}\n"
+        f"pathlib.Path({str(marker)!r}).write_text(json.dumps(value))\n"
+        "while True:\n"
+        "    time.sleep(1)\n",
+        encoding="utf-8",
+    )
+    wrapper = (
+        "import os, pathlib, subprocess, sys; "
+        f"pathlib.Path({str(wrapper_pid_path)!r}).write_text(str(os.getpid())); "
+        f"child = subprocess.Popen([sys.executable, {str(child)!r}]); "
+        "sys.exit(child.wait())"
+    )
+    case = AcceptanceCase(
+        case_id="child-interpreter-stage",
+        kind="forced_interruption",
+        interruption_stage="synthesis",
+        command=(sys.executable, "-c", wrapper),
+        ready_file=marker,
+        recovery_command=(
+            sys.executable,
+            "-c",
+            f"import pathlib; pathlib.Path({str(recovered)!r}).write_text('resumed')",
+        ),
+        timeout_seconds=5,
+    )
+
+    report = run_acceptance(
+        cases=(case,),
+        offline=_passing_offline(),
+        migrations=_passing_migrations(),
+        hardware=_hardware(),
+    )
+
+    result = report.cases[0]
+    assert result.passed is True
+    assert result.stage_marker is not None
+    wrapper_pid = int(wrapper_pid_path.read_text(encoding="utf-8"))
+    assert result.stage_marker.process_id != wrapper_pid
+    assert psutil.pid_exists(result.stage_marker.process_id) is False
+    assert psutil.pid_exists(wrapper_pid) is False
+    assert recovered.read_text(encoding="utf-8") == "resumed"
+
+
+def test_forced_interruption_rejects_stage_marker_from_unrelated_process(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "unrelated.ready"
+    recovered = tmp_path / "unrelated.recovered"
+    unrelated_pid = os.getpid()
+    marker_script = (
+        "import datetime, json, pathlib, time; "
+        "value={"
+        "'schema_version':1,"
+        "'run_id':'11111111-1111-4111-8111-111111111111',"
+        "'stage':'synthesis',"
+        f"'process_id':{unrelated_pid},"
+        "'observed_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),"
+        "'durable_run_status':'running',"
+        "'durable_run_stage':'synthesizing'"
+        "}; "
+        f"pathlib.Path({str(marker)!r}).write_text(json.dumps(value)); "
+        "time.sleep(30)"
+    )
+    case = AcceptanceCase(
+        case_id="unrelated-process-stage",
+        kind="forced_interruption",
+        interruption_stage="synthesis",
+        command=(sys.executable, "-c", marker_script),
+        ready_file=marker,
+        recovery_command=(
+            sys.executable,
+            "-c",
+            f"import pathlib; pathlib.Path({str(recovered)!r}).write_text('resumed')",
+        ),
+        timeout_seconds=5,
+    )
+
+    report = run_acceptance(
+        cases=(case,),
+        offline=_passing_offline(),
+        migrations=_passing_migrations(),
+        hardware=_hardware(),
+    )
+
+    result = report.cases[0]
+    assert result.passed is False
+    assert result.stage_marker is None
+    assert result.recovery is None
+    assert "did not belong to the acceptance process tree" in result.detail
+    assert recovered.exists() is False
+
+
 @pytest.mark.skipif(os.name != "posix", reason="Requires POSIX session and signal behavior")
 @pytest.mark.parametrize("detached_child", [False, True])
 def test_acceptance_timeout_reaps_generation_child_before_next_case(

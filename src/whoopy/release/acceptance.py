@@ -629,8 +629,11 @@ def _run_forced_interruption(case: AcceptanceCase) -> AcceptanceCaseResult:
         stderr=subprocess.PIPE,
         text=True,
         env=_interruption_environment(case),
+        start_new_session=os.name == "posix",
     )
     interrupted = False
+    marker_evidence: AcceptanceStageMarker | None = None
+    marker_error: str | None = None
     try:
         deadline = started + case.timeout_seconds
         if case.ready_file is not None:
@@ -643,8 +646,17 @@ def _run_forced_interruption(case: AcceptanceCase) -> AcceptanceCaseResult:
                 deadline, started + case.interrupt_after_seconds
             ):
                 time.sleep(0.02)
+        descendant_process_ids: tuple[int, ...] = ()
+        if process.poll() is None:
+            with suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+                descendant_process_ids = tuple(
+                    child.pid for child in psutil.Process(process.pid).children(recursive=True)
+                )
+        marker_evidence, marker_error = _load_stage_marker(
+            case, expected_process_ids=(process.pid, *descendant_process_ids)
+        )
         if process.poll() is None and time.monotonic() < deadline:
-            process.terminate()
+            _stop_acceptance_command(process)
             interrupted = True
         try:
             stdout, stderr = process.communicate(timeout=5)
@@ -661,7 +673,6 @@ def _run_forced_interruption(case: AcceptanceCase) -> AcceptanceCaseResult:
         stdout_tail=stdout[-4_000:],
         stderr_tail=stderr[-4_000:],
     )
-    marker_evidence, marker_error = _load_stage_marker(case, expected_pid=process.pid)
     assert case.recovery_command is not None
     recovery = (
         _run_command(case.recovery_command, timeout_seconds=case.timeout_seconds)
@@ -686,7 +697,8 @@ def _run_forced_interruption(case: AcceptanceCase) -> AcceptanceCaseResult:
         stage_marker=marker_evidence,
         recovery=recovery,
         detail=(
-            "The production stage marker matched the child PID and durable run stage; "
+            "The production stage marker belonged to the acceptance process tree and matched "
+            "the durable run stage; "
             "the child was forcibly stopped and its recovery verifier completed."
             if passed
             else (
@@ -830,7 +842,7 @@ def _interruption_environment(case: AcceptanceCase) -> dict[str, str]:
 def _load_stage_marker(
     case: AcceptanceCase,
     *,
-    expected_pid: int,
+    expected_process_ids: tuple[int, ...],
 ) -> tuple[AcceptanceStageMarker | None, str | None]:
     if case.ready_file is None:
         return None, "No structured ready-file marker was configured."
@@ -840,9 +852,10 @@ def _load_stage_marker(
         )
     except (OSError, ValidationError) as error:
         return None, f"Stage marker was missing or invalid: {error}"
-    if marker.process_id != expected_pid:
+    if marker.process_id not in expected_process_ids:
         return None, (
-            f"Stage marker PID {marker.process_id} did not match child PID {expected_pid}."
+            f"Stage marker PID {marker.process_id} did not belong to the acceptance "
+            f"process tree rooted at PID {expected_process_ids[0]}."
         )
     if marker.stage != case.interruption_stage:
         return None, (

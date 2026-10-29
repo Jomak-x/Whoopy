@@ -50,7 +50,7 @@ def _service(tmp_path: Path) -> tuple[LegacyRuntimeCleanup, Path, Path, Path]:
     (root / ".venv" / "lib").mkdir(parents=True)
     (root / ".venv" / "lib" / "package.py").write_bytes(b"runtime")
     (root / ".git").mkdir()
-    (root / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (root / ".git" / "HEAD").write_bytes(b"ref: refs/heads/main\n")
     (root / "fish_speech").mkdir()
     (root / "fish_speech" / "model.py").write_bytes(b"source")
     checkpoint = root / "checkpoints" / "voice"

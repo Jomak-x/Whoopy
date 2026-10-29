@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import math
+import os
 import wave
 from array import array
 from datetime import UTC, datetime
@@ -29,8 +30,11 @@ def _installation(tmp_path: Path, backend: str) -> Path:
     models_dir = tmp_path / "models" / "managed"
     runtime = tmp_path / "models" / "managed" / "runtimes" / "qwen3-tts"
     model = tmp_path / "models" / "managed" / "model-packs" / f"qwen3-tts-{variant}" / "files"
-    (runtime / ".venv/bin").mkdir(parents=True)
-    (runtime / ".venv/bin/python").write_text("python", encoding="utf-8")
+    runtime_python = (
+        runtime / ".venv/Scripts/python.exe" if os.name == "nt" else runtime / ".venv/bin/python"
+    )
+    runtime_python.parent.mkdir(parents=True)
+    runtime_python.write_text("python", encoding="utf-8")
     (runtime / ".whoopy-runtime.json").write_text(
         '{"schema_version":1,"runtime_id":"qwen3-tts","revision":"runtime-test",'
         '"upstream_revision":"upstream-test","target":"darwin-arm64",'

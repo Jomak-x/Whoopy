@@ -226,7 +226,8 @@ def test_release_gate_uses_latest_immutable_experiment_revision_without_fallback
     complete_types = comparisons.facts["complete_comparison_types"]
     assert isinstance(complete_types, list)
     assert "writing_method" in complete_types
-    assert not any("/v1/report.json" in blocker for blocker in comparisons.blockers)
+    old_report = lab_root / "experiments" / report.definition.experiment_id / "v1" / "report.json"
+    assert not any(str(old_report) in blocker for blocker in comparisons.blockers)
 
     current_manifest.write_bytes(b"current source run changed")
     comparisons, _decisions = assess_lab(lab_root)
@@ -234,7 +235,10 @@ def test_release_gate_uses_latest_immutable_experiment_revision_without_fallback
     complete_types = comparisons.facts["complete_comparison_types"]
     assert isinstance(complete_types, list)
     assert "writing_method" not in complete_types
-    assert any("/v2/report.json" in blocker for blocker in comparisons.blockers)
+    current_report = (
+        lab_root / "experiments" / report.definition.experiment_id / "v2" / "report.json"
+    )
+    assert any(str(current_report) in blocker for blocker in comparisons.blockers)
 
 
 def test_missing_human_and_automatic_evidence_stays_explicitly_blocked() -> None:

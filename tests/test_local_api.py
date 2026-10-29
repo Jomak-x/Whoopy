@@ -950,8 +950,8 @@ def test_settings_round_trip_through_versioned_api(tmp_path: Path) -> None:
         "studio.default_delivery": "calm",
         "studio.minutes": 5,
     }
-    assert exported.json()["local_data"]["runs"].endswith("runs")
-    assert exported.json()["local_data"]["lab_evidence"].endswith("runs/.whoopy-lab")
+    assert Path(exported.json()["local_data"]["runs"]) == tmp_path / "runs"
+    assert Path(exported.json()["local_data"]["lab_evidence"]) == tmp_path / "runs" / ".whoopy-lab"
 
 
 def test_reviewed_pacing_profiles_are_exposed_with_content_identity(tmp_path: Path) -> None:
@@ -1035,7 +1035,9 @@ def test_voice_reference_full_versioned_api_workflow(tmp_path: Path) -> None:
     assert imported.json()["revision"] == 1
     assert imported.json()["consent"]["confirmed"] is True
     assert listed.json()["voice_references"][0]["reference_id"] == "my-narrator"
-    assert metadata.json()["audio_path"].startswith("references/")
+    assert Path(metadata.json()["audio_path"]) == (
+        Path("references") / "my-narrator" / "revisions" / "000001" / "reference.wav"
+    )
     assert preview.status_code == 200
     assert preview.headers["content-type"].startswith("audio/wav")
     assert preview.headers["x-whoopy-preview-duration-ms"] == "2000"

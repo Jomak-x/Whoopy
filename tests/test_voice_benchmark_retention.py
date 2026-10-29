@@ -249,7 +249,7 @@ def test_voice_candidate_relative_output_finishes_with_resolvable_artifact_paths
     report = json.loads((tmp_path / "evaluations/benchmarks/retry/report.json").read_text())
     assert report["status"] == "complete"
     assert calls == ["First paragraph.", "Second paragraph."]
-    assert report["raw_path"] == "evaluations/benchmarks/retry/raw.wav"
+    assert Path(report["raw_path"]) == Path("evaluations/benchmarks/retry/raw.wav")
     for segment in report["segments"]:
         path = tmp_path / segment["path"]
         assert path.is_file()

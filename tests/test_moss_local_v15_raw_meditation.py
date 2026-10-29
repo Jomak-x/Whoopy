@@ -245,10 +245,8 @@ def test_render_refuses_existing_evidence_before_runtime_import(
         moss.render({"script_sha256": "changed"}, [], args)
 
     assert {
-        str(path.relative_to(output)): path.read_bytes()
-        for path in output.rglob("*")
-        if path.is_file()
-    } == {saved_file: b"original attempt"}
+        path.relative_to(output): path.read_bytes() for path in output.rglob("*") if path.is_file()
+    } == {Path(saved_file): b"original attempt"}
 
 
 def test_render_has_no_resume_overwrite_mode() -> None:
