@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from whoopy.audio import load_export_manifest
+from whoopy.audio import AudioExportError, load_export_manifest
 
 REQUIRED_DURATIONS = (1, 3, 5, 10, 20)
 REQUIRED_KINDS = {"wav", "flac", "aac", "opus"}
@@ -76,7 +76,7 @@ def verify(receipts_directory: Path, runs_directory: Path) -> dict[str, Any]:
                     "passed": True,
                 }
             )
-        except (OSError, KeyError, TypeError, ValueError) as error:
+        except (AudioExportError, OSError, KeyError, TypeError, ValueError) as error:
             errors.append(f"{receipt_path}: {error}")
     expected_counts = {duration: 4 for duration in REQUIRED_DURATIONS}
     observed_counts = {duration: durations[duration] for duration in REQUIRED_DURATIONS}

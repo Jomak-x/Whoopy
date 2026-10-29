@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.verify_soak_exports import verify
+from scripts.verify_soak_exports import main, verify
 from whoopy.audio.exports import ExportArtifact, ExportKind, ExportManifest, ExportMetadata
 
 
@@ -108,6 +108,47 @@ def test_soak_rejects_unqualified_audio_without_rewriting_receipts(
     assert len(report["cases"]) == 19
     assert all(case["run_id"] != "1-0" for case in report["cases"])
     assert any(str(receipt_path) in error for error in report["errors"])
+    assert {path.name: path.read_bytes() for path in receipts_directory.glob("*.json")} == (
+        original_receipts
+    )
+
+
+def test_soak_reports_missing_and_damaged_manifests_and_continues(
+    soak_corpus: tuple[Path, Path], tmp_path: Path
+) -> None:
+    receipts_directory, runs_directory = soak_corpus
+    missing_manifest = runs_directory / "1-0" / "exports" / "export-manifest.json"
+    damaged_manifest = runs_directory / "3-0" / "exports" / "export-manifest.json"
+    missing_manifest.unlink()
+    damaged_manifest.write_text("not valid json", encoding="utf-8")
+    original_receipts = {path.name: path.read_bytes() for path in receipts_directory.glob("*.json")}
+    output = tmp_path / "soak-report.json"
+    output.write_text(json.dumps({"passed": True, "cases": ["stale"]}), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "--receipts-dir",
+            str(receipts_directory),
+            "--runs-dir",
+            str(runs_directory),
+            "--output",
+            str(output),
+        ]
+    )
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 1
+    assert report["passed"] is False
+    assert len(report["cases"]) == 18
+    assert report["duration_counts"] == {"1": 3, "3": 3, "5": 4, "10": 4, "20": 4}
+    assert {case["run_id"] for case in report["cases"]} == {
+        f"{minutes}-{index}"
+        for minutes in (1, 3, 5, 10, 20)
+        for index in range(4)
+        if (minutes, index) not in {(1, 0), (3, 0)}
+    }
+    assert any(str(missing_manifest) in error for error in report["errors"])
+    assert any(str(damaged_manifest) in error for error in report["errors"])
     assert {path.name: path.read_bytes() for path in receipts_directory.glob("*.json")} == (
         original_receipts
     )

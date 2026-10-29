@@ -46,11 +46,17 @@ uv run --offline whoopy draft \
   --minutes 3 --profile high --writing-method recipe_whole_session
 
 uv run --offline whoopy generate \
-  "A gentle good-night reflection after a busy day, lying down in bed." \
-  --minutes 5 --profile high --writing-method recipe_whole_session
+  "A seated grounding practice after work, using sound and contact." \
+  --minutes 3 --profile high --writing-method recipe_whole_session
 ```
 
-The new path supports daytime/sleep needs and external anchors when breath focus
+The quickstart uses the measured three-minute daytime grounding path. Five-minute
+sleep writing with `recipe_whole_session` remains experimental and unqualified:
+the [retained sleep benchmark](evaluations/benchmarks/2026-10-28/writing-v5-high-sleep-retry/report.json)
+failed after its holistic revision, with no accepted new script or sleep audio.
+Sleep routing remains available; see the [completion limits](evaluations/benchmarks/2026-10-28/RESULTS.md).
+
+The new path routes daytime/sleep needs and supports external anchors when breath focus
 is declined. Box breathing is explicitly unsupported; this slice uses optional
 natural breathing. Recipe and prompt hashes bind checkpoints to their actual
 content. Quiet periods compile into typed timeline events. Longer sessions need

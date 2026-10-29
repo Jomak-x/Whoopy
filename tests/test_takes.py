@@ -482,6 +482,7 @@ def test_alternative_finalizer_rechecks_ownership_before_restoring_take(
 
     monkeypatch.setattr(application, "_task_public", observed_completion)
     monkeypatch.setattr(application, "resume_run", resume)
+    monkeypatch.setattr(application, "_resume_run_admitted", resume)
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(
             application._finalize_alternative_take, generation_task, "speech-0001", original
@@ -578,6 +579,7 @@ def test_later_selection_waits_for_alternative_finalizer_commit(
 
     monkeypatch.setattr(SegmentTakeStore, "capture_active", capture)
     monkeypatch.setattr(application, "resume_run", lambda _run_id: None)
+    monkeypatch.setattr(application, "_resume_run_admitted", lambda _run_id: None)
     with ThreadPoolExecutor(max_workers=2) as executor:
         finalizer = executor.submit(
             application._finalize_alternative_take, generation_task, "speech-0001", original

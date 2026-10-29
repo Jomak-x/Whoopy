@@ -149,6 +149,32 @@ def test_silence_edit_creates_immutable_revision_and_requests_assembly_only(
     assert record.execution is not None and record.execution.stage is RunStage.ASSEMBLING
 
 
+def test_pause_edit_updates_compiled_markers_without_changing_ignored_text(tmp_path: Path) -> None:
+    script = (
+        "---\n[pause: 90s]\n---\n# A practice\n\n"
+        "Welcome to this practice.\n\n"
+        "```text\n[pause: 80s]\n```\n\n"
+        "  [PAUSE: 2s]  \n\n[pause: 2000ms]\n\n"
+        "Notice the support beneath you.\n"
+    )
+    store = _completed_script_run(tmp_path / "runs")
+    store._write_bytes(store.script_path(RUN_ID), script.encode())
+    store.write_timeline(
+        RUN_ID, build_script_timeline(run_id=RUN_ID, script=script, created_at=NOW)
+    )
+    RevisionStore(store).create(
+        RUN_ID,
+        RevisionRequest(timeline=TimelineEdit(silence_duration_ms={"silence-0001": 1_000})),
+    )
+
+    editable_script = store.load_script(RUN_ID)
+    assert editable_script == script.replace("[PAUSE: 2s]", "[pause: 1000ms]").replace(
+        "[pause: 2000ms]\n", ""
+    )
+    recompiled = build_script_timeline(run_id=RUN_ID, script=editable_script, created_at=NOW)
+    assert recompiled.segments == store.load_timeline(RUN_ID).segments
+
+
 def test_delivery_edit_invalidates_only_the_affected_speech_segment(tmp_path: Path) -> None:
     store = _completed_script_run(tmp_path / "runs")
     revisions = RevisionStore(store)
@@ -882,9 +908,7 @@ def test_wording_edit_preserves_accepted_generated_pause_timing(tmp_path: Path) 
     worker = LocalWorker(store)
     assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
     pause_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
-    script = store.load_script(RUN_ID).replace(
-        f"[pause: {first_silence.duration_ms}ms]", "[pause: 1000ms]", 1
-    )
+    script = store.load_script(RUN_ID)
     edited = revisions.create(
         RUN_ID,
         RevisionRequest(script=script.replace("steady support", "comfortable steady support", 1)),
@@ -910,6 +934,42 @@ def test_wording_edit_preserves_accepted_generated_pause_timing(tmp_path: Path) 
     restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
     assert restored_manifest["duration_ms"] == pause_manifest["duration_ms"]
     assert restored_manifest["pcm_sha256"] == pause_manifest["pcm_sha256"]
+
+
+@pytest.mark.parametrize("prior_pause_edit", [False, True])
+def test_explicit_script_pause_change_overrides_generated_timing(
+    tmp_path: Path, prior_pause_edit: bool
+) -> None:
+    generated = _generated(
+        _plan(), middle_text="Notice the support beneath you and let attention settle here."
+    )
+    store = _completed_generated_run(tmp_path / "runs", generated)
+    revisions = RevisionStore(store)
+    if prior_pause_edit:
+        revisions.create(
+            RUN_ID,
+            RevisionRequest(timeline=TimelineEdit(silence_duration_ms={"silence-0001": 1_000})),
+        )
+    script = store.load_script(RUN_ID)
+    compiled = build_script_timeline(run_id=RUN_ID, script=script, created_at=NOW)
+    first_pause = next(s for s in compiled.segments if isinstance(s, SilenceSegment))
+    revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            script=script.replace(f"[pause: {first_pause.duration_ms}ms]", "[pause: 2000ms]", 1)
+        ),
+    )
+
+    assert store.load_timeline(RUN_ID).preserve_timing is True
+    assert LocalWorker(store).resume(RUN_ID).status is RunStatus.COMPLETED
+    manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    span = next(s for s in manifest["segments"] if s["segment_id"] == "silence-0001")
+    assert span["requested_duration_ms"] == 2_000
+    assert span["actual_duration_ms"] == 2_000
+    with wave.open(str(store.audio_path(RUN_ID)), "rb") as audio:
+        assert manifest["duration_ms"] == pytest.approx(
+            audio.getnframes() * 1_000 / audio.getframerate()
+        )
 
 
 def test_pace_edit_resynthesizes_only_changed_speech(tmp_path: Path) -> None:

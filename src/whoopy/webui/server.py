@@ -1978,6 +1978,10 @@ class LocalWebApplication:
     def resume_run(self, run_id: str) -> dict[str, Any] | None:
         """Launch the CLI's durable resume path without inventing web state."""
 
+        with self._admit_generation():
+            return self._resume_run_admitted(run_id)
+
+    def _resume_run_admitted(self, run_id: str) -> dict[str, Any] | None:
         try:
             record = RunStore(self.runs_directory).reconcile_stale_run(run_id)
         except (ValueError, RunNotFoundError, RunStoreError):
@@ -2001,7 +2005,7 @@ class LocalWebApplication:
                 "This legacy placeholder has no valid durable browser request; "
                 "create it again or move it to trash."
             )
-        return self._launch_recovery_command(run_id, "resume", prevalidated=True)
+        return self._launch_recovery_command_admitted(run_id, "resume")
 
     @staticmethod
     def _fixture_requires_web_launch(record: RunRecord) -> bool:
@@ -2182,7 +2186,7 @@ class LocalWebApplication:
         *,
         undo: bool = False,
     ) -> dict[str, Any] | None:
-        with self._operation_admission_lock:
+        with self._admit_generation():
             if self._record(run_id) is None:
                 return None
             takes = SegmentTakeStore(RunStore(self.runs_directory))
@@ -2199,7 +2203,7 @@ class LocalWebApplication:
                     else f"Selected take {selection.selected_take_id}."
                 ),
             )
-            task = self.resume_run(run_id)
+            task = self._resume_run_admitted(run_id)
             return {
                 "selection": selection.model_dump(mode="json"),
                 "revision": revision.model_dump(mode="json"),
@@ -2365,8 +2369,9 @@ class LocalWebApplication:
                     note=request.note,
                 )
                 return {"semantic_regeneration": True, "task": semantic_task}
-        revision = RevisionStore(RunStore(self.runs_directory)).create(run_id, request)
-        resume_task = self.resume_run(run_id)
+        with self._admit_generation():
+            revision = RevisionStore(RunStore(self.runs_directory)).create(run_id, request)
+            resume_task = self._resume_run_admitted(run_id)
         return {
             "revision": revision.model_dump(mode="json"),
             "task": resume_task,
@@ -2455,8 +2460,9 @@ class LocalWebApplication:
     def restore_revision(self, run_id: str, revision_id: str) -> dict[str, Any] | None:
         if self._record(run_id) is None:
             return None
-        revision = RevisionStore(RunStore(self.runs_directory)).restore(run_id, revision_id)
-        task = self.resume_run(run_id)
+        with self._admit_generation():
+            revision = RevisionStore(RunStore(self.runs_directory)).restore(run_id, revision_id)
+            task = self._resume_run_admitted(run_id)
         return {
             "revision": revision.model_dump(mode="json"),
             "task": task,
@@ -2573,9 +2579,18 @@ class LocalWebApplication:
     ) -> dict[str, Any] | None:
         if not prevalidated and self.run(run_id) is None:
             return None
-        task = GenerationTask(task_id=run_id, run_id=run_id)
         admission = nullcontext() if command_name == "cancel" else self._admit_generation()
-        with admission, self._task_lock:
+        with admission:
+            return self._launch_recovery_command_admitted(run_id, command_name, segment_id)
+
+    def _launch_recovery_command_admitted(
+        self,
+        run_id: str,
+        command_name: str,
+        segment_id: str | None = None,
+    ) -> dict[str, Any]:
+        task = GenerationTask(task_id=run_id, run_id=run_id)
+        with self._task_lock:
             existing = self._tasks.get(run_id)
             if existing is not None and existing.active:
                 raise ValueError("This run already has an active local worker.")

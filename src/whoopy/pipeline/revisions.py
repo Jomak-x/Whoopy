@@ -32,6 +32,7 @@ from whoopy.timeline import (
     Timeline,
     build_script_timeline,
 )
+from whoopy.timeline.compiler import rewrite_script_pauses
 
 REVISION_ROOT = "revisions"
 ACTIVE_REVISION = "active.json"
@@ -220,6 +221,11 @@ class RevisionStore:
                 affected: set[str] = set()
                 changed = False
                 if request.script is not None and request.script != script:
+                    previous_script_timeline = build_script_timeline(
+                        run_id=parsed,
+                        script=script,
+                        created_at=old_timeline.created_at,
+                    )
                     script = request.script
                     new_timeline = build_script_timeline(
                         run_id=parsed,
@@ -229,7 +235,23 @@ class RevisionStore:
                             Literal["script_file", "generated_prompt"],
                             old_timeline.source,
                         ),
-                    ).model_copy(update={"preserve_timing": old_timeline.preserve_timing})
+                    )
+                    previous_pauses = [
+                        segment.duration_ms
+                        for segment in previous_script_timeline.segments
+                        if isinstance(segment, SilenceSegment)
+                    ]
+                    requested_pauses = [
+                        segment.duration_ms
+                        for segment in new_timeline.segments
+                        if isinstance(segment, SilenceSegment)
+                    ]
+                    new_timeline = new_timeline.model_copy(
+                        update={
+                            "preserve_timing": old_timeline.preserve_timing
+                            or requested_pauses != previous_pauses
+                        }
+                    )
                     change_kind = "script"
                     changed = True
                     old_speech = {
@@ -248,6 +270,12 @@ class RevisionStore:
                 )
                 affected.update(timeline_affected)
                 changed = changed or timeline_changed
+                if request.timeline.silence_duration_ms:
+                    script = rewrite_script_pauses(
+                        script=script,
+                        timeline=new_timeline,
+                        durations=request.timeline.silence_duration_ms,
+                    )
                 if request.breath_protocol is not None:
                     new_timeline, script, breath_affected = self._apply_breath_protocol_edit(
                         new_timeline,

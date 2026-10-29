@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Literal, cast
@@ -148,6 +149,12 @@ def _bounded_chunks(paragraph: str) -> list[str]:
     return chunks
 
 
+@dataclass(frozen=True)
+class _PauseMarker:
+    duration_ms: int
+    line_number: int
+
+
 def build_script_timeline(
     *,
     run_id: UUID,
@@ -157,6 +164,36 @@ def build_script_timeline(
 ) -> Timeline:
     """Compile paragraphs and standalone pause markers without model behavior."""
 
+    timeline, _ = _compile_script(
+        run_id=run_id, script=script, created_at=created_at, source=source
+    )
+    return timeline
+
+
+def rewrite_script_pauses(*, script: str, timeline: Timeline, durations: dict[str, int]) -> str:
+    _, pause_lines = _compile_script(
+        run_id=timeline.run_id,
+        script=script,
+        created_at=timeline.created_at,
+        source=cast(Literal["script_file", "generated_prompt"], timeline.source),
+    )
+    lines = script.splitlines(keepends=True)
+    for segment_id, duration_ms in durations.items():
+        indexes = pause_lines[segment_id]
+        first = indexes[0]
+        lines[first] = lines[first].replace(lines[first].strip(), f"[pause: {duration_ms}ms]")
+        for index in indexes[1:]:
+            lines[index] = ""
+    return "".join(lines)
+
+
+def _compile_script(
+    *,
+    run_id: UUID,
+    script: str,
+    created_at: datetime,
+    source: Literal["script_file", "generated_prompt"],
+) -> tuple[Timeline, dict[str, list[int]]]:
     if len(script) > MAX_SCRIPT_CHARACTERS:
         raise ScriptCompileError(
             f"Script exceeds the {MAX_SCRIPT_CHARACTERS:,}-character safety limit."
@@ -164,7 +201,7 @@ def build_script_timeline(
     if not script.strip():
         raise ScriptCompileError("Script cannot be empty.")
 
-    raw_blocks: list[str | int | tuple[str, str] | tuple[str, int, int, str]] = []
+    raw_blocks: list[str | _PauseMarker | tuple[str, str] | tuple[str, int, int, str]] = []
     paragraph_lines: list[str] = []
     in_front_matter = script.lstrip().startswith("---\n")
     front_matter_started = False
@@ -178,7 +215,7 @@ def build_script_timeline(
         if paragraph:
             raw_blocks.extend(_bounded_chunks(paragraph))
 
-    for raw_line in script.splitlines():
+    for line_number, raw_line in enumerate(script.splitlines()):
         line = raw_line.strip()
         if in_front_matter:
             if line == "---":
@@ -201,7 +238,7 @@ def build_script_timeline(
             continue
         if line.lower().startswith("[pause"):
             flush_paragraph()
-            raw_blocks.append(_pause_milliseconds(line))
+            raw_blocks.append(_PauseMarker(_pause_milliseconds(line), line_number))
             continue
         if line.lower().startswith("[breath"):
             flush_paragraph()
@@ -246,6 +283,7 @@ def build_script_timeline(
     segments: list[TimelineSegment] = []
     speech_number = 0
     silence_number = 0
+    pause_lines: dict[str, list[int]] = {}
     breath_number = 0
     speech_controls: dict[str, str] = {
         "delivery": "neutral",
@@ -277,18 +315,20 @@ def build_script_timeline(
                 )
             )
             continue
-        if isinstance(block, int):
+        if isinstance(block, _PauseMarker):
             if segments and isinstance(segments[-1], SilenceSegment):
-                combined = segments[-1].duration_ms + block
+                combined = segments[-1].duration_ms + block.duration_ms
                 if combined > 600_000:
                     raise ScriptCompileError("Adjacent pauses exceed the 10-minute limit.")
                 segments[-1] = segments[-1].model_copy(update={"duration_ms": combined})
+                pause_lines[segments[-1].id].append(block.line_number)
                 continue
             silence_number += 1
+            pause_lines[f"silence-{silence_number:04d}"] = [block.line_number]
             segments.append(
                 SilenceSegment(
                     id=f"silence-{silence_number:04d}",
-                    duration_ms=block,
+                    duration_ms=block.duration_ms,
                 )
             )
         else:
@@ -308,10 +348,11 @@ def build_script_timeline(
     if len(segments) > MAX_SEGMENTS:
         raise ScriptCompileError(f"Script exceeds the {MAX_SEGMENTS}-segment safety limit.")
 
-    return Timeline(
+    timeline = Timeline(
         schema_version=3 if source == "script_file" else 4,
         run_id=run_id,
         created_at=created_at,
         source=source,
         segments=segments,
     )
+    return timeline, pause_lines

@@ -157,3 +157,26 @@ inference, purge, or historical evidence replacement was performed.
 `git diff --check` passed, and frontend trees still match the original base.
 Source licensing remains unchanged. Final repository test/lint/type and GitHub
 CI gates remain with the outer executor.
+
+## Review fixes after 70e9ad3
+
+| Finding | Root cause and fix | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-19 | Timeline pause edits left stale controls in the stored editable script. Revision publication now synchronizes edited pauses through the compiler's marker mapping and honors subsequent explicit script pause changes. | Read the stored script after a 1,000 ms edit, change only prose, render and restore; verify accepted pauses and WAV/manifest duration. |
+| REVIEW-20 | Edit, restore, and take selection mutated persisted state before checking generation admission. These operations now hold shared admission from before mutation through worker registration. | Busy model/generation ownership leaves run files byte-identical; retry succeeds after release. Concurrent admission stays blocked until the revised run registers its worker. |
+| REVIEW-21 | Soak verification omitted the export loader's exception from per-case failures. Missing or damaged manifests now yield failed cases while the remaining corpus is checked. | CLI produces a fresh failure report for two damaged cases, counts the other 18, and preserves every receipt byte. |
+| QUICKSTART_QUALIFICATION_SCOPE | The first generation example used the failed five-minute sleep request. It now uses the measured three-minute daytime grounding request, with the retained sleep failure linked and explicitly described as experimental/unqualified. | Source documentation was checked against the retained writing benchmark results; no inference was run. |
+
+The focused batch covered **141 tests** in `test_revisions.py`,
+`test_revision_admission.py`, `test_timeline.py`, `test_takes.py`,
+`test_webui_review_boundaries.py`, `test_durable_admission.py`, `test_webui.py`,
+and `test_soak_exports.py`. Initially 140 passed; one existing take-finalizer
+fixture mocked the public resume entry point rather than the new internal
+admitted entry point. Updating that fixture's mock made the failed case pass on
+its targeted rerun. Both runs emitted the existing Starlette/httpx deprecation.
+`git diff --check` passed and frontend trees match the original base.
+
+Tests use disposable fixtures and synthetic speech only. Historical evidence and
+source licensing remain unchanged; no real model inference or real-data purge
+was requested or performed. Final repository test/lint/type and GitHub CI gates
+belong to the outer executor.
