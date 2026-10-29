@@ -52,7 +52,8 @@ def _completed_run(root: Path) -> tuple[RunStore, PcmAudio]:
         profile="basic",
         target=TargetPlatform(operating_system="linux", architecture="x86_64"),
         tts=TTSRunSettings(
-            voice_name="af_heart",
+            backend="moss-local-v1.5",
+            voice_name="reference",
             speaker_id=0,
             speed=0.8,
             num_threads=2,

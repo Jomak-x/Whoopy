@@ -201,18 +201,21 @@ class ResourceWatchdog:
 
 
 def _gpu_lock() -> int:
-    if os.name != "posix":
+    if sys.platform == "win32" or os.name != "posix":
         raise RuntimeError("MLX GPU serialization requires POSIX flock; unsupported platform")
-    import fcntl
+    else:
+        import fcntl
 
-    # The benchmark and ASR use this same advisory lock. Keep its descriptor until exit.
-    fd = os.open("/tmp/whoopy-benchmark-gpu.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-    except BaseException:
-        os.close(fd)
-        raise
-    return fd
+        # The benchmark and ASR use this same advisory lock. Keep its descriptor until exit.
+        fd = os.open(
+            "/tmp/whoopy-benchmark-gpu.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600
+        )
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        except BaseException:
+            os.close(fd)
+            raise
+        return fd
 
 
 class NativeOutputError(RuntimeError):

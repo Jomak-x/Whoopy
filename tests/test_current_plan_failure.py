@@ -12,6 +12,7 @@ from tests.test_plan_regeneration_ownership import _regeneration_inputs
 from tests.test_revisions import RUN_ID, _completed_generated_run, _generated, _plan
 from whoopy.adapters.llm import LlamaCppScriptGenerator
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
+from whoopy.audio.processing import ProcessedSpeechSynthesizer
 from whoopy.cli import main
 from whoopy.hardware import HardwareSnapshot
 from whoopy.meditation import MeditationGenerationResult, MeditationPlan
@@ -21,6 +22,10 @@ from whoopy.pipeline.runs import RunRecord, RunStatus, RunStore
 from whoopy.pipeline.worker import LocalWorker, WorkerError
 from whoopy.webui.api import create_api
 from whoopy.webui.server import GenerationTask, LocalWebApplication
+
+
+def _worker(store: RunStore) -> LocalWorker:
+    return LocalWorker(store, synthesizer=ProcessedSpeechSynthesizer(FixtureSpeechSynthesizer()))
 
 
 def _application(
@@ -113,7 +118,7 @@ def test_current_precommit_plan_failure_visible_until_cli_recovery(
         RevisionStore(store).create_assembly_revision(RUN_ID, note="Recover retained meditation")
         monkeypatch.setattr(
             "whoopy.cli._worker_for_record",
-            lambda run_store, _record, **_kwargs: LocalWorker(run_store),
+            lambda run_store, _record, **_kwargs: _worker(run_store),
         )
         assert main(["run", "resume", str(RUN_ID), "--runs-dir", str(store.root), "--json"]) == 0
         assert json.loads(capsys.readouterr().out)["status"] == "completed"
@@ -233,7 +238,7 @@ def test_committed_plan_worker_construction_failure_preserves_current_recovery(
         assert record.status is RunStatus.INTERRUPTED
         assert run_store.load_script(RUN_ID) == redraft.script
         if concurrent_recovery:
-            completed.append(LocalWorker(run_store).resume(RUN_ID))
+            completed.append(_worker(run_store).resume(RUN_ID))
         raise WorkerError("controlled speech adapter construction failure")
 
     monkeypatch.setattr("whoopy.cli.LocalMeditationGenerator", DraftGenerator)
@@ -258,7 +263,7 @@ def test_committed_plan_worker_construction_failure_preserves_current_recovery(
         assert state["resumable"] is True
         monkeypatch.setattr(
             "whoopy.cli._worker_for_record",
-            lambda run_store, _record, **_kwargs: LocalWorker(run_store),
+            lambda run_store, _record, **_kwargs: _worker(run_store),
         )
         assert main(["run", "resume", str(RUN_ID), "--runs-dir", str(store.root), "--json"]) == 0
         assert json.loads(capsys.readouterr().out)["status"] == "completed"

@@ -18,7 +18,8 @@ from whoopy.audio import (
     load_export_manifest,
 )
 from whoopy.audio.exports import ExportArtifact, ExportKind, ExportManifest
-from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore
+from whoopy.pipeline.runs import RunStore
+from whoopy.pipeline.worker import LocalWorker
 from whoopy.webui.server import LocalWebApplication
 
 
@@ -73,19 +74,7 @@ def test_completed_detailed_prompt_exports_bounded_title_without_changing_run(
     prompt = ("A detailed grounding request with room for reflection. " * 400)[:length]
     store = RunStore(application.runs_directory)
     record = store.create(prompt)
-    assert record.recovery is not None
-    record = record.transition(
-        RunStatus.COMPLETED,
-        updated_at=record.created_at,
-        timeline_artifact="timeline.json",
-        audio_artifact="narration.wav",
-        audio_manifest_artifact="audio-manifest.json",
-        quality_artifact="quality.json",
-        recovery=record.recovery.model_copy(update={"process_attempts": 1}),
-        execution=RunExecution(stage=RunStage.COMPLETED),
-    )
-    store.save(record)
-    _write_narration(store.audio_path(record.run_id))
+    LocalWorker(store).process(record.run_id)
     original_record = store.record_path(record.run_id).read_bytes()
 
     result = application.export_run(str(record.run_id))
@@ -220,19 +209,22 @@ def test_export_listing_and_download_reject_changed_artifact(tmp_path: Path, cha
     store = RunStore(application.runs_directory)
     record = store.create("A quiet moment.")
     run_id = str(record.run_id)
+    LocalWorker(store).process(run_id)
     audio = store.audio_path(run_id)
-    audio.write_bytes(b"narration revision A")
-    digest = hashlib.sha256(audio.read_bytes()).hexdigest()
+    original_audio = audio.read_bytes()
+    digest = hashlib.sha256(original_audio).hexdigest()
+    with wave.open(str(audio), "rb") as narration:
+        duration_ms = narration.getnframes() * 1_000 / narration.getframerate()
     output = audio.parent / "exports"
     output.mkdir()
     exported = output / "finished.wav"
-    exported.write_bytes(audio.read_bytes())
+    exported.write_bytes(original_audio)
     manifest = ExportManifest(
         generated_at=datetime.now(UTC),
         source_filename=audio.name,
         source_byte_count=audio.stat().st_size,
         source_sha256=digest,
-        source_duration_ms=1_000,
+        source_duration_ms=duration_ms,
         metadata=_metadata(),
         ffmpeg_executable="fixture-ffmpeg",
         ffmpeg_version="fixture",
@@ -243,7 +235,7 @@ def test_export_listing_and_download_reject_changed_artifact(tmp_path: Path, cha
                 codec="pcm_s16le",
                 byte_count=exported.stat().st_size,
                 sha256=digest,
-                duration_ms=1_000,
+                duration_ms=duration_ms,
                 sample_rate=24_000,
                 channels=1,
                 embedded_tags={},
@@ -258,7 +250,7 @@ def test_export_listing_and_download_reject_changed_artifact(tmp_path: Path, cha
     assert application.export_path(run_id, "wav") == exported
 
     if change == "replace":
-        exported.write_bytes(b"narration revision B")
+        exported.write_bytes(original_audio[:-1] + bytes([original_audio[-1] ^ 1]))
     elif change == "truncate":
         exported.write_bytes(b"short")
     else:
@@ -267,7 +259,7 @@ def test_export_listing_and_download_reject_changed_artifact(tmp_path: Path, cha
     assert application.exports(run_id) == {"available": False, "artifacts": []}
     assert application.export_path(run_id, "wav") is None
     assert receipt.read_bytes() == original_receipt
-    assert audio.read_bytes() == b"narration revision A"
+    assert audio.read_bytes() == original_audio
 
 
 @pytest.mark.skipif(

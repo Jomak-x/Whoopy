@@ -1951,7 +1951,7 @@ class LocalWebApplication:
                     )
                     with self._task_lock:
                         if self._tasks.get(run_id) is task:
-                            task.launching = False
+                            del self._tasks[run_id]
                 raise
         thread = threading.Thread(
             target=self._run_generation,

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import multiprocessing
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,11 @@ from whoopy.pipeline.locks import RunLock
 from whoopy.pipeline.runs import RunRecord, RunStatus, RunStore, RunStoreError
 from whoopy.pipeline.worker import LocalWorker, WorkerError
 from whoopy.webui.server import LocalWebApplication
+
+if sys.platform == "win32":
+    from multiprocessing.connection import PipeConnection as Connection
+else:
+    from multiprocessing.connection import Connection
 
 
 def _worker_commands(root: Path, run_id: str, connection: Connection) -> None:

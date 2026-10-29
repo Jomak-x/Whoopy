@@ -390,34 +390,37 @@ def test_watchdog_requires_sustained_pressure_and_resets(worker: dict[str, Any])
     assert swap_reason is not None and "swap" in swap_reason
 
 
-@pytest.mark.skipif(os.name != "posix", reason="flock is only available on POSIX")
 def test_gpu_lock_is_held_until_descriptor_closes(worker: dict[str, Any], tmp_path: Path) -> None:
-    lock_path = tmp_path / "private-gpu.lock"
-    real_open = os.open
-    lock = worker["_gpu_lock"]
-    lock.__globals__["os"] = SimpleNamespace(
-        name="posix",
-        open=lambda _path, flags, mode: real_open(lock_path, flags, mode),
-        O_CREAT=os.O_CREAT,
-        O_RDWR=os.O_RDWR,
-        O_NOFOLLOW=os.O_NOFOLLOW,
-        close=os.close,
-    )
-    fd = lock()
-    program = (
-        "import fcntl,sys; f=open(sys.argv[1], 'rb'); fcntl.flock(f, fcntl.LOCK_EX|fcntl.LOCK_NB)"
-    )
-    try:
-        blocked = subprocess.run(
+    if sys.platform == "win32" or os.name != "posix":
+        pytest.skip("flock is only available on POSIX")
+    else:
+        lock_path = tmp_path / "private-gpu.lock"
+        real_open = os.open
+        lock = worker["_gpu_lock"]
+        lock.__globals__["os"] = SimpleNamespace(
+            name="posix",
+            open=lambda _path, flags, mode: real_open(lock_path, flags, mode),
+            O_CREAT=os.O_CREAT,
+            O_RDWR=os.O_RDWR,
+            O_NOFOLLOW=os.O_NOFOLLOW,
+            close=os.close,
+        )
+        fd = lock()
+        program = (
+            "import fcntl,sys; f=open(sys.argv[1], 'rb'); "
+            "fcntl.flock(f, fcntl.LOCK_EX|fcntl.LOCK_NB)"
+        )
+        try:
+            blocked = subprocess.run(
+                [sys.executable, "-c", program, str(lock_path)], capture_output=True, timeout=10
+            )
+            assert blocked.returncode != 0
+        finally:
+            os.close(fd)
+        acquired = subprocess.run(
             [sys.executable, "-c", program, str(lock_path)], capture_output=True, timeout=10
         )
-        assert blocked.returncode != 0
-    finally:
-        os.close(fd)
-    acquired = subprocess.run(
-        [sys.executable, "-c", program, str(lock_path)], capture_output=True, timeout=10
-    )
-    assert acquired.returncode == 0
+        assert acquired.returncode == 0
 
 
 def test_json_loop_reports_bad_requests_and_closes_without_runtime_inference(

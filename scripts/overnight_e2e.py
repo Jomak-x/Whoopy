@@ -111,47 +111,50 @@ def inventory(root: Path) -> dict[str, dict[str, Any]]:
 
 def check_idle() -> None:
     """Probe both known cooperative locks before launching a new stage."""
-    import fcntl
+    if sys.platform == "win32":
+        raise RuntimeError("Live benchmark admission requires POSIX flock")
+    else:
+        import fcntl
 
-    for value in (PLAN["locks"]["worker_and_asr_gpu"], PLAN["locks"]["runtime"]):
-        path = Path(value)
-        if not path.exists():
-            continue
-        with path.open("rb") as lock:
+        for value in (PLAN["locks"]["worker_and_asr_gpu"], PLAN["locks"]["runtime"]):
+            path = Path(value)
+            if not path.exists():
+                continue
+            with path.open("rb") as lock:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError as error:
+                    raise RuntimeError(f"Another heavyweight process owns {path}") from error
+                fcntl.flock(lock, fcntl.LOCK_UN)
+        import psutil
+
+        for process in psutil.process_iter(["pid", "cmdline"]):
             try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as error:
-                raise RuntimeError(f"Another heavyweight process owns {path}") from error
-            fcntl.flock(lock, fcntl.LOCK_UN)
-    import psutil
-
-    for process in psutil.process_iter(["pid", "cmdline"]):
-        try:
-            words = process.info["cmdline"] or []
-            command = " ".join(words)
-            if process.pid != os.getpid() and (
-                ("whoopy" in words and "generate" in words)
-                or any(
-                    Path(word).name
-                    in {
-                        "llama-cli",
-                        "llama-server",
-                        "qwen3_tts_worker.py",
-                        "mlx_qwen3_tts_worker.py",
-                        "benchmark_voice_candidates.py",
-                        "benchmark_writing_methods.py",
-                        "verify_benchmark_audio.py",
-                        "raw_qwen_meditation.py",
-                        "dots_tts_full_meditation.py",
-                    }
-                    for word in words
-                )
-            ):
-                raise RuntimeError(
-                    f"External inference process detected: pid {process.pid}: {command}"
-                )
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
+                words = process.info["cmdline"] or []
+                command = " ".join(words)
+                if process.pid != os.getpid() and (
+                    ("whoopy" in words and "generate" in words)
+                    or any(
+                        Path(word).name
+                        in {
+                            "llama-cli",
+                            "llama-server",
+                            "qwen3_tts_worker.py",
+                            "mlx_qwen3_tts_worker.py",
+                            "benchmark_voice_candidates.py",
+                            "benchmark_writing_methods.py",
+                            "verify_benchmark_audio.py",
+                            "raw_qwen_meditation.py",
+                            "dots_tts_full_meditation.py",
+                        }
+                        for word in words
+                    )
+                ):
+                    raise RuntimeError(
+                        f"External inference process detected: pid {process.pid}: {command}"
+                    )
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
 
 
 def clean_env(source: Path) -> dict[str, str]:
@@ -207,7 +210,7 @@ def terminate_tree(process: subprocess.Popen[bytes], psutil: Any) -> None:
             child.send_signal(signal.SIGINT)
     if process.poll() is None:
         try:
-            if os.name == "posix":
+            if sys.platform != "win32" and os.name == "posix":
                 os.killpg(process.pid, signal.SIGINT)
             else:
                 process.send_signal(signal.SIGTERM)
@@ -262,11 +265,14 @@ def bounded(
     gpu: TextIO | None = None
     gpu_scope = ExitStack()
     if own_gpu:
-        import fcntl
+        if sys.platform == "win32":
+            raise RuntimeError("Live GPU ownership requires POSIX flock")
+        else:
+            import fcntl
 
-        # Descriptor spans the subprocess lifecycle; ExitStack closes it in finally.
-        gpu = gpu_scope.enter_context(Path(PLAN["locks"]["worker_and_asr_gpu"]).open("a"))  # noqa: SIM115
-        fcntl.flock(gpu, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Descriptor spans the subprocess lifecycle; ExitStack closes it in finally.
+            gpu = gpu_scope.enter_context(Path(PLAN["locks"]["worker_and_asr_gpu"]).open("a"))  # noqa: SIM115
+            fcntl.flock(gpu, fcntl.LOCK_EX | fcntl.LOCK_NB)
     started = time.monotonic()
     low_since: float | None = None
     process: subprocess.Popen[bytes] | None = None
@@ -342,7 +348,7 @@ def bounded(
     finally:
         result["wall_seconds"] = time.monotonic() - started
         save(folder / "receipt.json", result)
-        if gpu is not None:
+        if sys.platform != "win32" and gpu is not None:
             import fcntl
 
             fcntl.flock(gpu, fcntl.LOCK_UN)
@@ -426,12 +432,15 @@ def main() -> int:
         return 0
     if args.output is None:
         parser.error("--execute requires a fresh --output directory")
-    if sys.platform != "darwin":
+    # Keep the execution body type-checked even on hosts that cannot run MLX.
+    host_platform = sys.platform
+    if host_platform != "darwin":
         parser.error(
             "Live MLX benchmark execution requires macOS; plan/report/stub checks are portable"
         )
     # Import only for execute, so printing a plan cannot trigger optional runtime imports.
-    import fcntl
+    if sys.platform == "darwin":
+        import fcntl
 
     import psutil
 
@@ -444,7 +453,8 @@ def main() -> int:
     owner_scope = ExitStack()
     # Descriptor spans the whole campaign; ExitStack closes it in finally.
     owner = owner_scope.enter_context(Path(PLAN["locks"]["runner_owner"]).open("a"))  # noqa: SIM115
-    fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    if sys.platform == "darwin":
+        fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
     env, python = clean_env(source), Path(PLAN["python"])
     deadline = time.monotonic() + PLAN["limits"]["total_hours"] * 3600
     manifest: dict[str, Any] = {
@@ -804,7 +814,8 @@ def main() -> int:
         manifest["finished_at"] = datetime.now(UTC).isoformat()
         save(output / "manifest.json", manifest)
         save(output / "files.json", inventory(output))
-        fcntl.flock(owner, fcntl.LOCK_UN)
+        if sys.platform == "darwin":
+            fcntl.flock(owner, fcntl.LOCK_UN)
         owner_scope.close()
     if manifest["status"] in {"stopped", "incomplete"} or any(
         r["status"] == "fail" for r in manifest["records"]
