@@ -1262,13 +1262,11 @@ class LocalWebApplication:
                         raise ValueError(
                             "Cancel active generation before deleting this meditation."
                         )
+                    return self._trash_stopped_run(record)
             except RunLockUnavailable as error:
                 raise ValueError(
                     "Cancel active generation before deleting this meditation."
                 ) from error
-            # Windows cannot move a directory containing an open worker lock.
-            # Admission still excludes local worker registration during the move.
-            return self._trash_stopped_run(record)
 
     def _trash_stopped_run(self, record: RunRecord) -> dict[str, Any]:
         source = self.runs_directory / str(record.run_id)
@@ -1343,20 +1341,24 @@ class LocalWebApplication:
         run_id = str(item["run_id"])
         source = Path(str(item["path"]))
         destination = self.runs_directory / run_id
-        if destination.exists():
-            raise ValueError(f"Run {run_id} already exists; restore refused.")
         try:
-            source.replace(destination)
-            (destination / "trash-receipt.json").unlink(missing_ok=True)
-            for temporary in destination.glob(".trash-receipt.*.tmp"):
-                temporary.unlink(missing_ok=True)
-        except OSError as error:
-            if destination.is_dir() and not source.exists():
-                with suppress(OSError):
-                    destination.replace(source)
-            raise ValueError(
-                f"Could not restore the meditation from local trash: {error}"
-            ) from error
+            with RunLock(destination, require_directory=False):
+                if destination.exists():
+                    raise ValueError(f"Run {run_id} already exists; restore refused.")
+                try:
+                    source.replace(destination)
+                    (destination / "trash-receipt.json").unlink(missing_ok=True)
+                    for temporary in destination.glob(".trash-receipt.*.tmp"):
+                        temporary.unlink(missing_ok=True)
+                except OSError as error:
+                    if destination.is_dir() and not source.exists():
+                        with suppress(OSError):
+                            destination.replace(source)
+                    raise ValueError(
+                        f"Could not restore the meditation from local trash: {error}"
+                    ) from error
+        except RunLockUnavailable as error:
+            raise ValueError("This meditation has an active operation; restore refused.") from error
         return {"run_id": run_id, "receipt_id": receipt_id, "restored": True}
 
     def _deleted_run_entry(self, directory: Path) -> dict[str, Any] | None:

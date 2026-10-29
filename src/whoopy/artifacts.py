@@ -688,7 +688,7 @@ class ArtifactInstaller:
         reused: list[str] = []
         resolved = list(artifacts)
         for artifact in resolved:
-            state = self.store.inspect(artifact)
+            state = self.store.inspect(artifact, verify_digest=True)
             if state.state is ArtifactState.INSTALLED:
                 self.status_callback(f"Reusing {artifact.display_name}")
                 reused.append(artifact.artifact_id)

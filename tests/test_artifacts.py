@@ -262,6 +262,50 @@ def test_full_verification_detects_changed_extracted_content(tmp_path: Path) -> 
     assert "extracted installation digest" in status.message
 
 
+@pytest.mark.parametrize("damage", ["missing", "changed"])
+def test_offline_install_repairs_previously_verified_extraction(
+    tmp_path: Path, damage: str, monkeypatch: MonkeyPatch
+) -> None:
+    payload = _tar_bz2("kokoro/model.onnx", b"trusted voice")
+    artifact = _artifact(
+        "voice",
+        "tts_model",
+        payload,
+        filename="voice.tar.bz2",
+        archive=ArchiveFormat.TAR_BZ2,
+    )
+    store = ArtifactStore(tmp_path / "managed")
+    store.downloads.mkdir(parents=True)
+    archive = store.download_path(artifact)
+    archive.write_bytes(payload)
+    target = TargetPlatform(operating_system="linux", architecture="x86_64")
+    installer = ArtifactInstaller(store)
+    installer.install_profile("basic", [artifact], target, allow_network=False)
+    extracted = store.require(artifact) / "kokoro" / "model.onnx"
+    if damage == "missing":
+        extracted.unlink()
+    else:
+        extracted.write_bytes(b"altered voice")
+    archive_stat = archive.stat()
+
+    def reject_network(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("Offline repair attempted a network request")
+
+    monkeypatch.setattr(urllib.request, "urlopen", reject_network)
+    report = installer.install_profile("basic", [artifact], target, allow_network=False)
+
+    assert report.installed == ["voice"]
+    assert report.reused == []
+    assert extracted.read_bytes() == b"trusted voice"
+    assert archive.read_bytes() == payload
+    assert archive.stat().st_mtime_ns == archive_stat.st_mtime_ns
+    assert not store.quarantine.exists() or not list(store.quarantine.iterdir())
+    assert store.require(artifact) == extracted.parent.parent
+    reused = installer.install_profile("basic", [artifact], target, allow_network=False)
+    assert reused.reused == ["voice"]
+    assert reused.installed == []
+
+
 def test_verified_python_wheels_materialize_into_one_environment(tmp_path: Path) -> None:
     first_payload = _zip("sherpa_onnx/__init__.py", b"version = 'test'")
     second_payload = _zip("sherpa_onnx/lib/native.so", b"native")

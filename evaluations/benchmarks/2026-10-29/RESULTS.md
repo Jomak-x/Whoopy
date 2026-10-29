@@ -173,3 +173,22 @@ four-format FFmpeg exports. Touched Python files were formatted.
 No new live inference or external evidence reconciliation was performed in this
 review phase; full test/lint/type/CI gates and final Document/PR reconciliation
 remain with the outer executor.
+
+
+## Follow-up review corrections after 520b450
+
+Four selected findings were corrected: marker correspondence across combined
+paragraph splits and control changes, independent breath-focus exclusions in
+compound requests, verified extraction integrity before cached-artifact reuse,
+and stable cross-process ownership through run deletion/restoration.
+The [review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-520b450)
+retains the finding IDs, root causes and executable regressions.
+
+Focused verification covered 444 distinct tests. The initial batch passed 441
+and exposed one negation-span boundary plus two invalid test fixtures. After
+correction, all 227 affected routing, whole-session and ownership tests passed;
+the other 217 had passed in the initial batch. The ownership tests used spawned
+processes and actual worker resume and directory moves on this host. Native
+Linux/Windows execution and full repository test/lint/type/CI gates remain with
+the outer executor. No new live inference or external evidence reconciliation
+was performed; historical model results retain their actual producer revisions.

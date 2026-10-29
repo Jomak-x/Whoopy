@@ -1256,3 +1256,70 @@ def test_expanded_paragraph_preserves_later_control_scopes(
     revisions.restore(RUN_ID, accepted_revision.revision_id)
     assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
     assert store.load_timeline(RUN_ID) == accepted
+
+
+@pytest.mark.parametrize(
+    "replacement_marker, expected_pace",
+    [
+        ("[pace: slow]", "very_slow"),
+        ("[pace: natural]", "natural"),
+        ("[pace: slow]\n[pace: slow]", "slow"),
+    ],
+    ids=["unchanged-marker", "explicit-replacement", "ambiguous-reset"],
+)
+def test_paragraph_split_with_other_marker_change_preserves_controls(
+    tmp_path: Path, replacement_marker: str, expected_pace: str
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    first = "Settle into the support beneath you. Let your attention arrive here."
+    later = (
+        "Notice the weight of your body resting here.",
+        "Listen to the quiet sounds around you.",
+    )
+    ending = "Finish whenever you are ready."
+    script = "\n\n".join(["[pace: slow]", first, *later, "[pace: natural]", ending])
+    revisions.create(RUN_ID, RevisionRequest(script=script))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    controlled_ids = [
+        segment.id
+        for segment in store.load_timeline(RUN_ID).segments
+        if isinstance(segment, SpeechSegment) and segment.text in (*later, ending)
+    ]
+    accepted_revision = revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            timeline=TimelineEdit(pace={segment_id: "very_slow" for segment_id in controlled_ids})
+        ),
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    accepted = store.load_timeline(RUN_ID)
+    accepted_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    edited = (
+        script.replace(first, first.replace(". Let", ".\n\nLet"), 1)
+        .replace("[pace: natural]", "[pace: unhurried]")
+        .replace("[pace: slow]", replacement_marker, 1)
+    )
+
+    revisions.create(RUN_ID, RevisionRequest(script=edited))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    rendered = store.load_timeline(RUN_ID)
+    assert len(rendered.segments) == len(accepted.segments) + 1
+    later_speeches = [
+        segment
+        for segment in rendered.segments
+        if isinstance(segment, SpeechSegment) and segment.text in later
+    ]
+    assert [segment.text for segment in later_speeches] == list(later)
+    assert all(segment.pace == expected_pace for segment in later_speeches)
+    final = rendered.segments[-1]
+    assert isinstance(final, SpeechSegment)
+    assert final.text == ending
+    assert final.pace == "unhurried"
+
+    revisions.restore(RUN_ID, accepted_revision.revision_id)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == accepted
+    restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    assert restored_manifest["pcm_sha256"] == accepted_manifest["pcm_sha256"]

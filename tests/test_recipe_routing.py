@@ -100,6 +100,23 @@ def test_negated_box_breathing_request_routes_natural_breathing(negation: str) -
 @pytest.mark.parametrize(
     "prompt",
     [
+        "No breath focus or box breathing, please",
+        "No breath focus and box breathing, please",
+        "Avoid breath focus or square breathing",
+        "Don’t use breath focus or box breathing",
+        "No box breathing; no breath focus either",
+    ],
+)
+def test_compound_breath_exclusions_preserve_external_anchor(prompt: str) -> None:
+    session = route_session(prompt, 180)
+
+    assert session.breath_excluded
+    assert session.anchor == "sound"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
         "No box breathing; help me sleep",
         "No box breathing, but help me sleep",
         "No box breathing but help me sleep",

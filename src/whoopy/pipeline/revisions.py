@@ -69,7 +69,17 @@ def _control_correspondence(
             correspondence[name] = dict(zip(requested_markers, previous_markers, strict=True))
             continue
         matched = correspondence[name] = {}
+        previous_value_counts = Counter(previous_markers.values())
+        requested_value_counts = Counter(requested_markers.values())
+        unique_previous = {
+            value: origin
+            for origin, value in previous_markers.items()
+            if previous_value_counts[value] == 1
+        }
         for origin, value in requested_markers.items():
+            if value in unique_previous and requested_value_counts[value] == 1:
+                matched[origin] = unique_previous[value]
+                continue
             old_paragraph = paragraphs.get(origin[0])
             if old_paragraph is not None:
                 old_origin = (old_paragraph, origin[1])

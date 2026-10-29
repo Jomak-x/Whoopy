@@ -324,3 +324,24 @@ Focused verification: **345 passed in 28.99 seconds** across revisions, timeline
 compilation, whole-session generation, Lab evaluation, real exports, timeout
 capture, adapters and benchmark attempt retention. Touched Python files were
 formatted. No full test/lint/type or CI gate ran in this review phase.
+
+## Review fixes after 520b450
+
+All four selected findings were confirmed against the current source.
+
+| Finding | Root cause and correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-CONTROL-PARAGRAPH-SPLIT | Partially changed marker streams still depended on paragraph correspondence. Unique unchanged values now establish per-control marker identity independently of paragraph splits, while explicit replacements and ambiguous duplicate resets remain authoritative. | `test_revisions.py`: combined paragraph split and unrelated marker change, multiple later paragraphs, explicit replacement, duplicate reset, rendering and restoration. |
+| REVIEW-COMPOUND-BREATH-EXCLUSION | Removing a negated box-breathing span discarded an independent breath-focus exclusion inside it. Routing now evaluates that independent exclusion before removing the span. | `test_recipe_routing.py` and `test_recipe_whole_session.py`: compound exclusions retain an external anchor through generation, while declining box breathing alone permits natural breathing. |
+| REVIEW-CACHED-ARCHIVE-REPAIR-ADMISSION | Metadata-only reuse skipped damaged previously verified extraction trees. Installation now verifies digests at the shared reuse decision and reaches existing offline archive repair. | `test_artifacts.py`: missing and replaced extracted model files are repaired without network use, archive replacement or quarantine; subsequent installation reuses the repaired tree. |
+| REVIEW-DELETE-CROSS-PROCESS-OWNERSHIP | Deletion released worker ownership before moving the directory. Shared run locks now live outside movable run directories and remain held through deletion and restoration; missing runs cannot be claimed. Cleanup probes the same stable locks. | `test_run_delete_ownership.py`: spawned workers contend before/after the actual move, cannot resurrect deleted runs, can resume after explicit restoration, and exclude deletion while holding ownership. |
+
+No live inference, external receipt reconciliation, UI or licensing changes,
+publication, or outer pipeline gates are performed in this review phase.
+Focused verification covered **444 distinct tests**. The combined batch initially
+passed 441 tests and exposed one negation-span boundary plus two invalid new
+interrupted-run fixtures. After correcting those, the affected routing,
+whole-session and cross-process ownership batch passed **227 tests in 2.77
+seconds**. The remaining 217 tests passed in the initial batch. Touched Python
+files were formatted; full repository test/lint/type gates and native
+Linux/Windows execution remain with the outer executor.

@@ -664,14 +664,11 @@ class LegacyRuntimeCleanup:
             probe.release()
         if self.runs_root is not None and self.runs_root.is_dir():
             safe_runs = Path(os.path.abspath(self.runs_root))
-            for worker_lock in sorted(safe_runs.glob("*/worker.lock")):
+            for worker_lock in sorted(safe_runs.glob(".locks/*.lock")):
                 safe_managed_path(safe_runs, worker_lock, label="generation worker lock")
                 probe = _AdvisoryFileLock(worker_lock, safety_root=safe_runs)
                 if not probe.acquire(timeout_seconds=0):
-                    return (
-                        "Cleanup is blocked while generation run "
-                        f"{worker_lock.parent.name} is active."
-                    )
+                    return f"Cleanup is blocked while generation run {worker_lock.stem} is active."
                 probe.release()
         return None
 

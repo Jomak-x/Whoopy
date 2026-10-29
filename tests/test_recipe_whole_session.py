@@ -176,9 +176,16 @@ def test_sleep_reflection_has_all_prior_and_future_beats_in_single_prompt() -> N
     assert result.estimated_duration_seconds == pytest.approx(600, abs=0.02)
 
 
-def test_no_breath_focus_routes_sound_and_preserves_explicit_sitting() -> None:
+@pytest.mark.parametrize(
+    "need",
+    [
+        "Help me sleep while sitting, no breath focus please",
+        "Help me sleep while sitting. No breath focus or box breathing, please",
+    ],
+)
+def test_no_breath_focus_routes_sound_and_preserves_explicit_sitting(need: str) -> None:
     adapter = WholeSessionAdapter()
-    result = run(adapter, "Help me sleep while sitting, no breath focus please", 300)
+    result = run(adapter, need, 300)
     assert result.plan.posture == "sitting"
     assert result.plan.anchor == "sound"
     assert result.plan.breath_mode == "external_anchor"
