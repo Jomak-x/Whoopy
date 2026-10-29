@@ -459,6 +459,12 @@ def test_package_freshness_covers_installed_config_and_worker_data(tmp_path: Pat
     worker.parent.mkdir()
     config.write_text("models: {}\n", "utf-8")
     worker.write_text("# pinned worker\n", "utf-8")
+    with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as stream:
+        stream.write(
+            "\n[tool.setuptools.data-files]\n"
+            '"share/whoopy/config" = ["config/models.yaml"]\n'
+            '"share/whoopy/scripts" = ["scripts/moss_tts_worker.py"]\n'
+        )
 
     wheel = dist / "whoopy-1.2.3-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:

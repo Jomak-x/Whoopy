@@ -9,7 +9,7 @@ Run from the repository root:
 models/experimental/verification-2026-10-28/.venv/bin/python \
   scripts/verify_benchmark_audio.py path/to/mono.wav \
   --expected-file evaluations/benchmarks/2026-10-28/voice-script.txt \
-  --report evaluations/benchmarks/2026-10-28/verification/candidate.json
+  --report .whoopy-recovery/verification/candidate.json
 ```
 
 Use `--mode narration` for assembled speech containing deliberate meditation
@@ -26,11 +26,27 @@ words or contextual prompt to the recognizer, and obtains an exclusive
 `/tmp/whoopy-benchmark-gpu.lock` before loading/inferencing. Metal access may
 require execution outside the filesystem sandbox.
 
-Each report contains audio, expected-text, model-weight, model-config and verifier
-source SHA256 digests; runtime versions; full ASR transcript, segment/word
+Full local reports contain audio, expected-text, model-weight, model-config and
+verifier source SHA256 digests; runtime versions; full ASR transcript, segment/word
 timestamps and recognizer confidence fields; ordered edit alignment; coverage,
 word-error rate, omissions, excess repetitions and additions; possible missing
 ending; and supplementary PCM finite/silence/clipping/noise diagnostics.
+
+Published verification JSON is a compact historical results/provenance contract.
+It omits recognized transcripts, token and word traces, alignments, and full word
+arrays while retaining classifications, numerical metrics, audio/model/source
+hashes, and aggregate proof references. Each compact receipt's `publication`
+metadata binds the exact original bytes with `original_receipt_sha256` and records
+the unchanged `original_status`. Existing referenced receipt hashes still identify
+the original full local receipt bytes, not the compact files at these link paths.
+They are not current certification or a substitute for local evidence.
+
+The publication cleanup preserved all 37 original receipts byte-for-byte under
+the ignored `.whoopy-recovery/asr-publication/` tree, retaining their repository
+relative paths. Full traces in the original assets checkout and prior Git history
+were not modified. New full reports belong in ignored local paths; publish only
+reviewed compact results. The aggregation helper requires those full local
+receipts when recomputing word-level evidence.
 
 Exit status is 0 for **pass**, 2 for **review**, and 1 for **fail**. Missing ASR,
 model import/inference errors, timeout, and uninspectable PCM fail closed. A pass
@@ -135,13 +151,14 @@ The source builder reads [listening/manifest-policy-v3-strict.json](listening/ma
 and [writing-listening-policy-v3.json](../writing-listening-policy-v3.json),
 including Review samples with explicit labels and original raw/proof links.
 These manifests preserve the original manifest hashes, classifications, media
-hashes and timestamps. They were copied as metadata only; no audio or old
-verification receipt was rewritten. Current source changes postdate the measured
+hashes and timestamps. They were copied as metadata only; no audio was rewritten.
+Verification links now resolve to the compact publication receipts described above.
+Current source changes postdate the measured
 benchmark runs and do not retroactively certify them.
 
-The strict update adds only `policy-v3/voxcpm2-designed-male-strict-review.json`
-and `listening/manifest-policy-v3-strict.json`; previous receipts and manifests
-remain intact. The producer defaults to this strict manifest and also accepts
+The strict policy update added `policy-v3/voxcpm2-designed-male-strict-review.json`
+and `listening/manifest-policy-v3-strict.json`; original full receipts remain local
+and the manifests remain intact. The producer defaults to this strict manifest and also accepts
 `--manifest PATH`. Use `--output PATH` to write the HTML into a separate checkout
 while the benchmark root, media, and receipts remain read-only. The page uses
 relative links intended for the complete local benchmark tree; published HTML

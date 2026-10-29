@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -46,6 +47,7 @@ class ScriptGenerationRequest(BaseModel):
     max_output_tokens: int = Field(default=512, ge=1)
     seed: int = 0
     response_json_schema: dict[str, Any] | None = None
+    raw_invocation_directory: Path | None = None
 
 
 class ScriptGenerationTelemetry(BaseModel):

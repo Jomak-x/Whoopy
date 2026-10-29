@@ -48,6 +48,62 @@ ProcessRunner = Callable[
 MonotonicClock = Callable[[], float]
 
 
+class CapturingProcessRunner:
+    """Keep immutable evidence before the adapter removes its temporary inputs."""
+
+    def __init__(self, root: Path, runner: ProcessRunner) -> None:
+        self.root = root
+        self.runner = runner
+        self.invocations = 0
+
+    def __call__(
+        self, command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str] | LlamaProcessResult:
+        self.invocations += 1
+        folder = self.root / f"{self.invocations:03d}"
+        folder.mkdir(mode=0o700, parents=True, exist_ok=False)
+
+        def save(name: str, value: str | bytes) -> None:
+            with (folder / name).open("xb") as destination:
+                destination.write(value.encode("utf-8") if isinstance(value, str) else value)
+
+        save("command.json", json.dumps(list(command), indent=2) + "\n")
+        receipt: dict[str, Any] = {"timeout_seconds": timeout_seconds, "returncode": None}
+        try:
+            for flag, name in (
+                ("--file", "prompt.txt"),
+                ("--system-prompt-file", "system.txt"),
+                ("--json-schema-file", "response-schema.json"),
+            ):
+                if flag in command:
+                    save(name, Path(command[command.index(flag) + 1]).read_bytes())
+            result = self.runner(command, timeout_seconds)
+            completed = result.completed if isinstance(result, LlamaProcessResult) else result
+            save("stdout.txt", completed.stdout)
+            save("stderr.txt", completed.stderr)
+            receipt.update(status="completed", returncode=completed.returncode)
+            return result
+        except BaseException as error:
+            receipt.update(status="failed", exception_type=type(error).__name__, error=str(error))
+            for stream in ("stdout", "stderr"):
+                value = getattr(error, stream, None)
+                if isinstance(value, str | bytes):
+                    save(f"{stream}.txt", value)
+                else:
+                    receipt[f"{stream}_unavailable_reason"] = (
+                        "Process runner did not return this stream on failure."
+                    )
+            raise
+        finally:
+            if "--output-file" in command:
+                output = Path(command[command.index("--output-file") + 1])
+                if output.is_file():
+                    save("output.txt", output.read_bytes())
+                else:
+                    receipt["output_unavailable_reason"] = "Process produced no output file."
+            save("process.json", json.dumps(receipt, indent=2) + "\n")
+
+
 @dataclass(frozen=True)
 class LlamaCppSettings:
     """Bounded settings shared by every llama.cpp invocation."""
@@ -453,9 +509,12 @@ class LlamaCppScriptGenerator:
                 schema_path.chmod(0o600)
                 command.extend(["--json-schema-file", str(schema_path)])
 
+            runner = self.process_runner
+            if request.raw_invocation_directory is not None:
+                runner = CapturingProcessRunner(request.raw_invocation_directory, runner)
             started = self.monotonic()
             try:
-                process_result = self.process_runner(command, self.settings.timeout_seconds)
+                process_result = runner(command, self.settings.timeout_seconds)
             except subprocess.TimeoutExpired as error:
                 raise TransientAdapterError(
                     f"llama.cpp exceeded its {self.settings.timeout_seconds:g}-second timeout"
@@ -478,10 +537,7 @@ class LlamaCppScriptGenerator:
                 memory_reason = "injected process runner did not report process-tree memory"
 
             if completed.returncode != 0:
-                diagnostic = completed.stderr.strip()[-2_000:] or "no diagnostic output"
-                raise FatalAdapterError(
-                    f"llama.cpp exited with code {completed.returncode}: {diagnostic}"
-                )
+                raise FatalAdapterError(f"llama.cpp exited with code {completed.returncode}")
             sampler_failure = _SAMPLER_FAILURE.search(completed.stderr)
             if sampler_failure is not None:
                 raise InvalidAdapterOutput(

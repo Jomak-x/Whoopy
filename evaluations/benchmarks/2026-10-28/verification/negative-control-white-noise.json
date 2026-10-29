@@ -12,7 +12,6 @@
   ],
   "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/verification/negative-control-white-noise.wav",
   "audio_sha256": "1c00c5afa89c406f3fd3931de2c9fae18517920d12f12789498766d2bd6ebb57",
-  "expected_transcript": "Welcome. Let your shoulders soften.",
   "expected_text_sha256": "bce18109cb36f13ceb974f31f57f86237784e0f6c092d4c4296595b45a684800",
   "mode": "speech",
   "pcm": {
@@ -37,9 +36,7 @@
     "model_weights_sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
     "model_config_sha256": "e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e",
     "audio_sha256": "1c00c5afa89c406f3fd3931de2c9fae18517920d12f12789498766d2bd6ebb57",
-    "text": "",
     "language": "en",
-    "segments": [],
     "inference_seconds": 1.624618833011482,
     "versions": {
       "mlx-whisper": "0.4.3",
@@ -68,55 +65,7 @@
     "deletions": 5,
     "insertions": 0,
     "substitutions": 0,
-    "missing_words": [
-      "welcome",
-      "let",
-      "your",
-      "shoulders",
-      "soften"
-    ],
-    "unexpected_words": [],
-    "excess_repeated_words": {},
-    "missing_tail_words": [
-      "welcome",
-      "let",
-      "your",
-      "shoulders",
-      "soften"
-    ],
-    "possible_truncation": true,
-    "alignment": [
-      {
-        "operation": "delete",
-        "expected": "welcome",
-        "observed": null,
-        "expected_index": 0
-      },
-      {
-        "operation": "delete",
-        "expected": "let",
-        "observed": null,
-        "expected_index": 1
-      },
-      {
-        "operation": "delete",
-        "expected": "your",
-        "observed": null,
-        "expected_index": 2
-      },
-      {
-        "operation": "delete",
-        "expected": "shoulders",
-        "observed": null,
-        "expected_index": 3
-      },
-      {
-        "operation": "delete",
-        "expected": "soften",
-        "observed": null,
-        "expected_index": 4
-      }
-    ]
+    "possible_truncation": true
   },
   "limits": [
     "ASR is independent evidence, not a human transcription or a proof of perfect speech.",
@@ -131,5 +80,13 @@
     "fail_coverage_below": 0.65
   },
   "verifier_source_sha256": "8ea15afa9ae6b18d6acecd99f4562253fc77223c189ccd39906091104759560e",
-  "harness_source_sha256": "fffc65adfee2c762b336cf581c03c162fdac213129f00073bdc2a3417f0d4d49"
+  "harness_source_sha256": "fffc65adfee2c762b336cf581c03c162fdac213129f00073bdc2a3417f0d4d49",
+  "publication": {
+    "schema_version": 1,
+    "kind": "compact_verification_receipt",
+    "original_receipt_sha256": "05ee048d9f5358c1a19d59caf49c66979cac69cf942f54ac436117b91a72e854",
+    "original_status": "fail",
+    "full_trace_included": false,
+    "referenced_receipt_hashes": "original_receipt_bytes"
+  }
 }

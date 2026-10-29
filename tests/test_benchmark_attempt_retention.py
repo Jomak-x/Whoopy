@@ -21,7 +21,11 @@ from scripts import (
     raw_qwen_meditation,
     verify_benchmark_audio,
 )
-from whoopy.adapters.llm.llama_cpp import LlamaCppScriptGenerator, LlamaProcessResult
+from whoopy.adapters.llm.llama_cpp import (
+    CapturingProcessRunner,
+    LlamaCppScriptGenerator,
+    LlamaProcessResult,
+)
 
 
 @pytest.mark.parametrize("worker", [False, True])
@@ -207,7 +211,7 @@ def test_writing_capture_preserves_each_actual_process_invocation(
         return expected
 
     root = tmp_path / "evidence"
-    capture = benchmark_writing_methods.CapturingProcessRunner(root, run)
+    capture = CapturingProcessRunner(root, run)
     assert capture(command, 300) is expected
     before = {path.name: path.read_bytes() for path in (root / "001").iterdir()}
     assert capture(command, 300) is expected
@@ -223,7 +227,7 @@ def test_writing_capture_preserves_each_actual_process_invocation(
         assert (folder / "stderr.txt").read_text() == "raw stderr\n"
         assert json.loads((folder / "process.json").read_text())["returncode"] == returncode
 
-    collision = benchmark_writing_methods.CapturingProcessRunner(root, run)
+    collision = CapturingProcessRunner(root, run)
     with pytest.raises(FileExistsError):
         collision(command, 300)
     assert before == {path.name: path.read_bytes() for path in (root / "001").iterdir()}
@@ -245,7 +249,7 @@ def test_writing_capture_keeps_partial_output_and_propagates_process_failure(
         output.write_bytes(b"partial model output")
         raise failure
 
-    capture = benchmark_writing_methods.CapturingProcessRunner(tmp_path / "evidence", run)
+    capture = CapturingProcessRunner(tmp_path / "evidence", run)
     with pytest.raises(type(failure)) as caught:
         capture(command, 300)
     assert caught.value is failure
@@ -336,7 +340,21 @@ def test_writing_cli_passes_explicit_model_storage_and_keeps_both_failed_methods
         "recipe_whole_session",
     ]
     assert all(result["status"] == "failed" for result in report["results"])
-    assert (output / ".gitignore").read_text() == "*\n"
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    ignored = [
+        "fresh/report.json",
+        "fresh/grounding-3m/recipe_whole_session/raw-invocations/001/output.txt",
+        "fresh/grounding-3m/recipe_whole_session/raw-invocations/001/prompt.txt",
+        "fresh/grounding-3m/recipe_whole_session/raw-invocations/001/process.json",
+    ]
+    result = subprocess.run(
+        ["git", "-C", str(tmp_path), "check-ignore", "--no-index", "--stdin"],
+        input="\n".join([*ignored, "publishable-summary.json"]) + "\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.splitlines() == ignored
 
 
 @pytest.fixture

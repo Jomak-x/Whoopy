@@ -6,7 +6,6 @@
   "review_reasons": [],
   "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/voices/voxcpm2-reference/raw.wav",
   "audio_sha256": "37383b3c2f8136926c756ab93688b65a5a18bbb827e2a51cafd1aaafa47400bc",
-  "expected_transcript": "Settle into a position that feels comfortable.",
   "expected_text_sha256": "a43df81197ba86cf78576bbdd08bed1b1367f7c74d56a2e885a500c141659943",
   "mode": "speech",
   "pcm": {
@@ -31,77 +30,7 @@
     "model_weights_sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
     "model_config_sha256": "e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e",
     "audio_sha256": "37383b3c2f8136926c756ab93688b65a5a18bbb827e2a51cafd1aaafa47400bc",
-    "text": " settle into a position that feels comfortable.",
     "language": "en",
-    "segments": [
-      {
-        "id": 0,
-        "seek": 0,
-        "start": 0.0,
-        "end": 2.94,
-        "text": " settle into a position that feels comfortable.",
-        "tokens": [
-          50364,
-          11852,
-          666,
-          257,
-          2535,
-          300,
-          3417,
-          4619,
-          13,
-          50524
-        ],
-        "temperature": 0.0,
-        "avg_logprob": -0.3331815979697488,
-        "compression_ratio": 0.8846153846153846,
-        "no_speech_prob": 0.002773832995444536,
-        "words": [
-          {
-            "word": " settle",
-            "start": 0.0,
-            "end": 0.48,
-            "probability": 0.8388671875
-          },
-          {
-            "word": " into",
-            "start": 0.48,
-            "end": 0.86,
-            "probability": 0.96875
-          },
-          {
-            "word": " a",
-            "start": 0.86,
-            "end": 1.04,
-            "probability": 0.99658203125
-          },
-          {
-            "word": " position",
-            "start": 1.04,
-            "end": 1.48,
-            "probability": 0.99853515625
-          },
-          {
-            "word": " that",
-            "start": 1.48,
-            "end": 1.86,
-            "probability": 0.9970703125
-          },
-          {
-            "word": " feels",
-            "start": 1.86,
-            "end": 2.28,
-            "probability": 0.99609375
-          },
-          {
-            "word": " comfortable.",
-            "start": 2.28,
-            "end": 2.94,
-            "probability": 0.986328125
-          }
-        ]
-      }
-    ],
     "inference_seconds": 1.8026953330263495,
     "versions": {
       "mlx-whisper": "0.4.3",
@@ -131,62 +60,7 @@
     "deletions": 0,
     "insertions": 0,
     "substitutions": 0,
-    "missing_words": [],
-    "unexpected_words": [],
-    "excess_repeated_words": {},
-    "missing_tail_words": [],
-    "possible_truncation": false,
-    "alignment": [
-      {
-        "operation": "match",
-        "expected": "settle",
-        "observed": "settle",
-        "expected_index": 0,
-        "observed_index": 0
-      },
-      {
-        "operation": "match",
-        "expected": "into",
-        "observed": "into",
-        "expected_index": 1,
-        "observed_index": 1
-      },
-      {
-        "operation": "match",
-        "expected": "a",
-        "observed": "a",
-        "expected_index": 2,
-        "observed_index": 2
-      },
-      {
-        "operation": "match",
-        "expected": "position",
-        "observed": "position",
-        "expected_index": 3,
-        "observed_index": 3
-      },
-      {
-        "operation": "match",
-        "expected": "that",
-        "observed": "that",
-        "expected_index": 4,
-        "observed_index": 4
-      },
-      {
-        "operation": "match",
-        "expected": "feels",
-        "observed": "feels",
-        "expected_index": 5,
-        "observed_index": 5
-      },
-      {
-        "operation": "match",
-        "expected": "comfortable",
-        "observed": "comfortable",
-        "expected_index": 6,
-        "observed_index": 6
-      }
-    ]
+    "possible_truncation": false
   },
   "limits": [
     "ASR is independent evidence, not a human transcription or a proof of perfect speech.",
@@ -201,5 +75,13 @@
     "fail_coverage_below": 0.65
   },
   "verifier_source_sha256": "3669cf3793b7200110dab88dd698d4eed1816a291f3f8581de7c6bf7dd83b3d3",
-  "harness_source_sha256": "a35b1cc25f4418de82b402e1ca5bc361ea22c6c6ee13eeee778c84db8854b8b5"
+  "harness_source_sha256": "a35b1cc25f4418de82b402e1ca5bc361ea22c6c6ee13eeee778c84db8854b8b5",
+  "publication": {
+    "schema_version": 1,
+    "kind": "compact_verification_receipt",
+    "original_receipt_sha256": "5ed4793387ca44676ff72993aced9c9feb49b6ee7cb84a7f6cc6bee8835bae55",
+    "original_status": "pass",
+    "full_trace_included": false,
+    "referenced_receipt_hashes": "original_receipt_bytes"
+  }
 }

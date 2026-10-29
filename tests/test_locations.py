@@ -11,6 +11,7 @@ import pytest
 import whoopy.locations as locations
 from whoopy.config import load_settings
 from whoopy.locations import default_config_directory, runtime_worker_script
+from whoopy.release.status import assess_package
 
 
 def test_installed_distribution_falls_back_to_bundled_config_and_workers(
@@ -41,7 +42,7 @@ def test_built_wheel_contains_product_data_without_local_settings(tmp_path: Path
             project / directory,
             ignore=shutil.ignore_patterns("local.yaml", "__pycache__", "*.egg-info"),
         )
-    for name in ("pyproject.toml", "README.md"):
+    for name in ("pyproject.toml", "README.md", "uv.lock"):
         shutil.copy2(root / name, project / name)
     (project / "config/local.yaml").write_text(
         "tts:\n  voice: synthetic-private-voice\n", encoding="utf-8"
@@ -51,13 +52,17 @@ def test_built_wheel_contains_product_data_without_local_settings(tmp_path: Path
     uv = shutil.which("uv")
     assert uv is not None, "The wheel regression requires the project's uv build tool"
     result = subprocess.run(
-        [uv, "build", "--wheel", "--out-dir", str(tmp_path / "dist"), str(project)],
+        [uv, "build", "--offline", "--out-dir", str(tmp_path / "dist"), str(project)],
         capture_output=True,
         text=True,
         check=False,
         timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    package_status = assess_package(project, tmp_path / "dist")
+    assert package_status.outcome == "passed", package_status.blockers
+    (project / "config/local.yaml").write_text("tts:\n  voice: changed-private-voice\n")
+    assert assess_package(project, tmp_path / "dist").outcome == "passed"
     wheel = next((tmp_path / "dist").glob("*.whl"))
     with zipfile.ZipFile(wheel) as archive:
         names = archive.namelist()
@@ -98,3 +103,12 @@ def test_built_wheel_contains_product_data_without_local_settings(tmp_path: Path
     assert (config.parent / "scripts/mlx_qwen3_tts_worker.py").read_bytes() == (
         root / "scripts/mlx_qwen3_tts_worker.py"
     ).read_bytes()
+
+    for relative in ("scripts/mlx_qwen3_tts_worker.py", "docs/experimental-mlx-qwen.md"):
+        source = project / relative
+        original = source.read_bytes()
+        source.write_bytes(original + b"\n")
+        stale = assess_package(project, tmp_path / "dist")
+        assert stale.outcome == "stale"
+        assert f"Wheel does not match current source: {source}" in stale.blockers
+        source.write_bytes(original)

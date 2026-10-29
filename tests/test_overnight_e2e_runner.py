@@ -30,6 +30,65 @@ def observer(available: int = 32 * 1024**3) -> SimpleNamespace:
 
 
 class RunnerChecks(unittest.TestCase):
+    def test_verification_retains_incomplete_report_and_rejects_interrupted_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "verification.json"
+            for status in ("incomplete", "pass", "review"):
+                with self.subTest(status=status):
+                    original = json.dumps({"status": status, "partial_evidence": ["retained"]})
+                    report.write_text(original)
+                    receipt = {"status": "stopped", "reason": "overnight deadline", "returncode": 0}
+                    result = runner.load_verification_result(report, receipt)
+                    self.assertEqual(result["status"], "fail")
+                    self.assertEqual(result["verification_report"], json.loads(original))
+                    self.assertEqual(result["receipt"], receipt)
+                    self.assertEqual(report.read_text(), original)
+            report.write_text(json.dumps({"status": "incomplete"}))
+            result = runner.load_verification_result(
+                report, {"status": "completed", "returncode": 0}
+            )
+            self.assertEqual(result["status"], "fail")
+            report.unlink()
+            self.assertEqual(
+                runner.load_verification_result(report, {"status": "not_started"})["status"],
+                "fail",
+            )
+
+    def test_completed_verification_requires_matching_exit_code(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "verification.json"
+            for status, returncode in (("pass", 0), ("review", 2), ("fail", 1)):
+                with self.subTest(status=status):
+                    payload = {"status": status, "evidence": "retained"}
+                    report.write_text(json.dumps(payload))
+                    receipt: dict[str, Any] = {
+                        "status": "completed" if returncode == 0 else "nonzero",
+                        "returncode": returncode,
+                    }
+                    self.assertEqual(runner.load_verification_result(report, receipt), payload)
+                    receipt["returncode"] = 99
+                    self.assertEqual(
+                        runner.load_verification_result(report, receipt)["status"], "fail"
+                    )
+
+    def test_screening_requires_terminal_results_for_every_selected_native_segment(self) -> None:
+        final = {"status": "pass"}
+        first: dict[str, Any] = {"segment_id": "speech-0001", "verification": {"status": "pass"}}
+        second: dict[str, Any] = {"segment_id": "speech-0002", "verification": {"status": "pass"}}
+        required = {"speech-0001", "speech-0002"}
+        self.assertEqual(runner.screening_status(final, [first, second], required), "pass")
+        for reports in ([], [first], [first, first], [first, second, second]):
+            with self.subTest(reports=reports):
+                self.assertEqual(runner.screening_status(final, reports, required), "fail")
+        for status in ("incomplete", "running", "fail", None):
+            with self.subTest(status=status):
+                second["verification"] = {"status": status}
+                self.assertEqual(runner.screening_status(final, [first, second], required), "fail")
+                self.assertEqual(runner.screening_status({"status": status}, [], set()), "fail")
+        second["verification"] = {"status": "review"}
+        self.assertEqual(runner.screening_status(final, [first, second], required), "review")
+        self.assertEqual(runner.screening_status(final, [], set()), "pass")
+
     def call(self, root: Path, code: str, **changes: Any) -> dict[str, Any]:
         options: dict[str, Any] = dict(
             cwd=root,

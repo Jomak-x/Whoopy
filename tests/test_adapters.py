@@ -6,7 +6,8 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+from uuid import UUID
 
 import pytest
 
@@ -38,6 +39,12 @@ from whoopy.audio.synthesis import (
     FatalSynthesisError,
     InvalidSynthesisOutput,
     TransientSynthesisError,
+)
+from whoopy.meditation import (
+    GenerationWorkspace,
+    LocalMeditationGenerator,
+    load_prompt_bundle,
+    load_recipe_library,
 )
 from whoopy.ports import (
     FatalAdapterError,
@@ -165,8 +172,9 @@ def test_llama_adapter_classifies_nonzero_exit_as_fatal(tmp_path: Path) -> None:
         process_runner=failed_runner,
     )
 
-    with pytest.raises(FatalAdapterError, match="invalid GGUF"):
+    with pytest.raises(FatalAdapterError, match="exited with code 2") as error:
         adapter.generate(ScriptGenerationRequest(prompt="A prompt."))
+    assert "invalid GGUF" not in str(error.value)
 
 
 def test_llama_adapter_delivers_requested_schema_to_native_process(tmp_path: Path) -> None:
@@ -287,6 +295,90 @@ def test_llama_adapter_rejects_partial_output_after_engine_sampler_failure(
         adapter.generate(
             ScriptGenerationRequest(prompt="A prompt.", response_json_schema={"type": "object"})
         )
+
+
+@pytest.mark.parametrize("writing_method", ["plan_first", "recipe_whole_session"])
+@pytest.mark.parametrize("failure", ["sampler", "timeout", "exit", "empty"])
+def test_llama_writer_preserves_failed_invocations_before_temporary_cleanup(
+    tmp_path: Path,
+    writing_method: Literal["plan_first", "recipe_whole_session"],
+    failure: str,
+) -> None:
+    executable, model = _llama_files(tmp_path)
+    captured: list[tuple[list[str], dict[str, bytes]]] = []
+    raw_output = b'User:\nPrivate request.\n\nAssistant:\n{"text":'
+    stdout = "Private raw stdout."
+    stderr = "common_sampler_init: error initializing grammar sampler\nPrivate raw stderr."
+
+    def runner(command: Sequence[str], timeout: float) -> subprocess.CompletedProcess[str]:
+        argv = list(command)
+        inputs = {
+            name: Path(argv[argv.index(flag) + 1]).read_bytes()
+            for flag, name in (
+                ("--file", "prompt.txt"),
+                ("--system-prompt-file", "system.txt"),
+                ("--json-schema-file", "response-schema.json"),
+            )
+            if flag in argv
+        }
+        captured.append((argv, inputs))
+        output = b"" if failure == "empty" else raw_output
+        Path(argv[argv.index("--output-file") + 1]).write_bytes(output)
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(argv, timeout, output=stdout, stderr=stderr)
+        return subprocess.CompletedProcess(
+            argv, 2 if failure == "exit" else 0, stdout, "" if failure == "empty" else stderr
+        )
+
+    adapter = LlamaCppScriptGenerator(
+        executable_path=executable,
+        model_path=model,
+        versioned_model_id="fixture/model@1",
+        runtime_version="fixture",
+        license_id="Apache-2.0",
+        device="cpu",
+        process_runner=runner,
+    )
+    workspace = GenerationWorkspace(tmp_path / "workspace")
+    preserved: dict[Path, bytes] = {}
+    for _ in range(2):
+        generator = LocalMeditationGenerator(
+            adapter,
+            load_prompt_bundle(Path("config/prompts")),
+            recipes=load_recipe_library(Path("config/session_recipes.yaml")),
+            workspace=workspace,
+        )
+        with pytest.raises(
+            (InvalidAdapterOutput, TransientAdapterError, FatalAdapterError)
+        ) as error:
+            generator.generate(
+                prompt="A seated grounding meditation after an overstimulating workday.",
+                duration_seconds=180,
+                run_id=UUID("44444444-4444-4444-8444-444444444444"),
+                writing_method=writing_method,
+            )
+        assert "Private" not in str(error.value)
+        assert all(path.read_bytes() == data for path, data in preserved.items())
+        receipts = list((workspace.root / "raw-invocations").glob("*/001/process.json"))
+        assert len(receipts) == len(captured)
+        for receipt_path in receipts:
+            folder = receipt_path.parent
+            argv = json.loads((folder / "command.json").read_text())
+            expected_inputs = next(inputs for command, inputs in captured if command == argv)
+            for name, data in expected_inputs.items():
+                assert (folder / name).read_bytes() == data
+            assert (folder / "output.txt").read_bytes() == (
+                b"" if failure == "empty" else raw_output
+            )
+            assert (folder / "stdout.txt").read_text() == stdout
+            assert (folder / "stderr.txt").read_text() == ("" if failure == "empty" else stderr)
+            receipt = json.loads(receipt_path.read_text())
+            assert receipt["status"] == ("failed" if failure == "timeout" else "completed")
+            assert receipt["returncode"] == (
+                None if failure == "timeout" else 2 if failure == "exit" else 0
+            )
+            assert not Path(argv[argv.index("--file") + 1]).exists()
+            preserved.update({path: path.read_bytes() for path in folder.iterdir()})
 
 
 def test_llama_adapter_removes_single_turn_transcript_wrapper() -> None:

@@ -15,8 +15,14 @@ from pytest import CaptureFixture, MonkeyPatch
 
 from whoopy.adapters.llm import LlamaCppScriptGenerator
 from whoopy.adapters.tts import SherpaOnnxKokoroAdapter
+from whoopy.adapters.tts.mlx_qwen3_tts import MLX_QWEN_BACKENDS
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
-from whoopy.cli import _apply_global_speech_overrides, _apply_speech_capability_fallbacks, main
+from whoopy.cli import (
+    QWEN_BACKEND_VARIANTS,
+    _apply_global_speech_overrides,
+    _apply_speech_capability_fallbacks,
+    main,
+)
 from whoopy.hardware import HardwareSnapshot
 from whoopy.pipeline.generation import PendingGenerationConfig, TTSRunSettings
 from whoopy.pipeline.locks import RunLock
@@ -681,6 +687,48 @@ def test_draft_command_persists_validated_local_generation(
     assert (draft / "script.md").is_file()
     assert (draft / "timeline.json").is_file()
     assert len(list((draft / "sections").glob("*.json"))) == 3
+
+
+@pytest.mark.parametrize(
+    "backend",
+    ["fish-1.4", "moss-local-v1.5", "moss-v1.5", *QWEN_BACKEND_VARIANTS, *MLX_QWEN_BACKENDS],
+)
+@pytest.mark.parametrize("mode", ["prompt", "script"])
+def test_generate_rejects_unsupported_numeric_speed_before_backend_setup(
+    backend: str,
+    mode: str,
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    def unexpected_backend_setup(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("Unsupported numeric speed reached model setup")
+
+    monkeypatch.setattr("whoopy.cli._model_plan", unexpected_backend_setup)
+    script = tmp_path / "script.md"
+    script.write_text("Notice an ordinary sound.\n", encoding="utf-8")
+    source = ["A gentle grounding pause."] if mode == "prompt" else ["--script-file", str(script)]
+    runs_dir = tmp_path / "runs"
+
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "generate",
+                *source,
+                "--tts-model",
+                backend,
+                "--speed",
+                "0.6",
+                "--pacing-profile",
+                "meditative-v2",
+                "--runs-dir",
+                str(runs_dir),
+            ]
+        )
+
+    assert error.value.code == 2
+    assert "does not support numeric --speed" in capsys.readouterr().err
+    assert not runs_dir.exists()
 
 
 @pytest.mark.parametrize(

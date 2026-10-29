@@ -1005,7 +1005,10 @@ def test_pace_edit_resynthesizes_only_changed_speech(tmp_path: Path) -> None:
     assert silence_span["actual_duration_ms"] == 2_000
 
 
-def test_wording_revision_preserves_rendered_controls_and_fitted_pauses(tmp_path: Path) -> None:
+@pytest.mark.parametrize("expand_paragraph", [False, True])
+def test_wording_revision_preserves_rendered_controls_and_fitted_pauses(
+    tmp_path: Path, expand_paragraph: bool
+) -> None:
     generated = _generated(
         _plan(), middle_text="Notice the support beneath you and let attention settle here."
     )
@@ -1029,7 +1032,7 @@ def test_wording_revision_preserves_rendered_controls_and_fitted_pauses(tmp_path
         RUN_ID,
         RevisionRequest(
             timeline=TimelineEdit(
-                pace={"speech-0001": "slow"},
+                pace={"speech-0001": "slow", "speech-0003": "very_slow"},
                 delivery={"speech-0001": "compassionate"},
                 intensity={"speech-0001": "moderate"},
                 pronunciation_overrides={
@@ -1044,14 +1047,25 @@ def test_wording_revision_preserves_rendered_controls_and_fitted_pauses(tmp_path
     accepted_timeline = store.load_timeline(RUN_ID)
     accepted_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
     editable_script = store.load_script(RUN_ID)
+    replacement = "let your attention"
+    if expand_paragraph:
+        replacement = "Notice the support beneath your feet. " * 20 + replacement
     wording = revisions.create(
         RUN_ID,
-        RevisionRequest(script=editable_script.replace("let attention", "let your attention", 1)),
+        RevisionRequest(script=editable_script.replace("let attention", replacement, 1)),
     )
-    assert wording.affected_speech_segment_ids == ("speech-0002",)
+    if expand_paragraph:
+        assert len(store.load_timeline(RUN_ID).segments) > len(accepted_timeline.segments)
+        assert "speech-0001" not in wording.affected_speech_segment_ids
+    else:
+        assert wording.affected_speech_segment_ids == ("speech-0002",)
     assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
     rendered = store.load_timeline(RUN_ID)
     assert rendered.segments[0] == accepted_timeline.segments[0]
+    ending = next(
+        segment for segment in reversed(rendered.segments) if isinstance(segment, SpeechSegment)
+    )
+    assert ending.pace == "very_slow"
     assert [s for s in rendered.segments if isinstance(s, SilenceSegment)] == fitted
     manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
     for pause in fitted:
@@ -1070,8 +1084,9 @@ def test_wording_revision_preserves_rendered_controls_and_fitted_pauses(tmp_path
 
 
 @pytest.mark.parametrize("pace, delivery", [("very_slow", "warm"), ("natural", "neutral")])
+@pytest.mark.parametrize("expand_paragraph", [False, True])
 def test_new_script_controls_override_accepted_controls(
-    tmp_path: Path, pace: str, delivery: str
+    tmp_path: Path, pace: str, delivery: str, expand_paragraph: bool
 ) -> None:
     store = _completed_script_run(tmp_path / "runs")
     revisions = RevisionStore(store)
@@ -1090,12 +1105,17 @@ def test_new_script_controls_override_accepted_controls(
         ),
     )
     assert LocalWorker(store).resume(RUN_ID).status is RunStatus.COMPLETED
+    script = store.load_script(RUN_ID)
+    if expand_paragraph:
+        script = script.replace(
+            "Notice the support beneath you.", "Notice the support beneath you. " * 24
+        )
     revisions.create(
         RUN_ID,
-        RevisionRequest(
-            script=f"[pace: {pace}]\n[delivery: {delivery}]\n\n" + store.load_script(RUN_ID)
-        ),
+        RevisionRequest(script=f"[pace: {pace}]\n[delivery: {delivery}]\n\n" + script),
     )
+    if expand_paragraph:
+        assert len(store.load_timeline(RUN_ID).segments) > 3
     first = store.load_timeline(RUN_ID).segments[0]
     assert isinstance(first, SpeechSegment)
     assert first.pace == pace

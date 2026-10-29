@@ -56,6 +56,42 @@ def _snapshot(directory: Path) -> dict[str, bytes]:
     }
 
 
+@pytest.mark.parametrize("blocker", ["model", "generation"])
+def test_busy_alternative_take_preserves_selection_and_undo_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, blocker: str
+) -> None:
+    application = LocalWebApplication(
+        project_root=Path.cwd(),
+        config_directory=Path.cwd() / "config",
+        models_directory=tmp_path / "models",
+        runs_directory=tmp_path / "runs",
+    )
+    store, _audio = _completed_run(application.runs_directory)
+    original, alternative, _alternative_audio = _alternative_take(store)
+    takes = SegmentTakeStore(store)
+    takes.choose(RUN_ID, "speech-0001", original)
+    takes.choose(RUN_ID, "speech-0001", alternative)
+    monkeypatch.setattr("whoopy.webui.server.threading.Thread.start", lambda _thread: None)
+    if blocker == "model":
+        application.start_model_pack_task("smoke-test", "moss-local-5b", {})
+    else:
+        application._tasks["other"] = GenerationTask(task_id="other", run_id="other")
+    before = _snapshot(store.run_directory(RUN_ID))
+
+    with pytest.raises(ValueError, match="active"):
+        application.generate_alternative_take(str(RUN_ID), "speech-0001")
+
+    assert _snapshot(store.run_directory(RUN_ID)) == before
+    assert takes.selected(RUN_ID, "speech-0001") == alternative
+    assert takes.undo(RUN_ID, "speech-0001").selected_take_id == original
+    application._tasks.clear()
+    application._model_pack_tasks.clear()
+    result = application.generate_alternative_take(str(RUN_ID), "speech-0001")
+    assert result is not None
+    assert application._tasks[str(RUN_ID)].active
+    assert application._tasks[str(RUN_ID)].finalizing_take
+
+
 @pytest.mark.parametrize("operation", ["edit", "restore", "take"])
 @pytest.mark.parametrize("blocker", ["model", "generation"])
 def test_busy_revision_request_does_not_mutate_and_can_retry(

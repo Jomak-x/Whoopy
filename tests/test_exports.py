@@ -17,6 +17,9 @@ from whoopy.audio import (
     export_finished_audio,
     load_export_manifest,
 )
+from whoopy.audio.exports import ExportArtifact, ExportKind, ExportManifest
+from whoopy.pipeline.runs import RunStore
+from whoopy.webui.server import LocalWebApplication
 
 
 def _write_narration(path: Path, *, seconds: float = 1.0) -> None:
@@ -97,6 +100,129 @@ def test_failed_export_preserves_previous_directory(
     assert prior.read_text(encoding="utf-8") == "still authoritative"
     assert not list(tmp_path.glob(".exports.*.tmp"))
     assert not list(tmp_path.glob(".exports.*.backup"))
+
+
+def test_export_freezes_source_and_rejects_changed_master(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "narration.wav"
+    _write_narration(source)
+    original = source.read_bytes()
+    replacement = original[:-2] + b"\x00\x00"
+    output = tmp_path / "exports"
+    output.mkdir()
+    prior = output / "prior-export.txt"
+    prior.write_bytes(b"prior export")
+    encoded_sources: list[bytes] = []
+
+    def encode(
+        frozen: Path,
+        staging: Path,
+        _metadata: ExportMetadata,
+        *,
+        kind: ExportKind,
+        filename: str,
+        expected_codec: str,
+        **_kwargs: object,
+    ) -> ExportArtifact:
+        data = frozen.read_bytes()
+        encoded_sources.append(data)
+        (staging / filename).write_bytes(data)
+        if len(encoded_sources) == 1:
+            revised = tmp_path / "reassembled.wav"
+            revised.write_bytes(replacement)
+            revised.replace(source)
+        return ExportArtifact(
+            kind=kind,
+            filename=filename,
+            codec=expected_codec,
+            byte_count=len(data),
+            sha256=hashlib.sha256(data).hexdigest(),
+            duration_ms=1_000,
+            sample_rate=24_000,
+            channels=1,
+            embedded_tags={},
+        )
+
+    monkeypatch.setattr(exports_module, "_ffmpeg_version", lambda _path: "test ffmpeg")
+    monkeypatch.setattr(exports_module, "_encode_and_verify", encode)
+
+    with pytest.raises(AudioExportError, match="Narration master changed"):
+        export_finished_audio(
+            source,
+            output,
+            _metadata(),
+            ffmpeg_executable=Path(sys.executable),
+            ffprobe_executable=Path(sys.executable),
+        )
+
+    assert encoded_sources == [original] * 4
+    assert source.read_bytes() == replacement
+    assert prior.read_bytes() == b"prior export"
+    assert list(output.iterdir()) == [prior]
+    assert not list(tmp_path.glob(".exports.*.tmp"))
+    assert not list(tmp_path.glob(".exports.*.backup"))
+
+
+@pytest.mark.parametrize("change", ["replace", "truncate", "remove"])
+def test_export_listing_and_download_reject_changed_artifact(tmp_path: Path, change: str) -> None:
+    application = LocalWebApplication(
+        project_root=Path.cwd(),
+        config_directory=Path.cwd() / "config",
+        models_directory=tmp_path / "models",
+        runs_directory=tmp_path / "runs",
+    )
+    store = RunStore(application.runs_directory)
+    record = store.create("A quiet moment.")
+    run_id = str(record.run_id)
+    audio = store.audio_path(run_id)
+    audio.write_bytes(b"narration revision A")
+    digest = hashlib.sha256(audio.read_bytes()).hexdigest()
+    output = audio.parent / "exports"
+    output.mkdir()
+    exported = output / "finished.wav"
+    exported.write_bytes(audio.read_bytes())
+    manifest = ExportManifest(
+        generated_at=datetime.now(UTC),
+        source_filename=audio.name,
+        source_byte_count=audio.stat().st_size,
+        source_sha256=digest,
+        source_duration_ms=1_000,
+        metadata=_metadata(),
+        ffmpeg_executable="fixture-ffmpeg",
+        ffmpeg_version="fixture",
+        artifacts=(
+            ExportArtifact(
+                kind="wav",
+                filename=exported.name,
+                codec="pcm_s16le",
+                byte_count=exported.stat().st_size,
+                sha256=digest,
+                duration_ms=1_000,
+                sample_rate=24_000,
+                channels=1,
+                embedded_tags={},
+            ),
+        ),
+    )
+    receipt = output / "export-manifest.json"
+    receipt.write_text(manifest.model_dump_json(), encoding="utf-8")
+    original_receipt = receipt.read_bytes()
+    available = application.exports(run_id)
+    assert available is not None and available["available"] is True
+    assert application.export_path(run_id, "wav") == exported
+
+    if change == "replace":
+        exported.write_bytes(b"narration revision B")
+    elif change == "truncate":
+        exported.write_bytes(b"short")
+    else:
+        exported.unlink()
+
+    assert application.exports(run_id) == {"available": False, "artifacts": []}
+    assert application.export_path(run_id, "wav") is None
+    assert receipt.read_bytes() == original_receipt
+    assert audio.read_bytes() == b"narration revision A"
 
 
 @pytest.mark.skipif(

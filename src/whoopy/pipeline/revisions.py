@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 from datetime import UTC, datetime
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Literal, cast
 from uuid import UUID, uuid4
@@ -249,50 +250,75 @@ class RevisionStore:
                         for segment in new_timeline.segments
                         if isinstance(segment, SilenceSegment)
                     ]
-                    # The editable script can predate accepted controls and fitted
-                    # pauses. Only changed script fields replace canonical values.
-                    if (
-                        [(s.id, s.type) for s in previous_script_timeline.segments]
-                        == [(s.id, s.type) for s in old_timeline.segments]
-                        == [(s.id, s.type) for s in new_timeline.segments]
-                    ):
-                        merged_segments = []
-                        for previous, current, requested in zip(
-                            previous_script_timeline.segments,
-                            old_timeline.segments,
-                            new_timeline.segments,
-                            strict=True,
+                    previous_segments = previous_script_timeline.segments
+                    requested_segments = new_timeline.segments
+                    current_segments = {segment.id: segment for segment in old_timeline.segments}
+                    correspondence: dict[int, int] = {}
+                    matcher = SequenceMatcher(
+                        a=[
+                            segment.model_dump_json(
+                                exclude={"id", "delivery", "intensity", "pace", "voice_mode"}
+                            )
+                            for segment in previous_segments
+                        ],
+                        b=[
+                            segment.model_dump_json(
+                                exclude={"id", "delivery", "intensity", "pace", "voice_mode"}
+                            )
+                            for segment in requested_segments
+                        ],
+                        autojunk=False,
+                    )
+                    for operation, old_start, old_end, new_start, new_end in matcher.get_opcodes():
+                        if operation == "equal" or (
+                            operation == "replace" and old_end - old_start == new_end - new_start
                         ):
-                            updates: dict[str, object] = {}
-                            if (
-                                isinstance(previous, SpeechSegment)
-                                and isinstance(current, SpeechSegment)
-                                and isinstance(requested, SpeechSegment)
-                            ):
-                                for name in ("delivery", "intensity", "pace", "voice_mode"):
-                                    if getattr(previous, name) == getattr(
-                                        requested, name
-                                    ) and previous_controls[previous.id].get(
-                                        name
-                                    ) == requested_controls[requested.id].get(name):
-                                        updates[name] = getattr(current, name)
-                                updates["language"] = current.language
-                                updates["pronunciation_overrides"] = tuple(
-                                    override
-                                    for override in current.pronunciation_overrides
-                                    if override.source in requested.text
+                            correspondence.update(
+                                zip(
+                                    range(new_start, new_end),
+                                    range(old_start, old_end),
+                                    strict=True,
                                 )
-                                if previous.text == requested.text:
-                                    updates["target_duration_ms"] = current.target_duration_ms
-                            elif (
-                                isinstance(previous, SilenceSegment)
-                                and isinstance(current, SilenceSegment)
-                                and isinstance(requested, SilenceSegment)
-                                and previous.duration_ms == requested.duration_ms
-                            ):
-                                updates["duration_ms"] = current.duration_ms
-                            merged_segments.append(requested.model_copy(update=updates))
-                        new_timeline = new_timeline.model_copy(update={"segments": merged_segments})
+                            )
+                    merged_segments = []
+                    for index, requested in enumerate(requested_segments):
+                        previous_index = correspondence.get(index)
+                        if previous_index is None:
+                            merged_segments.append(requested)
+                            continue
+                        previous = previous_segments[previous_index]
+                        current = current_segments.get(previous.id)
+                        updates: dict[str, object] = {}
+                        if (
+                            isinstance(previous, SpeechSegment)
+                            and isinstance(current, SpeechSegment)
+                            and isinstance(requested, SpeechSegment)
+                            and previous.text == current.text
+                        ):
+                            for name in ("delivery", "intensity", "pace", "voice_mode"):
+                                if getattr(previous, name) == getattr(
+                                    requested, name
+                                ) and previous_controls[previous.id].get(
+                                    name
+                                ) == requested_controls[requested.id].get(name):
+                                    updates[name] = getattr(current, name)
+                            updates["language"] = current.language
+                            updates["pronunciation_overrides"] = tuple(
+                                override
+                                for override in current.pronunciation_overrides
+                                if override.source in requested.text
+                            )
+                            if previous.text == requested.text:
+                                updates["target_duration_ms"] = current.target_duration_ms
+                        elif (
+                            isinstance(previous, SilenceSegment)
+                            and isinstance(current, SilenceSegment)
+                            and isinstance(requested, SilenceSegment)
+                            and previous.duration_ms == requested.duration_ms
+                        ):
+                            updates["duration_ms"] = current.duration_ms
+                        merged_segments.append(requested.model_copy(update=updates))
+                    new_timeline = new_timeline.model_copy(update={"segments": merged_segments})
                     merged_pauses = [
                         segment.duration_ms
                         for segment in new_timeline.segments

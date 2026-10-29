@@ -246,3 +246,29 @@ listening. Deterministic regression passes do not resolve that qualification.
 Frontend trees remain byte-identical to the original base. No source license,
 model payload, audio payload, or recovery archive was added. Existing prepared
 dependencies were preserved; transient test bytecode/cache files were removed.
+
+
+## Review fixes after c31d4e3
+
+These eleven misses were confirmed against the current implementation before
+editing. This round preserves the existing frontend exclusion, prior fixes,
+source-license decision, and local model/evidence boundaries. No live inference,
+paid API call, pipeline control, publication, or CI phase ran here.
+
+| Finding | Root cause and narrow correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-INCOMPLETE-ASR | Qualification defaulted to Pass for nonterminal results and omitted native coverage checks. Receipt loading now requires terminal process/report outcomes; reduction requires every selected segment exactly once. Incomplete reports remain intact. | `test_overnight_e2e_runner.py`: interrupted, incomplete, mismatched exit, missing and duplicate coverage. |
+| REVIEW-ASR-PUBLICATION | Full local verification payloads crossed the publication boundary. Tracked receipts now contain compact results/provenance; exact originals are retained in the ignored worktree recovery directory, identified by SHA-256. | `test_publication_receipts.py`: semantic compact-artifact contract and preserved disagreement/proof references. |
+| REVIEW-CONTROL-PRESERVATION | Control merging depended on identical complete topology. Ordered segment correspondence preserves accepted controls on unchanged segments across unrelated chunk splits, while explicit replacements win. | `test_revisions.py`: edit/render/restore with a split later paragraph, unchanged opening/ending controls and fitted pauses. |
+| REVIEW-EXPORT-SOURCE-RACE | Each format read a mutable master independently. Exports now share one frozen source and refuse activation if the master changes. | `test_exports.py`: same-duration source replacement between encodes, identical frozen bytes, prior export preserved. |
+| REVIEW-EXPORT-ARTIFACT-INTEGRITY | Export resolution trusted manifest metadata without checking served artifacts. Listing/download now require recorded sizes and hashes for exported files. | `test_exports.py`: same-size replacement, truncation and removal, preserving the receipt. |
+| REVIEW-SAMPLER-EVIDENCE | Adapter failure preceded durable writing-attempt capture. Both writer methods now retain immutable command, prompt/schema, streams and partial output before temporary cleanup; public errors omit raw diagnostics. | `test_adapters.py`: composed sampler, timeout, nonzero-exit and empty-output failures, with repeated attempts. |
+| REVIEW-PHYSICAL-MOVEMENT | An unrestricted movement verb accepted metaphorical endings. Movement/stretch matches now require physical body targets. | `test_recipe_whole_session.py`: reject moving into the day or stretching attention; accept body, hands, fingers, arms and feet. |
+| REVIEW-UNSUPPORTED-SPEED | Unsupported backends discarded explicit speed after it changed pacing selection. Shared CLI validation rejects it before model setup; backend launchers emit numeric speed only for Kokoro. | `test_cli.py`, `test_webui.py`: every unsupported backend plus preserved Kokoro and legacy MOSS/Qwen launches. |
+| REVIEW-TAKE-ADMISSION | Alternative capture/selection preceded admission. Admission now encloses those mutations through worker registration and existing finalizer ownership. | `test_revision_admission.py`: blocked model/run requests preserve selection and Undo; retry registers ownership. |
+| REVIEW-PACKAGE-INVENTORY | A second package manifest drifted from the actual build declarations. Inventory and wheel destinations now derive from explicit setuptools data-file declarations. | `test_locations.py`: emitted wheel/sdist assessment, synthetic local settings excluded, changed MLX worker/guide detected. |
+| REVIEW-IGNORE-TEST-SEMANTICS | A byte assertion did not establish exclusion behavior. The test now invokes Git's ignore consumer in a disposable repository. | `test_benchmark_attempt_retention.py`: generated reports/raw attempts ignored; publication control remains visible. |
+
+Focused verification for this round is recorded in the October 29 results file.
+Full test/lint/type gates and final-revision native CI remain the outer executor's
+responsibility. Compact receipts are historical results, not fresh certification.

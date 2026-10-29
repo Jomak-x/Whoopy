@@ -12,11 +12,9 @@ import hashlib
 import json
 import os
 import signal
-import subprocess
 import sys
 import threading
 import time
-from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -27,8 +25,6 @@ import psutil
 from whoopy.adapters.llm.llama_cpp import (
     LlamaCppScriptGenerator,
     LlamaCppSettings,
-    LlamaProcessResult,
-    ProcessRunner,
 )
 from whoopy.artifacts import ArtifactStore, TargetPlatform, load_artifact_lock
 from whoopy.meditation import GenerationWorkspace, LocalMeditationGenerator, load_prompt_bundle
@@ -69,62 +65,6 @@ CASES = {
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, default=str) + "\n", encoding="utf-8")
-
-
-class CapturingProcessRunner:
-    """Keep immutable evidence before the adapter removes its temporary inputs."""
-
-    def __init__(self, root: Path, runner: ProcessRunner) -> None:
-        self.root = root
-        self.runner = runner
-        self.invocations = 0
-
-    def __call__(
-        self, command: Sequence[str], timeout_seconds: float
-    ) -> subprocess.CompletedProcess[str] | LlamaProcessResult:
-        self.invocations += 1
-        folder = self.root / f"{self.invocations:03d}"
-        folder.mkdir(parents=True, exist_ok=False)
-
-        def save(name: str, value: str | bytes) -> None:
-            with (folder / name).open("xb") as destination:
-                destination.write(value.encode("utf-8") if isinstance(value, str) else value)
-
-        save("command.json", json.dumps(list(command), indent=2) + "\n")
-        receipt: dict[str, Any] = {"timeout_seconds": timeout_seconds, "returncode": None}
-        try:
-            for flag, name in (
-                ("--file", "prompt.txt"),
-                ("--system-prompt-file", "system.txt"),
-                ("--json-schema-file", "response-schema.json"),
-            ):
-                if flag in command:
-                    save(name, Path(command[command.index(flag) + 1]).read_bytes())
-            result = self.runner(command, timeout_seconds)
-            completed = result.completed if isinstance(result, LlamaProcessResult) else result
-            save("stdout.txt", completed.stdout)
-            save("stderr.txt", completed.stderr)
-            receipt.update(status="completed", returncode=completed.returncode)
-            return result
-        except BaseException as error:
-            receipt.update(status="failed", exception_type=type(error).__name__, error=str(error))
-            for stream in ("stdout", "stderr"):
-                value = getattr(error, stream, None)
-                if isinstance(value, str | bytes):
-                    save(f"{stream}.txt", value)
-                else:
-                    receipt[f"{stream}_unavailable_reason"] = (
-                        "Process runner did not return this stream on failure."
-                    )
-            raise
-        finally:
-            if "--output-file" in command:
-                output = Path(command[command.index("--output-file") + 1])
-                if output.is_file():
-                    save("output.txt", output.read_bytes())
-                else:
-                    receipt["output_unavailable_reason"] = "Process produced no output file."
-            save("process.json", json.dumps(receipt, indent=2) + "\n")
 
 
 class ResourceGuard:
@@ -229,9 +169,6 @@ def main() -> int:
                         target=TargetPlatform.current(),
                         device="cpu,metal",
                         settings=LlamaCppSettings(context_tokens=32768, timeout_seconds=300),
-                    )
-                    adapter.process_runner = CapturingProcessRunner(
-                        folder / "raw-invocations", adapter.process_runner
                     )
                     generated = LocalMeditationGenerator(
                         adapter,

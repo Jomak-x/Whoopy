@@ -37,6 +37,35 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 
+def load_verification_result(report: Path, receipt: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = json.loads(report.read_text()) if report.is_file() else {}
+    expected_returncode = {"pass": 0, "review": 2, "fail": 1}.get(payload.get("status"))
+    if (
+        expected_returncode is not None
+        and receipt.get("status") in {"completed", "nonzero"}
+        and receipt.get("returncode") == expected_returncode
+    ):
+        return payload
+    return {
+        "status": "fail",
+        "failure_reasons": ["Verification did not finish with a terminal result"],
+        "receipt": receipt,
+        "verification_report": payload,
+    }
+
+
+def screening_status(
+    final: dict[str, Any], native_reports: list[dict[str, Any]], required_native: set[str]
+) -> str:
+    covered = [report["segment_id"] for report in native_reports]
+    if len(covered) != len(required_native) or set(covered) != required_native:
+        return "fail"
+    statuses = [final.get("status"), *[r["verification"].get("status") for r in native_reports]]
+    if any(status not in {"pass", "review"} for status in statuses):
+        return "fail"
+    return "review" if "review" in statuses else "pass"
+
+
 def freeze_writer_inputs(plan: dict[str, Any], config: Path) -> dict[str, Any]:
     """Freeze an explicit experimental lock without editing source configuration."""
     from whoopy.artifacts import load_artifact_lock
@@ -523,14 +552,7 @@ def main() -> int:
             )
             if receipt.get("status") in {"stopped", "exception", "not_started"}:
                 manifest["stop_queue_reason"] = receipt.get("reason", "verification resource stop")
-            if report.is_file():
-                payload: dict[str, Any] = json.loads(report.read_text())
-                return payload
-            return {
-                "status": "fail",
-                "failure_reasons": ["Verification did not finish"],
-                "receipt": receipt,
-            }
+            return load_verification_result(report, receipt)
 
         def generate(
             case: dict[str, Any],
@@ -665,6 +687,8 @@ def main() -> int:
                         }
                     )
                 native_reports = []
+                required_native: set[str] = set()
+                record["native_verification"] = native_reports
                 if not kokoro:
                     timeline = json.loads((run / "timeline.json").read_text())
                     spoken = {s["id"]: s for s in timeline["segments"] if s["type"] == "SPEECH"}
@@ -674,6 +698,7 @@ def main() -> int:
                     ]
                     if {s["segment_id"] for s in delivered} != set(spoken):
                         raise ValueError("Audio manifest does not cover every typed speech segment")
+                    required_native = set(spoken)
                     for index, segment in enumerate(delivered):
                         receipt_path = (
                             run / "native-speech/cache-references" / f"{segment['cache_key']}.json"
@@ -699,13 +724,8 @@ def main() -> int:
                         )
                         if manifest.get("stop_queue_reason"):
                             break
-                record["native_verification"] = native_reports
-                statuses = [
-                    record["final_verification"]["status"],
-                    *[r["verification"]["status"] for r in native_reports],
-                ]
-                record["status"] = (
-                    "fail" if "fail" in statuses else "review" if "review" in statuses else "pass"
+                record["status"] = screening_status(
+                    record["final_verification"], native_reports, required_native
                 )
                 record["native_evidence_scope"] = (
                     "native FLOAT with selected cache mapping"

@@ -2114,7 +2114,7 @@ class LocalWebApplication:
     def generate_alternative_take(self, run_id: str, segment_id: str) -> dict[str, Any] | None:
         """Run real cache-bypassing synthesis, retaining the selected take."""
 
-        with self._operation_admission_lock:
+        with self._admit_generation():
             if self._record(run_id) is None:
                 return None
             takes = SegmentTakeStore(RunStore(self.runs_directory))
@@ -2536,6 +2536,19 @@ class LocalWebApplication:
             source_sha256 = hashlib.file_digest(source, "sha256").hexdigest()
         if source_sha256 != manifest.source_sha256:
             return {"available": False, "artifacts": []}
+        for artifact in manifest.artifacts:
+            if Path(artifact.filename).name != artifact.filename:
+                return {"available": False, "artifacts": []}
+            artifact_path = path.parent / artifact.filename
+            try:
+                if artifact_path.stat().st_size != artifact.byte_count:
+                    return {"available": False, "artifacts": []}
+                with artifact_path.open("rb") as exported:
+                    artifact_sha256 = hashlib.file_digest(exported, "sha256").hexdigest()
+            except OSError:
+                return {"available": False, "artifacts": []}
+            if artifact_sha256 != artifact.sha256:
+                return {"available": False, "artifacts": []}
         return {
             "available": True,
             **manifest.model_dump(mode="json"),
@@ -2678,8 +2691,6 @@ class LocalWebApplication:
                 task.run_id,
                 "--tts-model",
                 tts_model,
-                "--speed",
-                str(speed),
                 "--seed",
                 str(seed),
                 "--delivery",
@@ -2702,7 +2713,7 @@ class LocalWebApplication:
                 audience,
             ]
             if tts_model == "kokoro":
-                command.extend(["--voice", voice])
+                command.extend(["--voice", voice, "--speed", str(speed)])
             if not moss_use_reference:
                 command.append("--moss-direct-voice")
             if voice_reference is not None:

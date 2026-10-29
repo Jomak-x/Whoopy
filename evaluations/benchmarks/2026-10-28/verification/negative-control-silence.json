@@ -11,7 +11,6 @@
   ],
   "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/verification/negative-control-silence.wav",
   "audio_sha256": "190415015d40eef0cd797e1b59ffe00846b01873050b12d44b3a216de3faa2a9",
-  "expected_transcript": "Welcome. Let your shoulders soften.",
   "expected_text_sha256": "bce18109cb36f13ceb974f31f57f86237784e0f6c092d4c4296595b45a684800",
   "mode": "speech",
   "pcm": {
@@ -36,34 +35,7 @@
     "model_weights_sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
     "model_config_sha256": "e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e",
     "audio_sha256": "190415015d40eef0cd797e1b59ffe00846b01873050b12d44b3a216de3faa2a9",
-    "text": " you",
     "language": "en",
-    "segments": [
-      {
-        "id": 0,
-        "seek": 0,
-        "start": 6.58,
-        "end": 7.98,
-        "text": " you",
-        "tokens": [
-          50364,
-          291,
-          50467
-        ],
-        "temperature": 0.0,
-        "avg_logprob": -0.8732398748397827,
-        "compression_ratio": 0.2727272727272727,
-        "no_speech_prob": 0.8457056283950806,
-        "words": [
-          {
-            "word": " you",
-            "start": 6.58,
-            "end": 7.98,
-            "probability": 0.1492919921875
-          }
-        ]
-      }
-    ],
     "inference_seconds": 7.217973874998279,
     "versions": {
       "mlx-whisper": "0.4.3",
@@ -92,49 +64,7 @@
     "deletions": 4,
     "insertions": 0,
     "substitutions": 1,
-    "missing_words": [
-      "welcome",
-      "let",
-      "your",
-      "shoulders"
-    ],
-    "unexpected_words": [],
-    "excess_repeated_words": {},
-    "missing_tail_words": [],
-    "possible_truncation": false,
-    "alignment": [
-      {
-        "operation": "delete",
-        "expected": "welcome",
-        "observed": null,
-        "expected_index": 0
-      },
-      {
-        "operation": "delete",
-        "expected": "let",
-        "observed": null,
-        "expected_index": 1
-      },
-      {
-        "operation": "delete",
-        "expected": "your",
-        "observed": null,
-        "expected_index": 2
-      },
-      {
-        "operation": "delete",
-        "expected": "shoulders",
-        "observed": null,
-        "expected_index": 3
-      },
-      {
-        "operation": "substitute",
-        "expected": "soften",
-        "observed": "you",
-        "expected_index": 4,
-        "observed_index": 0
-      }
-    ]
+    "possible_truncation": false
   },
   "limits": [
     "ASR is independent evidence, not a human transcription or a proof of perfect speech.",
@@ -149,5 +79,13 @@
     "fail_coverage_below": 0.65
   },
   "verifier_source_sha256": "8ea15afa9ae6b18d6acecd99f4562253fc77223c189ccd39906091104759560e",
-  "harness_source_sha256": "7ac7be9252f5d537a20f2ee7e38c9f05b252e627dc4f1b7df5b572dae764fbd6"
+  "harness_source_sha256": "7ac7be9252f5d537a20f2ee7e38c9f05b252e627dc4f1b7df5b572dae764fbd6",
+  "publication": {
+    "schema_version": 1,
+    "kind": "compact_verification_receipt",
+    "original_receipt_sha256": "604276d4a40fab15e66655d1bb527427751a5cd79dd0a83b4ec4bb251aaeefc1",
+    "original_status": "fail",
+    "full_trace_included": false,
+    "referenced_receipt_hashes": "original_receipt_bytes"
+  }
 }

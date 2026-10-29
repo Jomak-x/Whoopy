@@ -8,7 +8,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -40,7 +40,7 @@ from whoopy.meditation.pacing import (
 from whoopy.meditation.prompts import PromptBundle
 from whoopy.meditation.recipes import SLEEP, RecipeLibrary
 from whoopy.meditation.safety import ContentSafetyError, validate_meditation_text
-from whoopy.ports import ScriptGenerationRequest, ScriptGenerator
+from whoopy.ports import ScriptGenerationRequest, ScriptGenerationResult, ScriptGenerator
 from whoopy.timeline import SilenceSegment, Timeline, build_script_timeline
 
 WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
@@ -760,6 +760,17 @@ class LocalMeditationGenerator:
         self.workspace = workspace
         self.progress_callback = progress_callback
 
+    def generate_response(self, request: ScriptGenerationRequest) -> ScriptGenerationResult:
+        if self.workspace is not None:
+            request = request.model_copy(
+                update={
+                    "raw_invocation_directory": self.workspace.root
+                    / "raw-invocations"
+                    / uuid4().hex
+                }
+            )
+        return self.adapter.generate(request)
+
     def _validated_generate(
         self,
         *,
@@ -772,7 +783,7 @@ class LocalMeditationGenerator:
     ) -> ValidatedT:
         repair = ""
         for attempt in range(1, self.max_validation_attempts + 1):
-            result = self.adapter.generate(
+            result = self.generate_response(
                 ScriptGenerationRequest(
                     prompt=prompt + repair,
                     system_prompt=system_prompt,

@@ -665,6 +665,11 @@ def test_adapter_receives_dynamic_exact_order_response_schema(
         ),
         ("return", "Listen to surrounding sounds. You may lift your hands slightly."),
         ("return", "Listen to surrounding sounds. You may shift your weight slightly."),
+        ("return", "Listen to surrounding sounds. You may move your body gently."),
+        ("return", "Listen to surrounding sounds. You may stretch your arms gently."),
+        ("return", "Listen to surrounding sounds. You may move your hands gently."),
+        ("return", "Listen to surrounding sounds. You may stretch your fingers gently."),
+        ("return", "Listen to surrounding sounds. You may move your foot gently."),
     ],
 )
 def test_concrete_contact_and_physical_return_cues_preserve_authored_prose(
@@ -720,6 +725,16 @@ def test_concrete_contact_and_physical_return_cues_preserve_authored_prose(
         (
             "return",
             "Listen to the sounds around you and let them lift your spirits.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+        (
+            "return",
+            "Listen to the surrounding sounds as you move into the rest of your day.",
+            "return: include surrounding sound and an optional small movement",
+        ),
+        (
+            "return",
+            "Listen to the surrounding sounds and stretch your attention into the day.",
             "return: include surrounding sound and an optional small movement",
         ),
     ],

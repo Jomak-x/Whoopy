@@ -406,9 +406,10 @@ def _validate_session(
             errors.append("taper: permit quiet rest without a new task")
     else:
         if not re.search(r"\b(?:room|surround\w*|sound\w*)\b", ending, re.I) or not re.search(
-            r"\b(?:mov\w*|stretch\w*|finger\w*|toe\w*)\b|"
-            r"\b(?:lift|shift)(?:ing)?\s+(?:(?:your|the)\s+)?"
-            r"(?:hands?|arms?|feet|legs?|body|weight|position|posture)\b",
+            r"\b(?:finger\w*|toe\w*)\b|"
+            r"\b(?:move|moving|stretch(?:ing)?|lift(?:ing)?|shift(?:ing)?)\s+"
+            r"(?:(?:your|the)\s+)?"
+            r"(?:hands?|arms?|feet|foot|legs?|body|weight|position|posture)\b",
             ending,
             re.I,
         ):
@@ -752,7 +753,7 @@ def generate_whole_session(
             2_000,
             round(duration_seconds * generator.articulation_words_per_minute / 60 * 2.2) + 1_000,
         )
-        result = generator.adapter.generate(
+        result = generator.generate_response(
             ScriptGenerationRequest(
                 prompt=full_prompt + revision,
                 system_prompt=document.text,

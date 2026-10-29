@@ -562,6 +562,7 @@ def test_moss_controls_reach_the_real_cli_contract(
     _wait_for_capture(captured)
     command = captured["command"]
     assert command[command.index("--tts-model") + 1] == "moss-local-v1.5"
+    assert "--speed" not in command
     assert command[command.index("--moss-language") + 1] == "German"
     assert command[command.index("--moss-instruction") + 1] == ("Speak softly and thoughtfully.")
     assert command[command.index("--delivery") + 1] == "calm"
@@ -646,6 +647,7 @@ def test_qwen_speaker_does_not_enter_kokoro_voice_option(
     _wait_for_capture(captured)
     command = captured["command"]
     assert "--voice" not in command
+    assert "--speed" not in command
     assert command[command.index("--qwen-speaker") + 1] == "Serena"
     assert command[command.index("--pace") + 1] == "natural"
 

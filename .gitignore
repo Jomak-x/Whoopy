@@ -41,6 +41,7 @@ node_modules/
 
 # Recoverable local cleanup and generated listening artifacts
 .whoopy-recovery/
+raw-invocations/
 evaluations/**/*.wav
 evaluations/**/*.flac
 evaluations/**/*.m4a

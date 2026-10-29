@@ -105,3 +105,31 @@ explicit CLI workflow. [Ambience research](../../../docs/ambient-models-2026-10-
 recommends reliable procedural/CC0 assets first, with official MLX Stable Audio 3
 Small-SFX as an optional gated-model trial. No gated terms were accepted and no
 ambience model was promoted or added to the product.
+
+
+## Follow-up review corrections after c31d4e3
+
+Review found eleven remaining misses in ASR completion/coverage, publication of
+full traces, control preservation across chunk splits, export source/artifact
+integrity, failed sampler evidence, physical movement matching, numeric speed,
+alternative-take admission, package inventory, and ignore-test semantics. All are
+addressed in this source round; the detailed per-finding account is in the
+[review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-c31d4e3).
+
+Full ASR receipts are retained byte-for-byte in the ignored worktree directory
+`.whoopy-recovery/asr-publication/`; public JSON retains compact status, metrics
+and provenance with original receipt hashes. No original external-checkout
+evidence or prior Git history was changed. Human listening remains pending.
+The owner reports a fresh corrected grounding Pass; final campaign paths and
+receipts still require the outer Document/PR phase's evidence reconciliation.
+This review phase did not rerun inference or independently certify that result.
+
+Focused verification ran 430 tests across the changed areas and their immediate
+callers: adapters, benchmark retention, CLI, exports, package assessment/build,
+overnight orchestration, recipes, revisions/admission/takes, web/legacy dispatch,
+MLX integration, and compact publication receipts. The initial batch passed 428;
+two new admission cases exposed a fixture missing its original take selection.
+After correcting that setup without weakening assertions, both targeted cases
+passed. The sole warning was the existing Starlette/httpx deprecation. Changed
+Python files were formatted. No full test, lint, strict-type or CI gate ran in
+this phase; those remain pending with the outer executor.

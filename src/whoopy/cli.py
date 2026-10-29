@@ -2399,6 +2399,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise GenerationError("Provide either a prompt or --script-file, but not both.")
             if args.script_file is not None and args.draft_id is not None:
                 raise GenerationError("--draft-id is available only in prompt mode.")
+            if args.speed is not None and args.tts_model != "kokoro":
+                raise GenerationError(
+                    f"{args.tts_model} does not support numeric --speed; "
+                    "numeric speed is available only for Kokoro."
+                )
             if (
                 args.run_id is not None
                 and args.draft_id is not None
@@ -2665,11 +2670,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ),
                 )
             elif args.tts_model in MLX_QWEN_BACKENDS:
-                if args.speed is not None:
-                    raise GenerationError(
-                        "Experimental MLX Qwen does not support numeric --speed; "
-                        "use --pace for its reviewed instruction-based pacing."
-                    )
                 if args.qwen_reference is not None or args.qwen_reference_revision is not None:
                     raise GenerationError("Experimental MLX Qwen does not accept voice references")
                 mlx_installation = resolve_mlx_qwen_installation(

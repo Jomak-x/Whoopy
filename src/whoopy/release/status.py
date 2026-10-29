@@ -703,7 +703,19 @@ def _model_selection_role_evidence(
     return role_blockers, model_role_candidates
 
 
-def _required_package_inputs(project_root: Path) -> list[Path]:
+def _declared_package_data_files(project_root: Path) -> dict[Path, str]:
+    project = tomllib.loads((project_root / "pyproject.toml").read_text("utf-8"))
+    declarations = project.get("tool", {}).get("setuptools", {}).get("data-files", {})
+    return {
+        source: f"{destination}/{source.name}"
+        for destination, patterns in declarations.items()
+        for pattern in patterns
+        for source in project_root.glob(pattern)
+        if source.is_file()
+    }
+
+
+def _required_package_inputs(project_root: Path, data_files: dict[Path, str]) -> list[Path]:
     """Return every source that can change the installed Local V1 product.
 
     This deliberately mirrors the package-data and data-files declarations in
@@ -727,71 +739,21 @@ def _required_package_inputs(project_root: Path) -> list[Path]:
             or (relative.parts[:1] == ("resources",) and path.suffix in {".yaml", ".yml"})
         ):
             values.append(path)
-    for pattern in (
-        "config/*.yaml",
-        "config/README.md",
-        "config/acceptance/*.json",
-        "config/evaluation/*.yaml",
-        "config/evaluation/README.md",
-        "config/prompts/*.md",
-    ):
-        values.extend(path for path in project_root.glob(pattern) if path.is_file())
-    for guide_relative in (
-        "docs/setup.md",
-        "docs/troubleshooting.md",
-        "docs/model-capabilities.md",
-        "docs/privacy.md",
-        "docs/user-guide.md",
-        "docs/native-portability.md",
-        "docs/local-v1-acceptance-status.md",
-        "docs/release-finalization.md",
-    ):
-        path = project_root / guide_relative
-        if path.is_file():
-            values.append(path)
-    for worker_relative in (
-        "scripts/fish_speech_1_4_worker.py",
-        "scripts/moss_tts_worker.py",
-        "scripts/qwen3_tts_worker.py",
-    ):
-        path = project_root / worker_relative
-        if path.is_file():
-            values.append(path)
+    values.extend(data_files)
     return sorted(set(values))
 
 
-def _wheel_member_for_source(project_root: Path, source: Path, version: str) -> str | None:
+def _wheel_member_for_source(
+    project_root: Path, source: Path, version: str, data_files: dict[Path, str]
+) -> str | None:
     """Map an installed product source to its exact wheel member."""
 
     try:
         relative = source.relative_to(project_root / "src" / "whoopy").as_posix()
     except ValueError:
-        pass
-    else:
-        return f"whoopy/{relative}"
-    try:
-        relative = source.relative_to(project_root / "config").as_posix()
-    except ValueError:
-        pass
-    else:
-        return f"whoopy-{version}.data/data/share/whoopy/config/{relative}"
-    try:
-        relative = source.relative_to(project_root / "scripts").as_posix()
-    except ValueError:
-        pass
-    else:
-        if relative in {
-            "fish_speech_1_4_worker.py",
-            "moss_tts_worker.py",
-            "qwen3_tts_worker.py",
-        }:
-            return f"whoopy-{version}.data/data/share/whoopy/scripts/{relative}"
-        return None
-    try:
-        relative = source.relative_to(project_root / "docs").as_posix()
-    except ValueError:
-        return None
-    return f"whoopy-{version}.data/data/share/whoopy/docs/{relative}"
+        destination = data_files.get(source)
+        return f"whoopy-{version}.data/data/{destination}" if destination is not None else None
+    return f"whoopy/{relative}"
 
 
 def _sdist_member_for_source(project_root: Path, source: Path, version: str) -> str | None:
@@ -836,7 +798,8 @@ def assess_package(project_root: Path, dist_directory: Path) -> AcceptanceGateSt
             facts={"product_version": version},
         )
     wheel, sdist = wheels[0], sdists[0]
-    inputs = _required_package_inputs(project_root)
+    data_files = _declared_package_data_files(project_root)
+    inputs = _required_package_inputs(project_root, data_files)
     latest_input = max(path.stat().st_mtime_ns for path in inputs)
     stale_reasons: list[str] = []
     if wheel.stat().st_mtime_ns < latest_input or sdist.stat().st_mtime_ns < latest_input:
@@ -846,7 +809,8 @@ def assess_package(project_root: Path, dist_directory: Path) -> AcceptanceGateSt
         expected_wheel_sources = {
             packaged
             for source in inputs
-            if (packaged := _wheel_member_for_source(project_root, source, version)) is not None
+            if (packaged := _wheel_member_for_source(project_root, source, version, data_files))
+            is not None
         }
         wheel_metadata = {
             f"whoopy-{version}.dist-info/{name}"
@@ -855,7 +819,7 @@ def assess_package(project_root: Path, dist_directory: Path) -> AcceptanceGateSt
         if wheel_names - wheel_metadata != expected_wheel_sources:
             stale_reasons.append("Wheel source membership does not match the current source tree.")
         for source in inputs:
-            packaged = _wheel_member_for_source(project_root, source, version)
+            packaged = _wheel_member_for_source(project_root, source, version, data_files)
             if packaged is None:
                 continue
             if packaged not in wheel_names or archive.read(packaged) != source.read_bytes():

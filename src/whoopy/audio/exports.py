@@ -130,8 +130,6 @@ def export_finished_audio(
         raise AudioExportError(
             f"Expected the authoritative narration.wav master, received {source.name!r}"
         )
-    source_duration_ms = _wave_duration_ms(source)
-
     if ffmpeg_executable is None:
         ffmpeg = _discover_executable("ffmpeg")
     else:
@@ -153,10 +151,15 @@ def export_finished_audio(
     staging.mkdir()
 
     try:
+        snapshot = staging / "narration.wav"
+        shutil.copyfile(source, snapshot)
+        source_duration_ms = _wave_duration_ms(snapshot)
+        source_byte_count = snapshot.stat().st_size
+        source_sha256 = _sha256(snapshot)
         ffmpeg_version = _ffmpeg_version(ffmpeg)
         artifacts = tuple(
             _encode_and_verify(
-                source,
+                snapshot,
                 staging,
                 metadata,
                 source_duration_ms=source_duration_ms,
@@ -172,8 +175,8 @@ def export_finished_audio(
         manifest = ExportManifest(
             generated_at=timestamp,
             source_filename=source.name,
-            source_byte_count=source.stat().st_size,
-            source_sha256=_sha256(source),
+            source_byte_count=source_byte_count,
+            source_sha256=source_sha256,
             source_duration_ms=source_duration_ms,
             metadata=metadata,
             ffmpeg_executable=str(ffmpeg),
@@ -181,7 +184,10 @@ def export_finished_audio(
             artifacts=artifacts,
         )
         _write_manifest(staging / "export-manifest.json", manifest)
+        snapshot.unlink()
         _fsync_directory(staging)
+        if source.stat().st_size != source_byte_count or _sha256(source) != source_sha256:
+            raise AudioExportError("Narration master changed during export; retry the export.")
         _activate_directory(staging, destination, backup)
         return manifest
     except AudioExportError:
