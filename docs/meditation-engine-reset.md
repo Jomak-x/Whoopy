@@ -1,6 +1,16 @@
 # Meditation Engine Reset
 
-Status: proposed restart boundary, 2026-08-06.
+Status: historical restart proposal, 2026-08-06.
+
+> This dated proposal preserves the original failure analysis and design rationale.
+> Its proposed breathing variants, sleep-first slice, rendering models, and model
+> comparison order are not the implemented contract. Use the
+> [local quality baseline](local-quality-baseline.md) for current writing and audio
+> behavior, [README](../README.md#flexible-whole-session-writing) for the generation
+> quickstart, and the [benchmark report](../evaluations/benchmarks/2026-10-28/RESULTS.md)
+> for retained outcomes and qualification limits. The proposed box-breathing support
+> below was not implemented; the current recipe writer rejects positive requests
+> for it. Historical corpus observations below do not certify the current branch.
 
 This document replaces the assumption that a schema-valid, correctly timed script is
 a good meditation. The first target is one excellent single meditation. Courses,

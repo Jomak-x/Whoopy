@@ -10,6 +10,7 @@ An experiment definition selects exactly one comparison type:
 - `writing_method`: only `condition.writing_method` may differ.
 - `voice`: the complete named `condition.voice` configuration may differ while spoken
   text and deterministic silence hashes must stay identical.
+- `delivery`: only `condition.voice.delivery` and `condition.voice.intensity` may differ.
 - `pacing`: only `condition.pacing_profile_id` may differ while spoken text and the
   complete voice configuration stay identical.
 
@@ -19,7 +20,9 @@ and individually named metrics. The Lab deliberately has no combined automatic s
 Use a single corpus case before queuing a full batch. Heavy experiments run through the
 FIFO sequential queue so model loads do not overlap.
 
-The repeatable Meditation Engine V2 automatic run is:
+The existing blueprint-based corpus run is below. For the whole-session writing
+comparison and its qualification limits, use the
+[local quality baseline](../../docs/local-quality-baseline.md).
 
 ```console
 whoopy evaluate --profiles lite \

@@ -18,8 +18,8 @@ uv run --extra dev python scripts/check.py
 ```
 
 `uv` supplies the reference Python 3.11 runtime on Windows, macOS, and Linux.
-The current local-core skeleton has no Node, FFmpeg, Docker, or model-download
-step. Make targets are convenience wrappers, not the Windows interface.
+Make targets are convenience wrappers, not the Windows interface. See
+[setup](docs/setup.md) for product runtime and model requirements.
 
 ## Pull Request Standard
 
@@ -68,4 +68,6 @@ Run the full gate before requesting review:
 uv run --extra dev python scripts/check.py
 ```
 
-Also execute the manual verification steps named by the relevant roadmap PR. Large model and audio checks will be added only when those systems exist.
+For changes requiring local model or audio evidence, follow the applicable checks in
+[release finalization](docs/release-finalization.md); keep those observations separate
+from the deterministic quality gate.

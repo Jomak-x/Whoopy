@@ -1,6 +1,7 @@
 # Local API
 
-The future FastAPI transport, local queue tasks, and progress reporting belong
-here. Phase 1's transport-independent `LocalControlPlane` lives in
-`whoopy/control.py`; future routes should call it or its successor rather than
-duplicating run creation. No ML model should run inside the API process.
+The versioned loopback FastAPI transport lives in `whoopy.webui.api`, with its
+durable application boundary in `whoopy.webui.server`. Routes delegate run
+creation, admission, recovery, revisions, exports, and model operations to
+those boundaries instead of duplicating pipeline rules. Model inference runs
+in supervised workers rather than request handlers.

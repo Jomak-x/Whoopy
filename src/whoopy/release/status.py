@@ -905,8 +905,10 @@ def assess_package(project_root: Path, dist_directory: Path) -> AcceptanceGateSt
             packaged = _sdist_member_for_source(project_root, source, version)
             if packaged is None:
                 continue
-            member = members.get(packaged)
-            extracted = archive.extractfile(member) if member is not None else None
+            packaged_member = members.get(packaged)
+            extracted = (
+                archive.extractfile(packaged_member) if packaged_member is not None else None
+            )
             if extracted is None or extracted.read() != source.read_bytes():
                 stale_reasons.append(f"Source distribution does not match current source: {source}")
                 break

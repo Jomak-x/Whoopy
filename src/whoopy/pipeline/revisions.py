@@ -270,11 +270,11 @@ class RevisionStore:
                                 and isinstance(requested, SpeechSegment)
                             ):
                                 for name in ("delivery", "intensity", "pace", "voice_mode"):
-                                    if (
-                                        getattr(previous, name) == getattr(requested, name)
-                                        and previous_controls[previous.id].get(name)
-                                        == requested_controls[requested.id].get(name)
-                                    ):
+                                    if getattr(previous, name) == getattr(
+                                        requested, name
+                                    ) and previous_controls[previous.id].get(
+                                        name
+                                    ) == requested_controls[requested.id].get(name):
                                         updates[name] = getattr(current, name)
                                 updates["language"] = current.language
                                 updates["pronunciation_overrides"] = tuple(
@@ -292,9 +292,7 @@ class RevisionStore:
                             ):
                                 updates["duration_ms"] = current.duration_ms
                             merged_segments.append(requested.model_copy(update=updates))
-                        new_timeline = new_timeline.model_copy(
-                            update={"segments": merged_segments}
-                        )
+                        new_timeline = new_timeline.model_copy(update={"segments": merged_segments})
                     merged_pauses = [
                         segment.duration_ms
                         for segment in new_timeline.segments
@@ -349,10 +347,10 @@ class RevisionStore:
                     raise RevisionError(
                         "The revision does not change the active script, timeline, or plan."
                     )
-                current = self._ensure_initial(parsed)
+                current_revision = self._ensure_initial(parsed)
                 manifest = self._write_revision(
                     parsed,
-                    parent=current.revision_id,
+                    parent=current_revision.revision_id,
                     script=script,
                     timeline=new_timeline,
                     plan=active_plan,

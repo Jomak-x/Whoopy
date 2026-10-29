@@ -140,8 +140,10 @@ def main() -> int:
                 json.dumps({"status": "incomplete", "reason": "Verification has not completed."})
                 + "\n"
             )
-    except FileExistsError as error:
-        raise SystemExit("Evidence already exists; use a new report path.") from error
+    except FileExistsError as existing_report_error:
+        raise SystemExit(
+            "Evidence already exists; use a new report path."
+        ) from existing_report_error
     if args.asr_worker:
         asr_worker(args.audio, args.model, args.report)
         return 0

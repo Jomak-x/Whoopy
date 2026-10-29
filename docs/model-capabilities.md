@@ -1,8 +1,10 @@
 # Local Model Capabilities
 
 This document distinguishes an implemented adapter contract from a model that is selectable and
-proven on the current machine. Always treat `whoopy models pack list` and Studio's current-machine
-cards as authoritative readiness evidence.
+proven on the current machine. Treat `whoopy models doctor`, `whoopy models pack list` and the
+versioned local model-pack and speech-model APIs as authoritative readiness evidence for their
+respective artifact paths. The retained static frontend displays only a limited `/api/status`
+summary; it does not expose the full model-management or Lab controls.
 
 ## Readiness Vocabulary
 
@@ -19,12 +21,12 @@ retained mono PCM16 WAV and checks its sample rate, duration, and PCM hash again
 evidence. Copying a smoke JSON file, deleting or replacing its audio, or keeping evidence after
 runtime code changes cannot make a model ready.
 
-The product distinguishes a **Studio candidate** from a **Studio-selectable model**. Fish and MOSS
-are reviewed production candidates, so their setup cards remain available for installation and
-diagnosis. They enter the creation selector only while their current state is `ready`. Missing,
-installed-but-untested, resource-blocked, incompatible, and failed-smoke candidates remain visible
-as evidence in model management and Lab but cannot be selected for generation. Qwen3-TTS remains a
-Lab-only candidate; even a local development declaration cannot promote it into Studio.
+The backend distinguishes a **Studio candidate** from a **Studio-selectable model**. Fish and MOSS
+are reviewed production candidates, but they become selectable only while their current state is
+`ready`. Missing, installed-but-untested, resource-blocked, incompatible and failed-smoke states
+remain inspectable through `whoopy models pack list` and `/api/v1/model-packs`; they do not become
+selectable generation inputs. Qwen3-TTS remains Lab-only by default, and a local development
+declaration cannot promote it into Studio.
 
 Runtime bundles have their own stricter lifecycle. `whoopy models runtime list` reports whether a
 target-specific, checksum-reviewed isolated environment exists. A Git checkout or copied
@@ -41,16 +43,16 @@ macOS ARM64 bundle and still requires a current-machine real smoke after install
 source and 0.6B CustomVoice model revisions plus its macOS ARM64 Python 3.12.12 runtime are pinned
 and published; checkpoint acquisition and current-machine production audio remain separate gates.
 
-## Studio Voice Models
+## Voice Model Capabilities
 
 | Model                    | Managed targets                               | Voice modes                  | Native controls                                                                                                                                   | Important limits                                                                                                                     |
 | ------------------------ | --------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Kokoro multilingual v1.0 | Windows x64; macOS ARM64/x64; Linux ARM64/x64 | Preset voices                | Voice ID; English/Chinese; speed-derived natural through very-slow pace                                                                           | Portable default. Unsupported delivery/intensity intent is visibly normalized to neutral/subtle in the effective timeline.           |
+| Kokoro multilingual v1.0 | Windows x64; macOS ARM64/x64; Linux ARM64/x64 | Preset voices                | Voice ID; English/Chinese; speed-derived natural through very-slow pace                                                                           | Portable speech path and configured default. Unsupported delivery/intensity intent is visibly normalized to neutral/subtle in the effective timeline; human listening and promotion remain separate. |
 | Fish Speech 1.4          | macOS ARM64 in the pinned Local V1 pack       | Consented reference          | Reference audio and transcript                                                                                                                    | Experimental, heavyweight, and non-commercial under the managed pack declaration. It does not claim arbitrary delivery instructions. |
-| MOSS Local 5B            | macOS ARM64; Linux x64                        | Reference or direct/designed | Eight delivery styles; subtle/moderate intensity translation; four pace intents; language; instruction; optional target duration; pronunciation data | Studio derives a reviewed instruction from typed delivery. Target duration is translated to MOSS audio tokens (about 12.5 tokens/second); exact deliberate quiet remains separate Whoopy timeline events. Lab may store a bounded instruction override as typed adapter metadata while holding it fixed for delivery comparisons. Requires MOSS Audio Tokenizer v2, substantial RAM/disk, and a real smoke test. |
+| MOSS Local 5B            | macOS ARM64; Linux x64                        | Reference or direct/designed | Eight delivery styles; subtle/moderate intensity translation; four pace intents; language; instruction; optional target duration; pronunciation data | The generation boundary derives a reviewed instruction from typed delivery. Target duration is translated to MOSS audio tokens (about 12.5 tokens/second); exact deliberate quiet remains separate Whoopy timeline events. Lab evaluation APIs may store a bounded instruction override as typed adapter metadata while holding it fixed for delivery comparisons. Requires MOSS Audio Tokenizer v2, substantial RAM/disk, and a real smoke test. |
 | MOSS 8B                  | macOS ARM64; Linux x64                        | Reference or direct/designed | Same typed contract as MOSS 5B                                                                                                                    | Larger memory footprint; often resource-blocked. A static record is never enough.                                                    |
 
-`moss-local-5b` and the Studio label “MOSS Local 5B” are established Whoopy
+`moss-local-5b` and the catalog label “MOSS Local 5B” are established Whoopy
 compatibility identifiers. The pinned upstream Local Transformer v1.5 checkpoint's
 language backbone configuration matches Qwen3-4B. The retained `5B` identifier is
 therefore not an exact language-backbone parameter claim; changing it would break
@@ -68,9 +70,9 @@ text), then applies the reviewed typed-pace multiplier: natural `1.15`, unhurrie
 part of adapter metadata and cache identity; explicit target duration is also a
 canonical per-segment cache input.
 
-Studio omits every model that is not currently ready from the normal creation selector. Its model
-management view still gives the exact install, runtime, resource, or re-test remedy. Experimental
-and incompatible evidence remains inspectable in Lab.
+The backend marks every model that is not currently ready as non-selectable for Studio generation.
+The model-pack CLI and API return the exact install, runtime, resource or re-test remedy.
+Experimental and incompatible evidence remains available through the versioned Lab and model APIs.
 
 Kokoro's shipped preset choices are `af_heart`, `af_bella`, `af_nicole`, and `am_michael`.
 
@@ -86,13 +88,12 @@ The model registry now contains only the first reviewed integration:
 `Qwen3-TTS-12Hz-0.6B-CustomVoice` for macOS ARM64, pinned at model revision
 `85e237c12c027371202489a0ec509ded67b5e4b5` and source revision
 `022e286b98fbec7e1e916cb940cdf532cd9f488e`. Its checksum-reviewed runtime clean-installs offline
-and passes its full import probe, but it remains **Lab-only and unavailable for generation** until
-the checkpoint and current-machine real offline audio smoke exist. The other adapter
-variants remain unregistered and therefore fail closed. Hand-authored model declarations and copied
-development environments cannot enable generation. Qwen is intentionally absent from Studio.
-A Lab voice comparison may preserve Qwen evidence and human ratings, but its promotion endpoint
-will refuse to write a Studio voice default while the selected model is not currently
-Studio-selectable. Promotion never bypasses model readiness.
+and passes its full import probe, but it remains **Lab-only and unavailable for Studio generation**
+until the checkpoint and current-machine real offline audio smoke exist. The other adapter variants
+remain unregistered and therefore fail closed. Hand-authored model declarations and copied
+development environments cannot enable generation. Versioned Lab APIs may preserve Qwen evidence
+and human ratings; the generation boundary still rejects Studio use until a current saved decision
+matches the exact ready voice contract. Promotion never bypasses model readiness.
 
 CustomVoice and VoiceDesign translate all eight reviewed delivery styles and four pace intents.
 Base cloning declares neutral/natural delivery because cloning a voice does not prove instruction
@@ -101,13 +102,16 @@ following. Qwen voice cloning requires the explicit scope
 
 ## Local Language Models
 
-| Model                             | Role                                | V1 decision                                                                                               |
-| --------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Qwen3-4B GGUF through llama.cpp   | Standard prompt-to-plan/script path | Dependable Standard baseline when installed and hardware-safe.                                            |
-| Qwen3-1.7B GGUF through llama.cpp | Lite experiment                     | Did not qualify as an automatic dependable prompt fallback; must be requested explicitly for experiments. |
-| Larger MLX/LLM candidates         | High/Studio research                | Registry ideas only until measured and promoted through saved Lab evidence.                               |
+| Model                                  | Role                          | Current boundary                                                                                                           |
+| -------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Ministral 3 14B GGUF through llama.cpp | Explicit High writing profile | Pinned and measured on the M4 Pro. Daytime whole-session evidence exists; sleep reliability and human quality are unqualified. |
+| Qwen3-4B GGUF through llama.cpp        | Standard local writing profile | Available when installed and hardware-safe. Its current `recipe_whole_session` pilot failed, so that method is unqualified on this writer. |
+| Qwen3-1.7B GGUF through llama.cpp      | Lite experiment               | Did not qualify as an automatic dependable prompt fallback; must be requested explicitly for experiments.                 |
+| Other larger model candidates          | Future research               | Not a supported profile until pinned, measured and documented through saved evidence.                                      |
 
 Authored-script Basic mode has no LLM dependency.
+Writing qualification and dated results belong to the
+[local quality baseline](local-quality-baseline.md), not to model installation state.
 
 ## Typed Delivery Contract
 
@@ -144,11 +148,11 @@ model-native pause markup.
 
 ## Voice References And Consent
 
-Studio supports point-and-click PCM16 WAV import or local microphone recording, exact transcript
-and rights consent, trim start/end controls, preview, immutable replacement revisions, active
-revision evidence, and recoverable deletion. Microphone recordings are converted locally before
-upload. The versioned local API also exposes revision history and restore. Every import or
-replacement requires the exact attestation:
+The versioned local API supports PCM16 WAV import with exact transcript and rights consent, trim
+start/end controls, preview, immutable replacement revisions, active revision evidence and
+recoverable deletion/restore. A client may convert a microphone recording locally before import,
+but the retained static frontend does not expose microphone or voice-reference management. Every
+import or replacement requires the exact attestation:
 
 > I own this voice or have permission to clone it.
 

@@ -128,7 +128,7 @@ def plan_document(
 
 
 def validate_raw_waveform(waveform: np.ndarray, *, speech_id: str) -> tuple[float, float]:
-    import numpy as np  # type: ignore[import-not-found]
+    import numpy as np
 
     if waveform.ndim != 1 or waveform.size == 0:
         raise RuntimeError(f"{speech_id}: invalid waveform shape {waveform.shape}")
@@ -148,8 +148,8 @@ def assemble_float_wave(
 ) -> dict[str, object]:
     """Copy float32 samples and insert exact authored zeros, without DSP."""
 
-    import numpy as np  # type: ignore[import-not-found]
-    import soundfile as sf  # type: ignore[import-not-found]
+    import numpy as np
+    import soundfile as sf
 
     output.parent.mkdir(parents=True, exist_ok=True)
     speech_number = 0
@@ -268,8 +268,8 @@ def run_heavyweight(
     if enroll_only:
         return
 
-    import numpy as np  # type: ignore[import-not-found]
-    import soundfile as sf  # type: ignore[import-not-found]
+    import numpy as np
+    import soundfile as sf
 
     speech_dir = output_dir / "speech"
     speech_dir.mkdir(parents=True, exist_ok=True)

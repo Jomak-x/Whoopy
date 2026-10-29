@@ -133,7 +133,7 @@ platform report cannot satisfy this gate.
 
 ## Package freshness
 
-Package freshness compares the current project version, Python modules, bundled Svelte frontend,
+Package freshness compares the current project version, Python modules, bundled static frontend,
 and packaged resource YAML byte-for-byte with the wheel. Both wheel and sdist must be newer than all
 package inputs, and the sdist must contain the current `pyproject.toml`. Rebuild after any product
 change:

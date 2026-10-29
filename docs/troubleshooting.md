@@ -33,8 +33,8 @@ uv sync --extra dev --locked
 
 On Windows, make sure the shell is native x64 PowerShell and use `where.exe whoopy`; on macOS or
 Linux use `command -v whoopy`. The product serves its packaged `whoopy.webui/static` files and never
-starts Node. A missing `_app` directory indicates an incomplete Python package or checkout, not a
-reason to run a frontend development server.
+starts Node. Missing `index.html`, `app.js`, or `styles.css` indicates an incomplete Python package
+or checkout, not a reason to run a frontend development server.
 
 ## Automatic GPU Selection Falls Back To CPU
 
@@ -209,7 +209,9 @@ The operation archives previous evidence and bypasses the affected checkpoint/ca
 - Restoring a revision rerenders its activated timeline.
 
 Check the revision manifest's `change_kind` and `affected_speech_segment_ids`. All output-affecting
-controls intentionally enter cache identity, so changing one cannot reuse incompatible speech.
+controls enter cache identity, so changing one cannot reuse incompatible speech. When a script edit
+changes only wording, accepted controls on otherwise matching segments are preserved from the
+canonical timeline; an explicit new control in the edited script takes effect.
 
 ## Finished Exports Fail
 
@@ -222,7 +224,8 @@ ffprobe -version
 
 Whoopy reports a specific missing-tool, encoder, codec, metadata, decode, duration, or activation
 failure. The existing export directory remains authoritative when staging fails. Check free disk and
-write permission on the run directory; then select **Create all exports** again.
+write permission on the run directory; then repeat the versioned API export request described in
+[setup](setup.md#7-finished-exports). The retained Studio frontend does not expose this action.
 
 Opus normally reports a 48 kHz decode rate even when the narration master is 24 kHz. That is part of
 the Opus format and is not a sample-rate failure.
@@ -258,38 +261,34 @@ This is intentional for `--profile auto`: the recorded V1 evaluation did not qua
 model as a dependable automatic fallback. Use Standard, use Basic with an authored script, or
 explicitly request Lite only for an experiment.
 
-## A Lab Experiment Produces Failed Trials
+## An Evaluation Experiment Produces Failed Trials
 
-The bundled Lab uses a default real production executor, so **Start with one case** creates durable
-ordinary generation runs. A candidate can still fail when its exact condition is not exposed by the
-production pipeline, its model is not ready, resources are insufficient, or generation/QC fails.
-Inspect the saved report and source run rather than treating queue completion as candidate success.
+The versioned evaluation API uses a real production executor, so an accepted experiment creates
+durable ordinary generation runs. A candidate can still fail when its exact condition is not exposed
+by the production pipeline, its model is not ready, resources are insufficient, or generation/QC
+fails. Inspect the saved report and source run rather than treating queue completion as candidate
+success. The retained Studio frontend does not expose an evaluation surface.
 
-Current production comparisons accept the implemented Qwen3-4B/1.7B LLM profiles,
-`blueprint_first_sparse` writing method, exposed Kokoro/Fish/MOSS voice contracts, and reviewed
-pacing IDs. For example, a proposed writing method that has no production implementation should
-create explicit failure evidence. No fixture output is substituted.
+Current production comparisons accept the implemented Qwen3-4B/1.7B LLM profiles, the supported
+`plan_first`, `blueprint_first_sparse`, `three_candidate_structural_selection`, and
+`recipe_whole_session` writing methods, exposed speech contracts, and reviewed pacing IDs. An
+unsupported condition produces explicit failure evidence; fixture output is never substituted.
 
-If the experiment remains queued, refresh the evidence list and check whether an earlier sequential
-experiment is still running. The versioned endpoints and reports are inspectable at `/api/docs`.
+Experiments run sequentially. API pause, cancel, and resume operations preserve completed trials;
+an active production run uses the ordinary durable cancellation path so verified work remains
+reusable. On restart, stale `queued` or `running` batch control files reconcile to `paused` and never
+auto-run. `incomplete` records an execution error, while `cancelled` records an explicit action.
 
-Use **Pause** when you intend to continue and **Cancel** when you intentionally stop the batch.
-Neither action deletes completed trials. An active production run is interrupted through the same
-durable cancellation path used by Studio, so **Resume** can reuse verified work. On restart, Whoopy
-reconciles stale `queued` or `running` batch control files to `paused`; experiments never auto-run
-after a restart. A status of `incomplete` indicates an execution error, while `cancelled` indicates
-an explicit user action.
-
-When drafting fails validation, open the failed run and expand **Rejected generation attempts**.
-Each entry identifies the generation stage, attempt number, rejected text, and validation reason.
-Malformed, oversized, linked, or out-of-workspace diagnostic files are ignored. If no attempts are
-shown, the failure happened before the generator wrote a draft or the managed workspace is absent.
+Rejected drafts and validation reasons remain in the run's managed `raw-model-output/` evidence.
+Malformed, oversized, linked, or out-of-workspace diagnostic files are ignored. If no attempt was
+written, the failure occurred before the generator produced a draft or the workspace is absent.
 
 ## Settings Import Fails
 
-Import the exact JSON envelope exported by Studio. The current schema version is 1; unknown envelope
-fields, invalid keys, oversized values, or non-JSON values are rejected. An import replaces catalog
-settings atomically but does not move runs/models or change immutable run metadata.
+Import the exact JSON envelope returned by `/api/v1/settings/export`. The current schema version is
+1; unknown envelope fields, invalid keys, oversized values, or non-JSON values are rejected. An API
+import replaces catalog settings atomically but does not move runs/models or change immutable run
+metadata. The retained Studio frontend does not expose settings import/export.
 
 ## Reported Platform Support Looks Wrong
 

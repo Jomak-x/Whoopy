@@ -120,8 +120,7 @@ def route_session(
         )
     sleep_constraints = NEGATED_SLEEP.sub("", prompt)
     sleep = meditation_kind == "sleep" or (
-        meditation_kind is None
-        and bool(SLEEP.search(sleep_constraints))
+        meditation_kind is None and bool(SLEEP.search(sleep_constraints))
     )
     if posture is None:
         if re.search(r"\b(?:lying|lie|lay)\s+(?:down|in bed)|\breclining\b", prompt, re.I):
@@ -185,7 +184,9 @@ def route_session(
                 "anchor when breathing is excluded."
             ),
             "loving_kindness": "Offer one or two optional well-wishes without demanding a feeling.",
-            "visualization": "Imagine one simple scene while staying connected to the chosen anchor.",
+            "visualization": (
+                "Imagine one simple scene while staying connected to the chosen anchor."
+            ),
             "open_awareness": (
                 "Notice sound, sensation, and thought without selecting or changing any of them."
             ),

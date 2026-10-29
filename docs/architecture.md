@@ -8,7 +8,7 @@ outside this architecture.
 
 ```mermaid
 flowchart LR
-  Browser["Studio and Lab\nSvelte static bundle"] --> API["FastAPI /api/v1\nloopback only"]
+  Browser["Retained local Studio\nstatic bundle"] --> API["FastAPI /api/v1\nloopback only"]
   API --> Store["Run directories\nauthoritative"]
   API --> Catalog["SQLite catalog\nrebuildable projection"]
   API --> Worker["One native worker\ndurable lease + checkpoints"]
@@ -17,7 +17,7 @@ flowchart LR
   Worker --> Timeline["Canonical timeline\nspeech + exact quiet"]
   Timeline --> Master["narration.wav\nquality evidence"]
   Master --> Exports["WAV FLAC M4A Opus\nverified manifest"]
-  API --> Lab["Versioned experiments\nproduction artifacts"]
+  API --> Lab["Versioned evaluation API\nproduction artifacts"]
 ```
 
 `whoopy app` composes these pieces, reconciles interrupted state, binds to `127.0.0.1`, serves the
@@ -27,25 +27,21 @@ bundled frontend, and opens the browser. `whoopy web` is only a legacy alias.
 
 ### Studio
 
-Studio presents reviewed defaults and safe controls:
+The retained local Studio frontend creates prompt or authored-script runs, selects an available
+speech model and its basic voice/pace controls, reports the active task, cancels that task, lists
+recent meditations, plays finished `narration.wav`, and displays Script, Plan, Checks, and Timeline
+artifacts. It intentionally does not include the concurrent frontend experiment.
 
-- prompt or authored-script creation;
-- requested duration and meditation kind;
-- only model paths proven ready on this machine;
-- typed delivery and pace intentions;
-- durable progress/cancel/resume;
-- searchable local library;
-- Plan, Script, Timeline, Delivery, and Listen views;
-- immutable revisions, restore, and selective rerender;
-- recoverable deletion and verified finished exports.
+The versioned loopback API is broader than this retained browser surface. It owns model management,
+resume, revisions, alternative takes, verified exports, recoverable deletion, settings, voice
+references, and evaluation records. Those backend capabilities must not be presented as visible
+Studio controls until a shipped frontend exposes them. The frontend never implements generation
+rules itself.
 
-The frontend never implements generation rules. It calls `/api/v1`, renders durable state, and
-plays or downloads saved artifacts.
+### Evaluation domain
 
-### Lab
-
-Lab uses the same adapters, generation paths, timelines, revisions, and audio files as Studio. Its
-domain supports five controlled comparisons:
+The versioned evaluation API uses the same adapters, generation paths, timelines, revisions, and
+audio files as Studio. Its domain supports five controlled comparisons:
 
 1. LLM with prompt, seed, schema, and blueprint held constant;
 2. writing method with model inputs held constant;
@@ -56,8 +52,7 @@ domain supports five controlled comparisons:
 
 Experiments are versioned and sequential, not a full Cartesian product. Results retain automatic
 metrics without a hidden combined score, blind presentation assignments, human 1–5 ratings,
-baseline comparisons, and promotion/rejection decisions. The bundled Lab creates a one-case
-experiment and starts the default `LocalProductionExperimentExecutor`, which launches the same
+baseline comparisons, and promotion/rejection decisions. The production executor launches the same
 durable child-process generation path as Studio. A candidate condition the production pipeline does
 not expose becomes durable failed-trial evidence instead of a simulated result.
 
@@ -132,14 +127,16 @@ sequentially.
 
 ### 2. Meditation Engine V2
 
-Prompt mode first selects one reviewed, versioned blueprint. A plan describes the technique,
-arrival, practice development, ending, purpose of each spoken block, silence intent, breath mode,
-and delivery intent.
+Prompt mode selects one reviewed, versioned blueprint. Plan-first and sparse section-writing paths
+use a plan describing the technique, arrival, practice development, ending, silence intent, breath
+mode, and delivery intent. The whole-session recipe writer has a separate, measured contract owned
+by [the local quality baseline](local-quality-baseline.md).
 
 The LLM supplies bounded prose. It cannot invent pause durations, breath ratios, holds, or an
 unsupported exercise. Editorial checks cover request fidelity, repetition, vague reassurance,
 abrupt transitions, unsafe claims, excessive narration, and incorrect daytime/sleep endings.
-Rejected sections can be regenerated without discarding accepted sections or raw evidence.
+Section-writing paths can regenerate rejected sections without discarding accepted sections or raw
+evidence; the whole-session method instead permits at most its contracted holistic revision.
 
 ### 3. Canonical typed timeline
 

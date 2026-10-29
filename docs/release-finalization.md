@@ -218,7 +218,6 @@ uv sync --extra dev --locked
 uv run whoopy doctor --json
 uv run python scripts/validate_runtime_releases.py
 uv run whoopy models install --profile standard
-uv run whoopy models pack install kokoro
 uv run whoopy models pack smoke-test kokoro
 ```
 

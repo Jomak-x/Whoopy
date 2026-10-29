@@ -180,7 +180,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             product_wheel_sha256 = _verified_product_wheel_sha256(product_wheel)
         except (OSError, ValueError, BadZipFile, subprocess.SubprocessError) as error:
-            raise SystemExit(f"--product-wheel does not match the executed product: {error}") from error
+            raise SystemExit(
+                f"--product-wheel does not match the executed product: {error}"
+            ) from error
     cases = suite.cases
     if args.case_ids:
         requested = tuple(dict.fromkeys(args.case_ids))

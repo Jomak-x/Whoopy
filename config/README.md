@@ -1,6 +1,6 @@
 # Configuration
 
-Whoopy uses one configuration path for the CLI, worker, and future API. Keep machine-specific values in `local.yaml` or environment variables; both `.env` and `local.yaml` are ignored by Git. Phase 0 does not automatically load `.env`, so source one through a shell or process manager when needed.
+Whoopy uses one configuration path for the CLI, worker, and local API. Keep machine-specific values in `local.yaml` or environment variables; both `.env` and `local.yaml` are ignored by Git and excluded from built wheels. Whoopy does not automatically load `.env`, so source one through a shell or process manager when needed.
 
 ## Precedence
 
@@ -28,7 +28,7 @@ Nested environment variables use two underscores. For example, `WHOOPY_TTS__VOIC
 - `runtime_build_recipes.yaml` pins the source revision, Python patch, source/import markers,
   supported targets, excluded Git submodules, and reviewed per-target dependency lock paths used
   to build clean optional runtime releases.
-- `prompts/` holds versioned system prompts once model-backed generation is added.
+- `prompts/` holds the versioned system prompts used by model-backed generation.
 
 Validate the resolved settings with:
 
@@ -38,8 +38,6 @@ whoopy doctor
 whoopy models doctor
 ```
 
-The universal llama.cpp and sherpa-onnx classes named by `models.yaml` now
-exist; normal CLI construction arrives in the integration PR. `artifacts.yaml`
-and `runtime_profiles.yaml` are active: the former answers “which immutable
-files?” and the latter answers “can this laptop safely use them?” Neither
-doctor command imports a runtime or loads a model.
+`artifacts.yaml` answers “which immutable files?” and `runtime_profiles.yaml`
+answers “can this laptop safely use them?” Inspection commands do not import a
+runtime or load a model; readiness requires the separate production smoke test.

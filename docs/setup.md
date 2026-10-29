@@ -52,9 +52,9 @@ not pass backend flags.
 ## 2. Install The Product Bundle
 
 Use the archive matching the exact target in the table above and Python 3.11 or 3.12 named by its
-filename. The archive contains Whoopy, the built Studio/Lab frontend, installed defaults, worker
+filename. The archive contains Whoopy, the retained local Studio frontend, installed defaults, worker
 scripts, and every Python dependency as a target-native wheel. It does not contain Python, FFmpeg,
-or model checkpoints.
+model checkpoints, or machine-local `config/local.yaml` overrides.
 
 Compare the archive to its separately published `.zip.sha256` file before unpacking it. A checksum
 proves integrity only when it was obtained through a trusted release channel; the self-contained
@@ -137,10 +137,12 @@ Metal/CUDA/Vulkan flags.
 
 - **Basic:** authored scripts with local TTS; no LLM.
 - **Lite:** experimental lower-resource prompt generation where explicitly requested.
-- **Standard:** the dependable Qwen3-4B prompt path plus Kokoro.
-- **High/Studio:** optional larger candidates only when measured and safe.
+- **Standard:** the Qwen3-4B prompt path plus Kokoro.
+- **High:** the explicit Ministral 3 14B writing profile.
+- **Studio:** a resource tier, not evidence of a qualified model.
 
-Selection is a resource preflight, not a model readiness claim.
+Selection is a resource preflight, not a model readiness claim. See
+[model capabilities](model-capabilities.md#local-language-models) for qualification limits.
 
 ## 4. Acquire And Prove The Basic Voice
 
@@ -150,12 +152,8 @@ List current declarations and honest states:
 uv run whoopy models pack list
 ```
 
-Install Kokoro, then run real local synthesis:
-
-```bash
-uv run whoopy models pack install kokoro
-uv run whoopy models pack smoke-test kokoro
-```
+Use [Start locally](../README.md#start-locally) for Kokoro acquisition and the real local
+synthesis check. Kokoro uses the profile artifact installer, not `models pack install`.
 
 The distinction matters:
 
@@ -165,9 +163,9 @@ The distinction matters:
 - `ready` means this exact model/runtime revision produced non-empty, playable offline audio on this
   machine.
 
-`whoopy models pack verify kokoro` rechecks files without loading the model. The app performs the
-same production smoke test when its model card says **Test**. A historical smoke file for a previous
-revision or another machine cannot make a selector usable.
+`whoopy models pack verify kokoro` rechecks files without loading the model. The retained Studio
+readiness card does not offer installation or smoke-test actions. A historical smoke file for a
+previous revision or another machine cannot make a selector usable.
 
 The older profile artifact installer is still used by the Standard LLM path:
 
@@ -185,7 +183,7 @@ uv run whoopy app
 ```
 
 Whoopy starts the versioned FastAPI control plane, reconciles expired runs, serves the bundled
-Svelte application, supervises native work, and opens `http://127.0.0.1:8765`.
+local Studio files, supervises native work, and opens `http://127.0.0.1:8765`.
 
 Useful launch options:
 
@@ -202,12 +200,12 @@ legacy alias; new instructions use `whoopy app`.
 
 In Studio:
 
-1. Select **From my script**.
+1. Select **Use my script**.
 2. Paste a short script containing ordinary prose and optional `[pause: 4s]` markers.
 3. Keep Kokoro and a ready preset voice selected.
 4. Select **Test this voice** for a short production sample, or **Create meditation** for the full
    script.
-5. Follow the durable stage message. Cancel preserves verified checkpoints.
+5. Follow the progress message. Cancel preserves verified checkpoints.
 6. Open the completed library item and listen.
 
 The equivalent CLI path is:
@@ -218,23 +216,24 @@ uv run --offline whoopy generate \
   --profile basic
 ```
 
-Prompt mode requires Lite or Standard model artifacts:
-
-```bash
-uv run --offline whoopy generate \
-  "A three-minute grounding practice after an overstimulating day." \
-  --minutes 3 \
-  --meditation-kind grounding \
-  --profile standard
-```
+Prompt mode additionally requires the selected local LLM artifacts. For the explicit High
+whole-session writer, use the [generation quickstart](../README.md#flexible-whole-session-writing).
 
 Automatic prompt mode will not silently use the Lite model because its recorded V1 bake-off did not
 qualify it as a dependable default. Lite remains an explicit experiment.
 
 ## 7. Finished Exports
 
-The generation master is `runs/<run-id>/narration.wav`. From a completed run's **Listen** view,
-select **Create all exports** to build:
+The generation master is `runs/<run-id>/narration.wav`. With `whoopy app` running, the versioned
+loopback API can create the finished set for a completed run (the retained Studio frontend does not
+yet expose this action):
+
+```bash
+curl -X POST -H 'Content-Type: application/json' -d '{}' \
+  'http://127.0.0.1:8765/api/v1/runs/<run-id>/exports'
+```
+
+This builds:
 
 ```text
 runs/<run-id>/exports/
@@ -252,14 +251,8 @@ model, creation time, duration, tool version, codecs, and SHA-256 evidence.
 
 ## 8. Prepare For No-Network Use
 
-While networking is available:
-
-```bash
-uv sync --extra dev --locked
-uv run whoopy models pack install kokoro
-uv run whoopy models pack smoke-test kokoro
-# Install and smoke-test any optional pack you intend to use.
-```
+While networking is available, complete [Start locally](../README.md#start-locally),
+then install and smoke-test any optional pack you intend to use.
 
 Then disconnect networking and launch:
 
@@ -348,22 +341,18 @@ Configuration precedence remains:
 config/default.yaml < config/local.yaml < WHOOPY_* environment < CLI flags
 ```
 
-Put machine-local overrides in `config/local.yaml`. Nested environment settings use two
-underscores:
+For a source checkout, put machine-local overrides in `config/local.yaml`; it is ignored by Git and
+excluded from built wheels. Installed-product users can prefer environment or CLI overrides. Nested
+environment settings use two underscores:
 
 ```bash
 WHOOPY_TTS__VOICE=af_bella uv run whoopy config show
 ```
 
-The defaults use `./runs`, `./models`, and `./whoopy.db` relative to the launch directory. Studio's
-**Local data and settings** disclosure shows the resolved paths. Exported settings do not include
-model weights or meditation artifacts.
-
-That disclosure also provides the shipped voice-reference manager. Import an existing PCM16 WAV,
-or record up to 60 seconds through the browser microphone, enter its exact transcript and a display
-name, and confirm the visible rights statement. Studio converts browser recordings locally to
-PCM16 WAV, previews the managed reference, and can move it to recoverable trash. The reference
-alone does not make a Qwen cloning model ready.
+The defaults use `./runs`, `./models`, and `./whoopy.db` relative to the launch directory. The
+retained Studio frontend does not expose settings export/import, resolved-path disclosure, or the
+voice-reference manager. Those contracts remain available through the versioned loopback API;
+settings envelopes do not include model weights or meditation artifacts.
 
 Read [privacy and local data](privacy.md) before moving or backing up these directories.
 
@@ -380,9 +369,11 @@ uv run whoopy run regenerate-segment <run-id> <segment-id>
 uv run whoopy cache stats
 ```
 
-Deleting a stopped run in Studio moves it to `runs/.trash/`; model removal requires explicit
-confirmation and uses managed trash. Do not manually delete an active run or the shared cache while
-the app is running.
+Deleting a stopped run through `DELETE /api/v1/runs/<run-id>` moves it to `runs/.trash/`; deletion
+is rejected while a generation, edit, restore, or take finalizer still owns the run. Model removal
+requires explicit confirmation and uses managed trash. The retained Studio frontend does not expose
+these deletion controls. Do not manually delete an active run or the shared cache while the app is
+running.
 
 ## 12. Release Acceptance Harness
 

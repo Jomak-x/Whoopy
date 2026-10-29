@@ -29,8 +29,9 @@ Paths are relative to the directory where Whoopy is launched unless overridden:
 | `models/managed/`                  | Pinned downloads, installed runtimes/models, verification/smoke evidence        | Managed local assets              |
 | `models/managed/voice-references/` | Consented reference audio, transcript, trims, revisions, previews               | Sensitive authoritative data      |
 
-Studio's **Local data and settings** disclosure shows resolved paths. Settings export contains the
-catalog's JSON settings and path information, not model weights or meditation audio.
+The versioned loopback API can report resolved paths and export the catalog's JSON settings. The
+retained Studio frontend does not expose those controls. A settings envelope contains settings and
+path information, not model weights or meditation audio.
 
 ## Loopback Security
 
@@ -45,9 +46,9 @@ port mapping, or router.
 
 ## Voice Data
 
-Reference audio can be identifying biometric-like data. Whoopy requires a transcript and the exact
-rights attestation before import. Managed voice references preserve revisions and move deletions to
-recoverable trash, so pressing delete does not immediately erase every byte.
+Reference audio can be identifying biometric-like data. The voice-reference API requires a
+transcript and the exact rights attestation before import. Managed references preserve revisions and
+move deletions to recoverable trash, so deletion does not immediately erase every byte.
 
 Before importing a voice:
 
@@ -57,11 +58,10 @@ Before importing a voice:
 - review the selected model's license;
 - do not impersonate, deceive, harass, or bypass consent.
 
-Studio accepts an existing PCM16 WAV or a browser microphone recording of up to 60 seconds, plus
-its exact transcript and consent checkbox. Browser recordings are converted locally to PCM16 WAV;
-preview generation also remains local. Microphone permission is requested only when the user
-selects the recording workflow. Deleting moves the managed reference to trash; it is not immediate
-secure erasure.
+The backend accepts an existing PCM16 WAV of up to 60 seconds plus its exact transcript and consent
+attestation; preview generation remains local. The retained Studio frontend does not include a
+microphone or voice-reference workflow. Deleting through the API moves the managed reference to
+trash; it is not immediate secure erasure.
 
 To fully purge a reference or run, first stop Whoopy, identify the exact managed trash entry, and
 remove it using an appropriate recoverable/secure-delete policy for your storage device. Backups may

@@ -2196,13 +2196,15 @@ class LocalWebApplication:
                 takes.choose(run_id, segment_id, selected_take_id, action="restore")
                 RevisionStore(RunStore(self.runs_directory)).create_assembly_revision(
                     run_id,
-                    note=f"Retained selected take {selected_take_id} after generating an alternative.",
+                    note=(
+                        f"Retained selected take {selected_take_id} "
+                        "after generating an alternative."
+                    ),
                 )
                 self._resume_run_admitted(run_id)
         finally:
-            with self._operation_admission_lock:
-                with self._task_lock:
-                    generation_task.finalizing_take = False
+            with self._operation_admission_lock, self._task_lock:
+                generation_task.finalizing_take = False
 
     def choose_segment_take(
         self,

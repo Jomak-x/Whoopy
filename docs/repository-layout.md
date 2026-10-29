@@ -10,7 +10,7 @@ This document is the placement guide for new code. It turns the conceptual archi
 | `src/whoopy/` | local domain logic, ports, adapters, pipeline, QC, control plane | Commons-only publishing UI or generated artifacts |
 | `assets/` | source assets with redistribution provenance | generated runs, untracked downloads |
 | `db/` | persistence models and migrations | domain decisions tied directly to an ORM session |
-| `web/` | local SvelteKit control and inspection UI | generation or audio rules |
+| `web/` | pointer to the packaged local tester; future frontend area | generation or audio rules |
 | `commons/` | optional public distribution and moderation platform | dependencies required by local generation |
 | `tests/` | unit, contract, golden, and integration checks | large model weights or generated runs |
 | `docs/` | current explanations, decisions, and operational guides | secrets or undocumented generated output |
@@ -35,7 +35,9 @@ API/CLI -> application services -> pipeline
 - `evaluation/` owns versioned bake-off schemas, measurements, and reports; it
   does not choose a default without explicit evidence.
 - `qc/` evaluates artifacts and returns structured results.
-- `api/` translates local HTTP/queue input into application calls; it does not run models in-process.
+- `webui/` owns the packaged static tester and local HTTP API, translating requests
+  into application calls while workers perform inference.
+- `api/` reserves a future control-plane boundary; it does not contain the current HTTP server.
 - `hardware.py` detects native resources and selects a safe user-facing runtime profile.
 - `control.py` submits prompts and reads run state without performing worker work.
 - `pipeline/runs.py` owns durable records, UUID-safe paths, and atomic artifact writes.
