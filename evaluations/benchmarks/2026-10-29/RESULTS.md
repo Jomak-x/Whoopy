@@ -233,3 +233,23 @@ changed revision, routing, listening-report and release paths. Timeout/exception
 regressions used synthetic ordinary and detached child processes and verified
 cleanup before the next case. Touched Python files were formatted; no full
 repository test/lint/type or CI gate ran in this phase.
+
+## Follow-up review corrections after 60c9eed
+
+Three selected findings were corrected: split-prose control preservation with
+safe structural/timing rejection, independent subject clauses in sleep/breath
+routing, and benchmark-local listening-report filenames with valid relative
+links. The [review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-60c9eed)
+records the finding IDs, root causes and executable regressions.
+
+Historical model evidence retains its actual producer revisions. No live
+inference, external receipt reconciliation or publication was performed in this
+review phase. Full repository gates, native Linux/Windows checks and final
+Document/PR reconciliation remain with the outer executor.
+
+Focused verification covered **413 distinct tests**. The combined batch passed
+412 tests in 36.79 seconds and exposed one older ownership fixture relying on
+an implicit delivery reset. After making that reset explicit, all four cases of
+the affected ownership test passed in 0.40 seconds, preserving its assertions.
+Touched Python files were formatted. No full repository test/lint/type or CI
+gate ran in this phase.

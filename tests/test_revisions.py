@@ -702,7 +702,10 @@ def test_semantic_plan_revision_commits_redraft_and_restores_section_artifacts(
 @pytest.mark.parametrize(
     "concurrent_edit",
     [
-        RevisionRequest(script="Notice the sounds around you and settle comfortably."),
+        RevisionRequest(
+            script="Notice the sounds around you and settle comfortably.",
+            timeline=TimelineEdit(delivery={"speech-0001": "neutral"}),
+        ),
         RevisionRequest(timeline=TimelineEdit(silence_duration_ms={"silence-0001": 9_000})),
     ],
 )
@@ -1215,6 +1218,188 @@ def test_explicit_reset_resolves_ambiguous_repeated_prose_controls(
     ]
     assert len(speeches) == 2
     assert all(segment.text == repeated and segment.pace == "natural" for segment in speeches)
+
+
+@pytest.mark.parametrize(
+    "replacement, expected_paces",
+    [
+        ("unchanged", ("very_slow", "very_slow")),
+        ("marker-default", ("natural", "natural")),
+        ("marker-new", ("slow", "slow")),
+        ("field-default", ("natural", "natural")),
+        ("field-new", ("slow", "slow")),
+        ("boundary-default", ("very_slow", "natural")),
+    ],
+)
+def test_exact_paragraph_split_preserves_rendered_controls_and_explicit_replacements(
+    tmp_path: Path, replacement: str, expected_paces: tuple[str, str]
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    sentences = ("Notice your feet.", "Notice your hands.")
+    overrides = (
+        PronunciationOverride(source="feet", pronunciation="feet"),
+        PronunciationOverride(source="hands", pronunciation="handz"),
+    )
+    revisions.create(RUN_ID, RevisionRequest(script=" ".join(sentences)))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    controlled = revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            timeline=TimelineEdit(
+                pace={"speech-0001": "very_slow"},
+                delivery={"speech-0001": "compassionate"},
+                intensity={"speech-0001": "moderate"},
+                pronunciation_overrides={"speech-0001": overrides},
+            )
+        ),
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    accepted = store.load_timeline(RUN_ID)
+    accepted_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    script = "\n\n".join(sentences)
+    edits = TimelineEdit()
+    if replacement.startswith("marker"):
+        script = f"[pace: {expected_paces[0]}]\n\n{script}"
+    elif replacement.startswith("field"):
+        edits = TimelineEdit.model_validate(
+            {"pace": {"speech-0001": expected_paces[0], "speech-0002": expected_paces[1]}}
+        )
+    elif replacement == "boundary-default":
+        script = f"{sentences[0]}\n\n[pace: natural]\n\n{sentences[1]}"
+
+    revisions.create(RUN_ID, RevisionRequest(script=script, timeline=edits))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    speeches = store.load_timeline(RUN_ID).segments
+    assert len(speeches) == 2
+    for index, segment in enumerate(speeches):
+        assert isinstance(segment, SpeechSegment)
+        assert segment.text == sentences[index]
+        assert segment.pace == expected_paces[index]
+        assert segment.delivery == "compassionate"
+        assert segment.intensity == "moderate"
+        assert segment.pronunciation_overrides == (overrides[index],)
+        assert segment.target_duration_ms is None
+
+    revisions.restore(RUN_ID, controlled.revision_id)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == accepted
+    restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    assert restored_manifest["pcm_sha256"] == accepted_manifest["pcm_sha256"]
+
+
+@pytest.mark.parametrize(
+    "structural_edit", ["changed-split", "duplicate-split", "mixed-duplicates", "merge"]
+)
+@pytest.mark.parametrize("control", ["pace", "pronunciation"])
+def test_ambiguous_structural_prose_edit_preserves_active_artifacts(
+    tmp_path: Path, structural_edit: str, control: str
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    sentences = ("Notice your feet.", "Notice your hands.")
+    initial = "\n\n".join(sentences) if structural_edit == "merge" else " ".join(sentences)
+    controlled_id = "speech-0001"
+    repeated = "Listen to the sounds around you."
+    if structural_edit == "mixed-duplicates":
+        initial = f"{repeated}\n\n{repeated}\n\n{initial}"
+        controlled_id = "speech-0003"
+    revisions.create(RUN_ID, RevisionRequest(script=initial))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    edits = TimelineEdit(pace={controlled_id: "very_slow"})
+    if control == "pronunciation":
+        edits = TimelineEdit(
+            pronunciation_overrides={
+                controlled_id: (PronunciationOverride(source="feet", pronunciation="feet"),)
+            }
+        )
+    revisions.create(RUN_ID, RevisionRequest(timeline=edits))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    if structural_edit == "merge":
+        script = " ".join(sentences)
+    elif structural_edit == "duplicate-split":
+        script = "\n\n".join([*sentences, sentences[0]])
+    elif structural_edit == "mixed-duplicates":
+        script = "\n\n".join([repeated, repeated, repeated, *sentences])
+    else:
+        script = f"Notice your toes.\n\n{sentences[1]}"
+    original_files = {
+        path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+        for path in store.run_directory(RUN_ID).rglob("*")
+        if path.is_file()
+    }
+
+    with pytest.raises(RevisionError, match="ambiguously moves accepted controls"):
+        revisions.create(RUN_ID, RevisionRequest(script=script))
+
+    assert {
+        path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+        for path in store.run_directory(RUN_ID).rglob("*")
+        if path.is_file()
+    } == original_files
+
+
+@pytest.mark.parametrize(
+    "unsupported_control", ["target-duration", "pronunciation", "pronunciation-reset"]
+)
+def test_paragraph_split_requires_explicit_resolution_of_indivisible_controls(
+    tmp_path: Path, unsupported_control: str
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    sentences = ("Notice your feet.", "Notice your hands.")
+    revisions.create(RUN_ID, RevisionRequest(script=" ".join(sentences)))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    timeline = store.load_timeline(RUN_ID)
+    changes: dict[str, object]
+    if unsupported_control == "target-duration":
+        changes = {"target_duration_ms": 8_000}
+        message = "accepted target duration"
+    else:
+        changes = {
+            "pronunciation_overrides": (
+                PronunciationOverride(source="feet. Notice", pronunciation="feet. No-tiss"),
+            )
+        }
+        message = "splits an accepted pronunciation"
+    store.write_timeline(
+        RUN_ID,
+        timeline.model_copy(update={"segments": [timeline.segments[0].model_copy(update=changes)]}),
+    )
+    if unsupported_control == "pronunciation-reset":
+        revisions.create(
+            RUN_ID,
+            RevisionRequest(
+                script="\n\n".join(sentences),
+                timeline=TimelineEdit(
+                    pronunciation_overrides={"speech-0001": (), "speech-0002": ()}
+                ),
+            ),
+        )
+        speeches = store.load_timeline(RUN_ID).segments
+        assert len(speeches) == 2
+        assert all(
+            isinstance(segment, SpeechSegment) and segment.pronunciation_overrides == ()
+            for segment in speeches
+        )
+        return
+    original_files = {
+        path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+        for path in store.run_directory(RUN_ID).rglob("*")
+        if path.is_file()
+    }
+
+    with pytest.raises(RevisionError, match=message):
+        revisions.create(RUN_ID, RevisionRequest(script="\n\n".join(sentences)))
+
+    assert {
+        path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+        for path in store.run_directory(RUN_ID).rglob("*")
+        if path.is_file()
+    } == original_files
 
 
 @pytest.mark.parametrize("pace, delivery", [("very_slow", "warm"), ("natural", "neutral")])

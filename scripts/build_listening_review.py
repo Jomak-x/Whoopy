@@ -90,6 +90,12 @@ def write_current_report(output: Path, page: str) -> None:
 
 def build(root: Path, *, manifest_path: Path | None = None, output: Path | None = None) -> Path:
     root = root.resolve()
+    output = output if output is not None else Path("review.html")
+    if output.parent != Path(".") or output.name in {"", ".."}:
+        raise ValueError("Output must be a report filename directly inside the benchmark root")
+    output = root / output
+    if output.is_symlink() or output.with_name(f"{output.name}.history").is_symlink():
+        raise ValueError("Output and report history must not be symbolic links")
     manifest_path = manifest_path or root / "verification/listening/manifest-policy-v3-strict.json"
     manifest = json.loads(manifest_path.read_text())
     records = manifest["records"]
@@ -195,7 +201,6 @@ Your notes stay in this browser. No ratings are sent anywhere.</p>
 Dots was stopped for memory pressure; Fish Drama 3 was excluded by memory preflight and Higgs by license fit.</p>
 <p><a href="voices/LICENSE-AUDIT.txt">License audit</a> · <a href="voices/excluded-candidates.json">Exclusions</a> ·
 <a href="voice-script.txt">Shared voice script</a></p></main><script>{script}</script></html>"""
-    output = output or root / "review.html"
     write_current_report(output, page)
     return output
 
@@ -204,7 +209,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
     parser.add_argument("--manifest", type=Path)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        metavar="FILENAME",
+        help="Report filename inside the benchmark root (default: review.html)",
+    )
     args = parser.parse_args()
     print(build(args.root, manifest_path=args.manifest, output=args.output))
 

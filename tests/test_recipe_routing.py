@@ -133,6 +133,8 @@ def test_compound_breath_exclusions_preserve_external_anchor(prompt: str) -> Non
         "Avoid box breathing; instead use natural breathing",
         "No box breathing and use natural breathing",
         "No box breathing, and focus on natural breathing",
+        "No box breathing and I want natural breathing",
+        "Don’t use box breathing, and you can guide natural breathing",
     ],
 )
 def test_box_only_exclusion_does_not_extend_into_positive_clause(prompt: str) -> None:
@@ -149,6 +151,8 @@ def test_box_only_exclusion_does_not_extend_into_positive_clause(prompt: str) ->
         "No box breathing; instead use box breathing",
         "Don’t use breath focus. Use square breathing",
         "No breath focus and use box breathing",
+        "No breath focus and I want box breathing",
+        "No breath focus or you can guide square breathing",
     ],
 )
 def test_positive_box_breathing_after_exclusion_is_still_unsupported(prompt: str) -> None:
@@ -181,6 +185,14 @@ def test_negated_box_breathing_clause_preserves_separate_sleep_request(prompt: s
         "No box breathing or breath focus and help me sleep",
         "No breath focus or box breathing; help me sleep",
         "Help me sleep, but no breath focus",
+        "No breath focus and I want to sleep",
+        "No breath focus and you can help me sleep",
+        "No breath focus, and I want to sleep",
+        "Don’t use breath focus and I want to sleep",
+        "No box breathing or breath focus and I want to sleep",
+        "No breath focus or box breathing and you can help me sleep",
+        "No breath focus or I would like help sleeping",
+        "No breath focus and we want to sleep",
     ],
 )
 def test_independent_sleep_request_keeps_breath_exclusion(prompt: str) -> None:
@@ -199,6 +211,9 @@ def test_independent_sleep_request_keeps_breath_exclusion(prompt: str) -> None:
         "Do not fall asleep and help me focus",
         "Don’t fall asleep; no breath focus or box breathing",
         "No breath focus and do not fall asleep",
+        "No breath focus and I don't want to sleep",
+        "No breath focus and I don’t want to sleep",
+        "No breath focus and you should avoid helping me fall asleep",
     ],
 )
 def test_actual_sleep_negation_remains_daytime_across_clauses(prompt: str) -> None:

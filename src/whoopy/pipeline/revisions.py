@@ -347,6 +347,7 @@ class RevisionStore:
                     ) & _ordered_control_alignment(previous_keys, requested_keys, prefer_late=True)
                     correspondence = {new: old for old, new in mandatory}
                     ambiguous: dict[int, list[int]] = {}
+                    split_children: dict[int, list[SpeechSegment]] = {}
                     boundaries = [(-1, -1), *sorted(mandatory)]
                     boundaries.append((len(previous_keys), len(requested_keys)))
                     for (old_start, new_start), (old_end, new_end) in zip(
@@ -362,10 +363,39 @@ class RevisionStore:
                             ]
                             for new in new_indices
                         }
-                        if not any(matches.values()) and len(old_indices) == len(new_indices):
+                        if any(matches.values()):
+                            matched_old = {
+                                old for candidates in matches.values() for old in candidates
+                            }
+                            unmatched_old = [old for old in old_indices if old not in matched_old]
+                            ambiguous.update(
+                                {
+                                    new: candidates or unmatched_old
+                                    for new, candidates in matches.items()
+                                }
+                            )
+                        elif len(old_indices) == len(new_indices):
                             correspondence.update(zip(new_indices, old_indices, strict=True))
+                        elif (
+                            len(old_indices) == 1
+                            and len(new_indices) > 1
+                            and isinstance(previous_segments[old_indices.start], SpeechSegment)
+                            and all(
+                                isinstance(requested_segments[new], SpeechSegment)
+                                for new in new_indices
+                            )
+                            and cast(SpeechSegment, previous_segments[old_indices.start]).text
+                            == " ".join(
+                                cast(SpeechSegment, requested_segments[new]).text
+                                for new in new_indices
+                            )
+                        ):
+                            correspondence.update(dict.fromkeys(new_indices, old_indices.start))
+                            split_children[old_indices.start] = [
+                                cast(SpeechSegment, requested_segments[new]) for new in new_indices
+                            ]
                         else:
-                            ambiguous.update(matches)
+                            ambiguous.update({new: list(old_indices) for new in new_indices})
                     control_correspondence = _control_correspondence(
                         previous_controls, requested_controls
                     )
@@ -387,6 +417,32 @@ class RevisionStore:
                                 and isinstance(requested, SpeechSegment)
                                 and previous.text == current.text
                             ):
+                                if (
+                                    (candidate in split_children or previous_index is None)
+                                    and previous.text != requested.text
+                                    and current.target_duration_ms is not None
+                                ):
+                                    raise RevisionError(
+                                        "This script edit changes the boundaries of speech with "
+                                        "an accepted target duration; keep that speech together."
+                                    )
+                                children = split_children.get(candidate, [])
+                                if (
+                                    children
+                                    and any(
+                                        not any(override.source in child.text for child in children)
+                                        for override in current.pronunciation_overrides
+                                    )
+                                    and any(
+                                        child.id not in request.timeline.pronunciation_overrides
+                                        for child in children
+                                    )
+                                ):
+                                    raise RevisionError(
+                                        "This script edit splits an accepted pronunciation "
+                                        "override; keep its source text together or explicitly "
+                                        "set replacement pronunciations."
+                                    )
                                 for name in ("delivery", "intensity", "pace", "voice_mode"):
                                     if getattr(previous, name) == getattr(requested, name) and (
                                         _same_control_origin(
@@ -400,7 +456,7 @@ class RevisionStore:
                                 updates["pronunciation_overrides"] = tuple(
                                     override
                                     for override in current.pronunciation_overrides
-                                    if override.source in requested.text
+                                    if previous_index is None or override.source in requested.text
                                 )
                                 if previous.text == requested.text:
                                     updates["target_duration_ms"] = current.target_duration_ms

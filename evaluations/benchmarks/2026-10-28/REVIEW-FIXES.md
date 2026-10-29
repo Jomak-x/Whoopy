@@ -387,3 +387,24 @@ listening-page evidence, Lab decision ratings, release status and acceptance
 cleanup. Synthetic child processes exercised timeout and exceptional exits,
 including detached POSIX sessions on this host. Touched Python files were
 formatted. No full repository test/lint/type or CI gate ran here.
+
+## Review fixes after 60c9eed
+
+All three selected findings were confirmed against source before editing.
+
+| Finding | Root cause and correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-SPLIT-PROSE-CONTROL-LOSS | Unequal replacement gaps with no exact segment matches bypassed control preservation and ambiguity checks. Exact speech splits can now retain safely corresponding controls; unsupported structural control or timing mappings reject before activation. | `test_revisions.py`: exact sentence/blank-line split, explicit replacements and unsupported structural changes with unchanged persisted state. |
+| REVIEW-POSITIVE-SLEEP-SUBJECT-CLAUSE | Shared negation boundaries recognized imperative clauses but missed independent subject clauses. Coordinating conjunctions before subject pronouns now separate clauses for both sleep and breath routing. | `test_recipe_routing.py` and `test_recipe_whole_session.py`: positive subject-clause sleep requests, actual negative sleep, coordinated exclusions and positive natural/box-breathing clauses. |
+| REVIEW-LISTENING-EXTERNAL-OUTPUT | Unrestricted report destinations broke benchmark-relative playback and evidence links. Output is now a report filename alongside the benchmark root; unsupported destinations reject before writes. | `test_listening_review.py`: resolved playback/evidence links, unsupported destinations, retained history and current Fail behavior. |
+
+This phase does not perform live inference, external receipt reconciliation,
+UI/source-license changes, publication or outer pipeline gates.
+
+Focused verification covered **413 distinct tests**. The combined batch passed
+412 tests and exposed one existing ownership fixture that implicitly discarded
+an accepted delivery control during whole-script replacement. Its replacement
+now declares an explicit reset while preserving every stale-draft ownership
+assertion; all four parameterized cases then passed in **0.40 seconds**. The
+initial focused batch took **36.79 seconds**. Touched Python files were formatted.
+No full repository test/lint/type or CI gate ran here.

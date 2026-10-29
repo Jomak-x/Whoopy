@@ -102,6 +102,7 @@ NEGATED_BOX_BREATHING = re.compile(
 REQUEST_CLAUSE_BOUNDARY = re.compile(
     r"[.!?;\n]+|,(?!\s*(?:and\b|or\b|breath\b|breathing\b|box\b|square\b))|"
     r"\b(?:but|however|yet|instead)\b|"
+    r"\b(?:and|or)\s+(?=(?:please\s+)?(?:i|you|we|he|she|they|it)\b)|"
     r"\band\s+(?=(?:please\s+)?(?:use|try|include|allow|focus|concentrate|guide|help)\b)",
     re.I,
 )
