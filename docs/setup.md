@@ -491,13 +491,18 @@ version, target identity, validated network-isolation evidence, migration audit,
 evidence.
 Missing targets stay `not_run`; partial or mismatched reports are rejected.
 
-Hosted CI separately exercises a fresh built wheel on the exact Windows x64, macOS ARM64/x64, and
-Linux x64/ARM64 runner labels. Each job acquires a target-native application wheelhouse, installs it
-into a new environment with indexes disabled, starts `whoopy app` from an unrelated temporary
-directory without a checkout config path, checks the versioned API and bundled frontend, and
-uploads the bundle plus a hashed packaging receipt. `scripts/aggregate_ci_portability.py` requires
-all five launcher receipts but always writes `local_v1_release_ready: false`: hosted packaging
-checks are not real-model, OS-network-disabled, or complete independent acceptance evidence.
+The sole checked-in hosted workflow, `.github/workflows/ci.yml`, runs on `ubuntu-latest`,
+`macos-14`, and `windows-latest`. Each job installs locked development dependencies, runs
+`uv run --extra dev python scripts/check.py`, and runs `uv run whoopy doctor --json`.
+It does not build or upload offline application bundles, perform installed-application launch
+acceptance, or aggregate packaging receipts.
+
+Offline wheelhouse acquisition, installation, application launch acceptance, artifact transfer,
+and receipt aggregation are manual release-tooling steps. `scripts/aggregate_ci_portability.py`
+can aggregate five supplied launcher receipts, but the current workflow does not produce them;
+the tool always writes `local_v1_release_ready: false`. Tool availability does not establish
+five-target packaging qualification, real-model operation, OS-network isolation, or independent
+platform acceptance.
 
 For a real post-acquisition packaging receipt, disable networking through an external operating
 system control and describe that control explicitly:

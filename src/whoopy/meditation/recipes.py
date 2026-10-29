@@ -106,6 +106,7 @@ SLEEP_DIFFICULTY = re.compile(
 )
 SLEEP_INTENT_SCOPE = re.compile(
     r"\b(?:during|throughout|for|in)\s+(?:(?:this|the|my|our|a)\s+)?"
+    r"(?:(?!(?:and|or|but|however|yet|instead)\b)[\w'\u2019-]+\s+){0,4}"
     r"(?:meditation|session|meeting)\b|"
     r"\b(?:goal|aim|intention|preference)\s+(?:is|are|isn['\u2019]t|aren['\u2019]t)\b|"
     r"\b(?:is|are)\s+(?:(?:my|our|the)\s+)?(?:goal|aim|intention|preference)\b",

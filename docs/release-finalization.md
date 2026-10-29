@@ -254,10 +254,14 @@ whoopy-app-<version>-<target>-py311.zip
 whoopy-app-<version>-<target>-py311.zip.sha256
 ```
 
-If the version differs from `0.1.0`, use the exact shared wheel version in both names. The GitHub
-workflow uploads these files under `offline-application-<target>`, but those artifacts remain
-CI-built packaging aids rather than independent evidence. Extract a downloaded ZIP before passing
-its unpacked bundle directory to the acceptance harness.
+If the version differs from `0.1.0`, use the exact shared wheel version in both names. These are
+outputs of the manual native bundle-building command above. The sole GitHub workflow runs
+`scripts/check.py` and `whoopy doctor --json` on `ubuntu-latest`, `macos-14`, and `windows-latest`;
+it does not upload `offline-application-<target>` artifacts or packaging receipts. Transfer any
+manually built bundle and its receipts explicitly, and extract the ZIP before passing its
+unpacked directory to the acceptance harness. Manual packaging, installed-application launch,
+artifact uploads and receipt aggregation remain unqualified until their actual evidence is
+collected; neither tool availability nor the hosted quality checks establishes that evidence.
 
 ### Run both offline observations
 
