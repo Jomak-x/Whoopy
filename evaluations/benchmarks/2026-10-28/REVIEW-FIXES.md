@@ -408,3 +408,26 @@ now declares an explicit reset while preserving every stale-draft ownership
 assertion; all four parameterized cases then passed in **0.40 seconds**. The
 initial focused batch took **36.79 seconds**. Touched Python files were formatted.
 No full repository test/lint/type or CI gate ran here.
+
+## Review fixes after bba3104
+
+All six selected findings were confirmed against source before editing.
+
+| Finding | Root cause and correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-NOUN-SUBJECT-SLEEP-CLAUSE | Clause splitting recognized only pronouns and selected imperatives. A shared subject/finite-verb pattern now separates noun-subject requests while coordinated negative object lists retain their scope. | `test_recipe_routing.py`: goal/aim/session subjects, negative noun clauses, coordinated sleep/breath/box objects, and separate positive breathing clauses. |
+| REVIEW-COORDINATED-NEGATED-WAKING | Negative movement spans ended before their body objects, exposing coordinated waking actions as positive. Movement objects and coordinated body/action phrases now remain within the negative span. | `test_recipe_whole_session.py`: exact hands/eyes example, contractions, body objects, negative coordination and independently positive waking clauses. |
+| REVIEW-PARAGRAPH-SEPARATOR-QUIET-IDENTITY | Paragraph strings could contain compiler-recognized separators, breaking identity during quiet-bound recovery. Draft validation rejects blank separator lines without rewriting prose; unmatched recovered speech fails explicitly. | `test_recipe_whole_session.py`: LF/CRLF/whitespace and Unicode separator variants, unchanged single-line-break prose, matching quiet limits and invalid recovery identity. |
+| REVIEW-PLAN-LAUNCH-ADMISSION-LEAK | Task registration preceded fallible plan-input preparation. Preparation now occurs under admission before task registration. | Task/admission regressions inject directory and write failures and verify no stuck task, activated revision or blocked subsequent operation. |
+| REVIEW-ALTERNATIVE-TAKE-PREMATURE-COMPLETION | Public task status followed child completion before alternative finalization finished. Finalization inspects durable child state separately while public status and selected-audio access remain unavailable through restoration and reassembly. Finalization failures persist a safe failure state requiring retained-take selection before web or CLI resume. | `test_task_finalization.py` exercises child exit, save/restore and reassembly boundaries through task/run and audio/export interfaces, plus failure handling across restart and worker resume. |
+| REVIEW-MLX-WHEEL-ACCEPTANCE-INVENTORY | A duplicated worker allowlist omitted packaged MLX. The runtime probe now resolves the complete worker inventory declared by the supplied wheel. | `test_review_evidence_regressions.py`: actual subprocess/package consumer accepts matching MLX and rejects changed or missing runtime bytes. |
+
+No live inference, external receipt reconciliation, UI/source-license changes,
+publication or outer pipeline gates were performed in this review phase.
+
+Focused verification passed **462 tests in 13.14 seconds**, covering routing,
+whole-session validation, acceptance evidence, task finalization, takes,
+revision/durable admission, web interfaces, plan-regeneration ownership and
+exports. The only warning was the existing Starlette/httpx deprecation.
+Touched Python files were formatted. No full repository test/lint/type or CI
+gate ran here.

@@ -323,6 +323,12 @@ class LocalWorker:
                     # only resume after their 15-second lease expires.
                     self.store.reconcile_stale_run_locked(parsed_run_id, now=self.clock())
                 record = self.store.load(parsed_run_id)
+                if (
+                    is_resume
+                    and record.execution is not None
+                    and record.execution.interruption_kind == "take_finalization_failed"
+                ):
+                    raise WorkerError("Choose a retained take before resuming this meditation.")
                 if not is_resume and record.status is not RunStatus.QUEUED:
                     raise WorkerError(
                         f"Run {record.run_id} is {record.status.value}; "

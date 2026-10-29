@@ -78,37 +78,47 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _verified_product_wheel_sha256(product_wheel: Path) -> str:
-    probe = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import json; from pathlib import Path; import whoopy; "
-            "from whoopy.locations import default_config_directory, runtime_worker_script; "
-            "print(json.dumps({'package': str(Path(whoopy.__file__).parent.resolve()), "
-            "'config': str(default_config_directory().resolve()), "
-            "'workers': {name: str(runtime_worker_script(name).resolve()) for name in "
-            "('fish_speech_1_4_worker.py', 'moss_tts_worker.py', 'qwen3_tts_worker.py')}}))",
-        ],
-        env=_offline_environment(),
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    identity = json.loads(probe.stdout)
-    package = Path(identity["package"])
-    config = Path(identity["config"])
-    if package != Path(whoopy.__file__).resolve().parent:
-        raise ValueError("acceptance driver and child resolve different Whoopy packages")
     with product_wheel.open("rb") as wheel_file:
         digest = hashlib.file_digest(wheel_file, "sha256").hexdigest()
         with ZipFile(wheel_file) as wheel:
+            wheel_members = wheel.namelist()
             package_members = {
                 name
-                for name in wheel.namelist()
+                for name in wheel_members
                 if name.startswith("whoopy/") and not name.endswith("/")
             }
             if "whoopy/__init__.py" not in package_members:
                 raise ValueError("wheel has no Whoopy package")
+            worker_names = []
+            for name in wheel_members:
+                if name.endswith("/"):
+                    continue
+                _, separator, relative = name.partition(".data/data/share/whoopy/scripts/")
+                if separator:
+                    worker_names.append(relative)
+            probe = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    "import json, sys; from pathlib import Path; import whoopy; "
+                    "from whoopy.locations import default_config_directory, runtime_worker_script; "
+                    "worker_names = json.loads(sys.argv[1]); "
+                    "print(json.dumps({'package': str(Path(whoopy.__file__).parent.resolve()), "
+                    "'config': str(default_config_directory().resolve()), "
+                    "'workers': {name: str(runtime_worker_script(name).resolve()) "
+                    "for name in worker_names}}))",
+                    json.dumps(worker_names),
+                ],
+                env=_offline_environment(),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            identity = json.loads(probe.stdout)
+            package = Path(identity["package"])
+            config = Path(identity["config"])
+            if package != Path(whoopy.__file__).resolve().parent:
+                raise ValueError("acceptance driver and child resolve different Whoopy packages")
             actual_members = {
                 "whoopy/" + path.relative_to(package).as_posix()
                 for path in package.rglob("*")
@@ -119,7 +129,7 @@ def _verified_product_wheel_sha256(product_wheel: Path) -> str:
             resources: dict[str, Path] = {
                 name: package / name.removeprefix("whoopy/") for name in package_members
             }
-            for name in wheel.namelist():
+            for name in wheel_members:
                 if name.endswith("/"):
                     continue
                 _, separator, relative = name.partition(".data/data/share/whoopy/")

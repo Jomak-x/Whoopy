@@ -87,8 +87,9 @@ NO_BREATH = re.compile(
 )
 SLEEP = re.compile(r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b", re.I)
 NEGATED_SLEEP = re.compile(
-    r"\b(?:no|without|avoid|skip|don['\u2019]t|do not|rather not)\b"
-    r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?,;\n]){0,35}"
+    r"\b(?:no|not|without|avoid|skip|(?:do|does|is|are|was|were|should|would|could|must)n['\u2019]t|"
+    r"do not|rather not)\b"
+    r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?;\n])*"
     r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b",
     re.I,
 )
@@ -99,10 +100,18 @@ NEGATED_BOX_BREATHING = re.compile(
     r"\b(?:box|square)\s+breathing\b",
     re.I,
 )
+REQUEST_SUBJECT_CLAUSE = (
+    r"(?:"
+    r"(?:i|you|we|he|she|they|it)\b|"
+    r"(?:(?!(?:and|or|but|however|yet|instead)\b)[a-z][\w'\u2019-]*\s+){1,6}"
+    r"(?:am|is|are|was|were|can|could|will|would|shall|should|must|may|might|"
+    r"has|have|does|do|wants?|needs?|aims?|seeks?|prefers?|includes?)\b)"
+)
 REQUEST_CLAUSE_BOUNDARY = re.compile(
-    r"[.!?;\n]+|,(?!\s*(?:and\b|or\b|breath\b|breathing\b|box\b|square\b))|"
+    rf",(?=\s*{REQUEST_SUBJECT_CLAUSE})|"
+    rf"[.!?;\n]+|,(?!\s*(?:(?:and|or|breath|breathing|box|square)\b|{SLEEP.pattern}))|"
     r"\b(?:but|however|yet|instead)\b|"
-    r"\b(?:and|or)\s+(?=(?:please\s+)?(?:i|you|we|he|she|they|it)\b)|"
+    rf"\b(?:and|or)\s+(?=(?:please\s+)?{REQUEST_SUBJECT_CLAUSE})|"
     r"\band\s+(?=(?:please\s+)?(?:use|try|include|allow|focus|concentrate|guide|help)\b)",
     re.I,
 )

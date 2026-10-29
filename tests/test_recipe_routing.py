@@ -135,6 +135,8 @@ def test_compound_breath_exclusions_preserve_external_anchor(prompt: str) -> Non
         "No box breathing, and focus on natural breathing",
         "No box breathing and I want natural breathing",
         "Don’t use box breathing, and you can guide natural breathing",
+        "No box breathing and my preference is natural breathing",
+        "No box breathing and the session should use natural breathing",
     ],
 )
 def test_box_only_exclusion_does_not_extend_into_positive_clause(prompt: str) -> None:
@@ -153,6 +155,8 @@ def test_box_only_exclusion_does_not_extend_into_positive_clause(prompt: str) ->
         "No breath focus and use box breathing",
         "No breath focus and I want box breathing",
         "No breath focus or you can guide square breathing",
+        "No breath focus and my preference is box breathing",
+        "No breath focus and the session should use square breathing",
     ],
 )
 def test_positive_box_breathing_after_exclusion_is_still_unsupported(prompt: str) -> None:
@@ -193,6 +197,15 @@ def test_negated_box_breathing_clause_preserves_separate_sleep_request(prompt: s
         "No breath focus or box breathing and you can help me sleep",
         "No breath focus or I would like help sleeping",
         "No breath focus and we want to sleep",
+        "No breath focus and my goal is sleep",
+        "No breath focus and our aim is sleep",
+        "No breath focus and the session should help me sleep",
+        "No breath focus, and a calming session could help me sleep",
+        "Don’t use breath focus and sleep is my goal",
+        "No box breathing or breath focus and my goal is sleep",
+        "No breath focus or box breathing and our aim is sleep",
+        "No breath focus and my partner wants to sleep",
+        "No breath focus, sleep is my goal",
     ],
 )
 def test_independent_sleep_request_keeps_breath_exclusion(prompt: str) -> None:
@@ -214,6 +227,9 @@ def test_independent_sleep_request_keeps_breath_exclusion(prompt: str) -> None:
         "No breath focus and I don't want to sleep",
         "No breath focus and I don’t want to sleep",
         "No breath focus and you should avoid helping me fall asleep",
+        "No breath focus and my goal is not sleep",
+        "No breath focus and our aim isn’t sleep",
+        "No breath focus and the session should not help me sleep",
     ],
 )
 def test_actual_sleep_negation_remains_daytime_across_clauses(prompt: str) -> None:
@@ -222,6 +238,29 @@ def test_actual_sleep_negation_remains_daytime_across_clauses(prompt: str) -> No
     assert session.kind != "sleep"
     assert session.posture == "sitting"
     assert session.recipe.ending == "daytime_reorientation"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "No breath focus and sleep",
+        "No sleep or breath focus",
+        "No breath focus or box breathing or sleep",
+        "No sleep or box breathing or breath focus",
+        "Don’t use breath focus or box breathing or sleep",
+        "Avoid sleep and breath focus",
+        "No breath focus, box breathing, or sleep",
+        "No breath focus, sleep, or box breathing",
+    ],
+)
+def test_coordinated_sleep_and_breath_objects_keep_shared_negation(prompt: str) -> None:
+    session = route_session(prompt, 180)
+
+    assert session.kind != "sleep"
+    assert session.posture == "sitting"
+    assert session.recipe.ending == "daytime_reorientation"
+    assert session.breath_excluded
+    assert session.anchor == "sound"
 
 
 @pytest.mark.parametrize(

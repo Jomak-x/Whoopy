@@ -31,12 +31,17 @@ def _product_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "config" / "default.yaml").write_text("profile: standard\n")
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts" / "moss_tts_worker.py").write_text("print('worker')\n")
+    (tmp_path / "scripts" / "mlx_qwen3_tts_worker.py").write_text("print('mlx worker')\n")
     wheel = tmp_path / "whoopy-0.1.0-py3-none-any.whl"
     with ZipFile(wheel, "w") as archive:
         for path in package.rglob("*"):
             if path.is_file():
                 archive.write(path, path.relative_to(tmp_path).as_posix())
-        for relative in ("config/default.yaml", "scripts/moss_tts_worker.py"):
+        for relative in (
+            "config/default.yaml",
+            "scripts/moss_tts_worker.py",
+            "scripts/mlx_qwen3_tts_worker.py",
+        ):
             archive.write(tmp_path / relative, f"whoopy-0.1.0.data/data/share/whoopy/{relative}")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(whoopy, "__file__", str(package / "__init__.py"))
@@ -61,6 +66,7 @@ def test_acceptance_attests_matching_executed_package_and_resources(
         "whoopy/resources/pacing.yaml",
         "config/default.yaml",
         "scripts/moss_tts_worker.py",
+        "scripts/mlx_qwen3_tts_worker.py",
         "whoopy/extra.py",
     ],
 )
@@ -71,6 +77,28 @@ def test_acceptance_rejects_same_version_wheel_with_different_executed_bytes(
     wheel = _product_fixture(tmp_path, monkeypatch)
     with (tmp_path / changed_path).open("a") as target:
         target.write("\n# Different same-version product bytes\n")
+
+    with pytest.raises(SystemExit, match="does not match the executed product"):
+        local_v1_acceptance.main(
+            [
+                "--scenario",
+                str(scenario),
+                "--output",
+                str(tmp_path / "receipt.json"),
+                "--product-wheel",
+                str(wheel),
+            ]
+        )
+
+    assert not (tmp_path / "receipt.json").exists()
+
+
+def test_acceptance_rejects_missing_packaged_worker_at_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scenario = Path("config/acceptance/local-v1-platform-v1.json").resolve()
+    wheel = _product_fixture(tmp_path, monkeypatch)
+    (tmp_path / "scripts" / "mlx_qwen3_tts_worker.py").unlink()
 
     with pytest.raises(SystemExit, match="does not match the executed product"):
         local_v1_acceptance.main(

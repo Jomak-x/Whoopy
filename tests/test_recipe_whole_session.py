@@ -838,6 +838,14 @@ def test_external_sound_anchor_rejects_switch_to_breath_attention() -> None:
         "You needn't wake up. Rest with familiar contact.",
         "You needn\u2019t open your eyes. Rest with familiar contact.",
         "Do not open your eyes or become alert. Allow quiet rest with familiar contact.",
+        "You do not need to move your hands or open your eyes. Rest with familiar contact.",
+        "You don\u2019t have to move your feet and open your eyes. Rest with familiar contact.",
+        "No need to move your fingers or to open your eyes. Rest with familiar contact.",
+        "You needn't move your hands and feet or become alert. Rest with familiar contact.",
+        "Do not move your hands or your feet and open your eyes. Rest with familiar contact.",
+        "Without needing to move your body or wake up, rest with familiar contact.",
+        "You do not need to move a finger or open your eyes. Rest with familiar contact.",
+        "No need to move an arm and open your eyes. Rest with familiar contact.",
     ],
 )
 def test_sleep_ending_accepts_explicitly_negated_waking_actions_without_prose_changes(
@@ -866,6 +874,11 @@ def test_sleep_ending_accepts_explicitly_negated_waking_actions_without_prose_ch
         "Do not worry and open your eyes to notice the room.",
         "You don't need to move; wake up and notice the room.",
         "You do not need to open your eyes, but become alert and notice the room.",
+        "You do not need to move your hands, but open your eyes. Rest with familiar contact.",
+        "You needn't move your feet; open your eyes and rest with familiar contact.",
+        "No need to move your hands or open your eyes. Become alert and rest with contact.",
+        "Do not move your hands and then open your eyes. Rest with familiar contact.",
+        "You don't need to move your hands and you can open your eyes. Rest with contact.",
     ],
 )
 def test_sleep_ending_still_rejects_positive_and_mixed_waking_clauses(ending: str) -> None:
@@ -902,6 +915,86 @@ def test_sleep_breath_mentions_remain_strict_even_when_negated(reflection: str) 
     ):
         run(adapter, "Good-night reflection in bed without breathing", 300)
     assert len(adapter.requests) == 2
+
+
+@pytest.mark.parametrize(
+    "separator",
+    [
+        "\n\n",
+        "\n \n",
+        "\n\t \n",
+        "\r\n\r\n",
+        "\r\n \t\r\n",
+        "\r\r",
+        "\u2028 \u2028",
+        "\v\v",
+    ],
+)
+def test_embedded_paragraph_separators_are_rejected_without_normalizing_prose(
+    separator: str,
+) -> None:
+    def mutate(output: FixtureDraft) -> None:
+        paragraph = output["sections"][0]["paragraphs"][0]
+        output["sections"][0]["paragraphs"][0] = paragraph.replace(" ", separator, 1)
+
+    adapter = WholeSessionAdapter(mutate)
+    result = run(adapter)
+
+    assert len(adapter.requests) == 2
+    assert separator in adapter.outputs[0]["sections"][0]["paragraphs"][0]
+    assert result.raw_attempts[0].validation_error == (
+        "comfort paragraph 1: paragraph strings must not contain blank separator lines"
+    )
+    assert result.raw_attempts[-1].validation_error is None
+    for section, fixture in zip(result.sections, adapter.outputs[1]["sections"], strict=True):
+        assert section.text == "\n\n".join(fixture["paragraphs"])
+
+
+@pytest.mark.parametrize("line_break", ["\n", "\r\n", "\r", "\u2028", "\v"])
+def test_single_line_breaks_preserve_prose_and_recover_matching_quiet_limits(
+    line_break: str,
+) -> None:
+    from whoopy.meditation.whole_session import recipe_quiet_limits
+    from whoopy.timeline import SilenceSegment
+
+    def mutate(output: FixtureDraft) -> None:
+        for section in output["sections"]:
+            section["paragraphs"] = [
+                paragraph.replace(" ", line_break, 1) for paragraph in section["paragraphs"]
+            ]
+
+    adapter = WholeSessionAdapter(mutate, always_mutate=True)
+    result = run(adapter, "Good-night reflection in bed with contact", 300)
+
+    assert len(adapter.requests) == 1
+    assert result.raw_attempts[0].validation_error is None
+    for section, fixture in zip(result.sections, adapter.outputs[0]["sections"], strict=True):
+        assert section.text == "\n\n".join(fixture["paragraphs"])
+        assert all(paragraph in result.script for paragraph in fixture["paragraphs"])
+    limits = recipe_quiet_limits(result.timeline, result.plan, result.sections)
+    silences = [
+        segment for segment in result.timeline.segments if isinstance(segment, SilenceSegment)
+    ]
+    expected_caps = [
+        22_000 if section["section_id"] in {"release", "taper"} else 16_000
+        for section in adapter.outputs[0]["sections"]
+        for _ in section["paragraphs"]
+    ]
+    assert [limits[segment.id] for segment in silences] == expected_caps
+
+
+def test_quiet_limit_recovery_rejects_speech_that_does_not_match_authored_paragraphs() -> None:
+    from whoopy.meditation.whole_session import recipe_quiet_limits
+    from whoopy.timeline import SpeechSegment
+
+    result = run(WholeSessionAdapter())
+    segments = list(result.timeline.segments)
+    index = next(i for i, segment in enumerate(segments) if isinstance(segment, SpeechSegment))
+    segments[index] = segments[index].model_copy(update={"text": "Unrelated spoken content."})
+    timeline = result.timeline.model_copy(update={"segments": segments})
+
+    with pytest.raises(ValueError, match="preceding speech does not match an authored paragraph"):
+        recipe_quiet_limits(timeline, result.plan, result.sections)
 
 
 def test_schema_algorithm_change_invalidates_completed_checkpoint(

@@ -24,6 +24,7 @@ from whoopy.pipeline.runs import (
     QUALITY_FILENAME,
     TIMELINE_FILENAME,
     RunExecution,
+    RunRecord,
     RunRecovery,
     RunStage,
     RunStatus,
@@ -324,7 +325,9 @@ def test_alternative_generation_retains_current_audio_after_an_edit(
     )
     alternative_audio = PcmAudio(b"\x50\x00" * 480, 24_000)
 
-    def regenerate(run_id: str, segment_id: str) -> dict[str, str]:
+    def regenerate(
+        run_id: str, segment_id: str, *, _finalizing_take: bool = False
+    ) -> dict[str, str]:
         selected = takes.selected(run_id, segment_id)
         assert selected is not None and selected != stale.take_id
         selected_manifest = next(
@@ -466,21 +469,22 @@ def test_alternative_finalizer_rechecks_ownership_before_restoring_take(
     application._tasks[run_id] = generation_task
     completion_observed = Event()
     selection_finished = Event()
-    task_public = application._task_public
+    read_record = application._record
     resumed: list[str] = []
 
-    def observed_completion(task: GenerationTask) -> dict[str, object]:
-        state = task_public(task)
-        completion_observed.set()
-        assert selection_finished.wait(5)
-        return state
+    def observed_completion(value: str) -> RunRecord | None:
+        record = read_record(value)
+        if not completion_observed.is_set():
+            completion_observed.set()
+            assert selection_finished.wait(5)
+        return record
 
     def resume(value: str) -> dict[str, str]:
         resumed.append(value)
         application._tasks[value] = GenerationTask(task_id=value, run_id=value)
         return {"run_id": value}
 
-    monkeypatch.setattr(application, "_task_public", observed_completion)
+    monkeypatch.setattr(application, "_record", observed_completion)
     monkeypatch.setattr(application, "resume_run", resume)
     monkeypatch.setattr(application, "_resume_run_admitted", resume)
     with ThreadPoolExecutor(max_workers=1) as executor:

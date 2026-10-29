@@ -1477,7 +1477,7 @@ class LocalWebApplication:
                 # the title convention to records that genuinely lack the field;
                 # a current Studio meditation may legitimately begin with “Lab”.
                 audience = "lab"
-        return {
+        summary = {
             "run_id": str(record.run_id),
             "status": record.status.value,
             "source_kind": record.source_kind,
@@ -1493,6 +1493,9 @@ class LocalWebApplication:
             and (directory / "narration.wav").is_file(),
             "error": record.error,
             "resumable": record.status in (RunStatus.FAILED, RunStatus.INTERRUPTED)
+            and not (
+                execution is not None and execution.interruption_kind == "take_finalization_failed"
+            )
             and (
                 record.source_kind != "fixture_prompt"
                 or self._web_launch_request_path(str(record.run_id)).is_file()
@@ -1507,6 +1510,9 @@ class LocalWebApplication:
             "execution": (execution.model_dump(mode="json") if execution is not None else None),
             "live_metrics": live_metrics,
         }
+        with self._task_lock:
+            task = self._tasks.get(str(record.run_id))
+        return summary if task is None else self._task_summary(summary, task)
 
     def run(self, run_id: str) -> dict[str, Any] | None:
         """Read one durable record; this works after a web-server restart."""
@@ -2012,6 +2018,11 @@ class LocalWebApplication:
             raise ValueError(
                 f"Run {run_id} is {record.status.value}; only failed or interrupted runs resume."
             )
+        if (
+            record.execution is not None
+            and record.execution.interruption_kind == "take_finalization_failed"
+        ):
+            raise ValueError("Choose a retained take before resuming this meditation.")
         launch_request_exists = self._web_launch_request_path(run_id).is_file()
         if record.source_kind == "fixture_prompt" and launch_request_exists:
             try:
@@ -2072,7 +2083,9 @@ class LocalWebApplication:
             raise ValueError("Durable browser launch request checksum does not match.")
         return cast(dict[str, Any], payload)
 
-    def regenerate_segment(self, run_id: str, segment_id: str) -> dict[str, Any] | None:
+    def regenerate_segment(
+        self, run_id: str, segment_id: str, *, _finalizing_take: bool = False
+    ) -> dict[str, Any] | None:
         """Ask the CLI to invalidate and rebuild one named speech segment."""
 
         record = self._record(run_id)
@@ -2100,6 +2113,7 @@ class LocalWebApplication:
             "regenerate-segment",
             segment_id,
             prevalidated=True,
+            finalizing_take=_finalizing_take,
         )
 
     def list_segment_takes(self, run_id: str, segment_id: str) -> dict[str, Any] | None:
@@ -2124,12 +2138,11 @@ class LocalWebApplication:
                 run_id, segment_id, source="original", select_if_unset=False
             )
             selected = takes.choose(run_id, segment_id, original.take_id).selected_take_id
-            task = self.regenerate_segment(run_id, segment_id)
+            task = self.regenerate_segment(run_id, segment_id, _finalizing_take=True)
             if task is None:
                 return None
             with self._task_lock:
                 generation_task = self._tasks[run_id]
-                generation_task.finalizing_take = True
             thread = threading.Thread(
                 target=self._finalize_alternative_take,
                 args=(generation_task, segment_id, selected),
@@ -2161,8 +2174,10 @@ class LocalWebApplication:
                     ):
                         return
                     active = generation_task.active
-                state = self._task_public(generation_task)
-                if not active and state["status"] not in {"queued", "running"}:
+                record = self._record(run_id)
+                if not active and (
+                    record is None or record.status not in {RunStatus.QUEUED, RunStatus.RUNNING}
+                ):
                     break
                 time.sleep(0.2)
             else:
@@ -2175,7 +2190,8 @@ class LocalWebApplication:
                         or generation_task.active
                     ):
                         return
-                if self._task_public(generation_task)["status"] != "completed":
+                record = self._record(run_id)
+                if record is None or record.status is not RunStatus.COMPLETED:
                     return
                 takes = SegmentTakeStore(RunStore(self.runs_directory))
                 regeneration_attempt_id: UUID | None = None
@@ -2204,6 +2220,35 @@ class LocalWebApplication:
                     ),
                 )
                 self._resume_run_admitted(run_id)
+        except (OSError, ValueError, RunStoreError) as error:
+            with self._operation_admission_lock:
+                with self._task_lock:
+                    if self._tasks.get(generation_task.run_id) is not generation_task:
+                        return
+                    generation_task.error = (
+                        f"Could not finish the alternative take ({type(error).__name__}). "
+                        "Choose a retained take before resuming."
+                    )
+                store = RunStore(self.runs_directory)
+                try:
+                    with RunLock(store.run_directory(generation_task.run_id)):
+                        record = store.load(generation_task.run_id)
+                        store.save(
+                            record.transition(
+                                RunStatus.FAILED,
+                                updated_at=datetime.now(UTC),
+                                execution=RunExecution(
+                                    stage=RunStage.ASSEMBLING,
+                                    interruption_kind="take_finalization_failed",
+                                    message=generation_task.error[:2_000],
+                                ),
+                                error=generation_task.error,
+                            )
+                        )
+                except (OSError, RunStoreError, RunLockUnavailable) as persist_error:
+                    generation_task.error += (
+                        f" Could not save the failure ({type(persist_error).__name__})."
+                    )
         finally:
             with self._operation_admission_lock, self._task_lock:
                 generation_task.finalizing_take = False
@@ -2255,7 +2300,7 @@ class LocalWebApplication:
     def waveform(self, run_id: str, *, points: int) -> dict[str, Any] | None:
         """Return PCM positions plus canonical editor and take context."""
 
-        if self._record(run_id) is None:
+        if self._record(run_id) is None or self.audio_path(run_id) is None:
             return None
         store = RunStore(self.runs_directory)
         payload = waveform_payload(
@@ -2309,7 +2354,7 @@ class LocalWebApplication:
     def segment_audition(self, run_id: str, segment_id: str) -> bytes | None:
         """Return an exact crop from the finished master; never resynthesize."""
 
-        if self._record(run_id) is None:
+        if self._record(run_id) is None or self.audio_path(run_id) is None:
             return None
         store = RunStore(self.runs_directory)
         return segment_wave_bytes(
@@ -2334,6 +2379,8 @@ class LocalWebApplication:
     def section_audition(self, run_id: str, section_id: str) -> bytes | None:
         """Return an exact crop for one reviewed plan section."""
 
+        if self.audio_path(run_id) is None:
+            return None
         sections = self.sections(run_id)
         if sections is None:
             return None
@@ -2415,15 +2462,16 @@ class LocalWebApplication:
         note: str,
     ) -> dict[str, Any]:
         task = GenerationTask(task_id=run_id, run_id=run_id, mode="plan_regeneration")
-        with self._admit_generation(), self._task_lock:
-            self._tasks[run_id] = task
-        input_root = self.runs_directory / run_id / "history" / "editor-inputs"
-        input_root.mkdir(parents=True, exist_ok=True)
-        input_path = input_root / f"{uuid4()}.plan.json"
-        RunStore(self.runs_directory)._write_bytes(
-            input_path,
-            (plan.model_dump_json(indent=2) + "\n").encode("utf-8"),
-        )
+        with self._admit_generation():
+            input_root = self.runs_directory / run_id / "history" / "editor-inputs"
+            input_root.mkdir(parents=True, exist_ok=True)
+            input_path = input_root / f"{uuid4()}.plan.json"
+            RunStore(self.runs_directory)._write_bytes(
+                input_path,
+                (plan.model_dump_json(indent=2) + "\n").encode("utf-8"),
+            )
+            with self._task_lock:
+                self._tasks[run_id] = task
         thread = threading.Thread(
             target=self._run_plan_regeneration,
             args=(task, input_path, note),
@@ -2576,7 +2624,27 @@ class LocalWebApplication:
             # The record was successfully created before the task was stored;
             # this branch is only defensive against external manual deletion.
             return {"task_id": task.task_id, "run_id": task.run_id, "status": "missing"}
-        result = {"task_id": task.task_id, **run}
+        return {"task_id": task.task_id, **self._task_summary(run, task)}
+
+    @staticmethod
+    def _task_summary(run: dict[str, Any], task: GenerationTask) -> dict[str, Any]:
+        result = dict(run)
+        if task.active or (task.mode == "alternative_take" and task.error is not None):
+            result["has_audio"] = False
+        if task.finalizing_take:
+            result.update(
+                {
+                    "status": "running",
+                    "has_audio": False,
+                    "duration_seconds": None,
+                    "quality_passed": None,
+                    "resumable": False,
+                    "execution": {
+                        "stage": "finalizing",
+                        "message": "Saving the alternative and restoring the selected take.",
+                    },
+                }
+            )
         if task.active and result.get("status") in {"completed", "interrupted", "failed"}:
             # The durable worker writes its stopped record before the
             # supervising child has necessarily returned and released the run
@@ -2585,6 +2653,7 @@ class LocalWebApplication:
             result.update(
                 {
                     "status": "running",
+                    "resumable": False,
                     "execution": {
                         "stage": "finalizing",
                         "message": (
@@ -2594,6 +2663,8 @@ class LocalWebApplication:
                     },
                 }
             )
+        if not task.active and task.error is not None and not task.finalizing_take:
+            result.update({"status": "failed", "error": task.error})
         if task.mode == "plan_regeneration":
             if task.active:
                 result.update(
@@ -2619,20 +2690,30 @@ class LocalWebApplication:
         segment_id: str | None = None,
         *,
         prevalidated: bool = False,
+        finalizing_take: bool = False,
     ) -> dict[str, Any] | None:
         if not prevalidated and self.run(run_id) is None:
             return None
         admission = nullcontext() if command_name == "cancel" else self._admit_generation()
         with admission:
-            return self._launch_recovery_command_admitted(run_id, command_name, segment_id)
+            return self._launch_recovery_command_admitted(
+                run_id, command_name, segment_id, finalizing_take=finalizing_take
+            )
 
     def _launch_recovery_command_admitted(
         self,
         run_id: str,
         command_name: str,
         segment_id: str | None = None,
+        *,
+        finalizing_take: bool = False,
     ) -> dict[str, Any]:
-        task = GenerationTask(task_id=run_id, run_id=run_id)
+        task = GenerationTask(
+            task_id=run_id,
+            run_id=run_id,
+            mode="alternative_take" if finalizing_take else None,
+            finalizing_take=finalizing_take,
+        )
         with self._task_lock:
             existing = self._tasks.get(run_id)
             if existing is not None and existing.active:
@@ -3077,6 +3158,21 @@ class LocalWebApplication:
         try:
             parsed = UUID(run_id)
         except ValueError:
+            return None
+        with self._task_lock:
+            task = self._tasks.get(str(parsed))
+            if task is not None and (
+                task.active
+                or task.finalizing_take
+                or (task.mode == "alternative_take" and task.error is not None)
+            ):
+                return None
+        record = self._record(str(parsed))
+        if (
+            record is not None
+            and record.execution is not None
+            and record.execution.interruption_kind == "take_finalization_failed"
+        ):
             return None
         path = self.runs_directory / str(parsed) / "narration.wav"
         return path if path.is_file() else None

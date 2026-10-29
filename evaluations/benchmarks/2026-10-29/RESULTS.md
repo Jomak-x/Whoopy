@@ -253,3 +253,22 @@ an implicit delivery reset. After making that reset explicit, all four cases of
 the affected ownership test passed in 0.40 seconds, preserving its assertions.
 Touched Python files were formatted. No full repository test/lint/type or CI
 gate ran in this phase.
+
+## Follow-up review corrections after bba3104
+
+Six selected findings were corrected: noun-subject request clauses, coordinated
+negated waking actions, paragraph/quiet-bound identity, plan-input admission
+rollback, alternative-take completion visibility, and packaged-worker acceptance
+inventory including MLX. The [review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-bba3104)
+retains finding IDs, root causes and executable regression coverage.
+
+Focused verification passed **462 tests in 13.14 seconds**. Coverage includes
+clause routing, paragraph validation and quiet recovery, plan-input failures,
+alternative-take finalization and restart failures, selected-audio/export access,
+admission/ownership and wheel worker resolution. Touched Python files were
+formatted; the only test warning was the existing Starlette/httpx deprecation.
+
+No new live inference, raw-evidence publication or external receipt reconciliation
+was performed. Historical model evidence retains its actual producer revisions.
+Full repository gates, native Linux/Windows checks and final Document/PR
+reconciliation remain with the outer executor.

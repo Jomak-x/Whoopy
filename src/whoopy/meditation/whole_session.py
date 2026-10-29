@@ -110,11 +110,18 @@ WAKING_ACTION = (
     r"return to (?:the|your) (?:day|room|surroundings)"
 )
 WAKING = re.compile(rf"\b(?:{WAKING_ACTION})\b", re.I)
+MOVEMENT_OBJECT = (
+    r"(?:(?:your|the|a|an)\s+)?(?:hands?|feet|fingers?|toes?|arms?|legs?|head|body|shoulders?)"
+)
+NEGATABLE_ACTION = (
+    rf"move(?:\s+{MOVEMENT_OBJECT}(?:\s+(?:or|and)\s+{MOVEMENT_OBJECT})*)?"
+    rf"|{WAKING_ACTION}"
+)
 NEGATED_WAKING = re.compile(
     r"\b(?:no need to|(?:do not|don't|don\u2019t) (?:need|have) to|"
     r"do not|don't|don\u2019t|need not|needn't|needn\u2019t|never|without needing to)\s+"
-    rf"(?:move|{WAKING_ACTION})"
-    rf"(?:\s+(?:or|and)\s+(?:to\s+)?(?:move|{WAKING_ACTION}))*\b",
+    rf"(?:{NEGATABLE_ACTION})"
+    rf"(?:\s+(?:or|and)\s+(?:to\s+)?(?:{NEGATABLE_ACTION}))*\b",
     re.I,
 )
 LYING_CONTRADICTION = re.compile(
@@ -215,7 +222,13 @@ def recipe_quiet_limits(
         if isinstance(segment, SpeechSegment):
             preceding_chunks.append(segment.text)
         elif isinstance(segment, SilenceSegment):
-            limits[segment.id] = paragraph_limits.get(tuple(preceding_chunks), 7_999)
+            chunks = tuple(preceding_chunks)
+            if chunks not in paragraph_limits:
+                raise ValueError(
+                    f"Cannot recover quiet limit for {segment.id}: preceding speech "
+                    "does not match an authored paragraph"
+                )
+            limits[segment.id] = paragraph_limits[chunks]
             preceding_chunks.clear()
         else:
             preceding_chunks.clear()
@@ -358,6 +371,8 @@ def _validate_session(
             )
         for index, (text, slot) in enumerate(zip(section.paragraphs, section_slots, strict=True)):
             label = f"{beat.id} paragraph {index + 1}"
+            if any(not line.strip() for line in text.splitlines()):
+                errors.append(f"{label}: paragraph strings must not contain blank separator lines")
             try:
                 validate_meditation_text(text)
             except ValueError as error:
