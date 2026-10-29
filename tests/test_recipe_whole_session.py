@@ -736,17 +736,33 @@ def test_custom_recipe_library_controls_draft_and_checkpoint(tmp_path: Path) -> 
         run(WholeSessionAdapter(), workspace=workspace)
 
 
-def test_paragraph_quiet_bounds_survive_pacing_and_real_speech_fitting() -> None:
+@pytest.mark.parametrize("paragraph_format", ["plain", "emphasis", "split"])
+def test_paragraph_quiet_bounds_survive_pacing_and_real_speech_fitting(
+    paragraph_format: str,
+) -> None:
     from whoopy.audio.models import PcmAudio
     from whoopy.evaluation.pacing_profiles import PacingProfileRegistry, apply_pacing_profile
     from whoopy.meditation.models import DraftedSection
     from whoopy.meditation.pacing import sentence_word_count
     from whoopy.meditation.whole_session import recipe_quiet_limits
     from whoopy.pipeline.worker import WorkerError, fit_generated_timeline_to_real_speech
-    from whoopy.timeline import SilenceSegment, SpeechSegment
+    from whoopy.timeline import SilenceSegment, SpeechSegment, build_script_timeline
 
     result = run(WholeSessionAdapter(), "Help me sleep tonight", 600)
     sections = list(result.sections)
+    if paragraph_format != "plain":
+        for index, drafted in enumerate(sections):
+            paragraphs = []
+            for paragraph in drafted.text.split("\n\n"):
+                if paragraph_format == "split":
+                    paragraph = "An ordinary moment unfolds. " * 30 + paragraph
+                paragraphs.append(f"**{paragraph}**")
+            text = "\n\n".join(paragraphs)
+            sections[index] = DraftedSection(
+                section_id=drafted.section_id,
+                text=text,
+                word_count=sentence_word_count(text),
+            )
     section = sections[2]
     paragraphs = section.text.split("\n\n")
     paragraphs[0] = "This ordinary moment is enough."
@@ -756,17 +772,19 @@ def test_paragraph_quiet_bounds_survive_pacing_and_real_speech_fitting() -> None
         text=edited_text,
         word_count=sentence_word_count(edited_text),
     )
-    original_text = section.text.split("\n\n")[0]
-    timeline = result.timeline.model_copy(
-        update={
-            "segments": [
-                segment.model_copy(update={"text": paragraphs[0]})
-                if isinstance(segment, SpeechSegment) and segment.text == original_text
-                else segment
-                for segment in result.timeline.segments
-            ]
-        }
+    authored_paragraphs = [
+        paragraph for section in sections for paragraph in section.text.split("\n\n")
+    ]
+    timeline = build_script_timeline(
+        run_id=RUN_ID,
+        script="\n\n".join(f"{paragraph}\n\n[pause: 1s]" for paragraph in authored_paragraphs),
+        created_at=result.timeline.created_at,
+        source="generated_prompt",
     )
+    if paragraph_format == "split":
+        assert sum(isinstance(segment, SpeechSegment) for segment in timeline.segments) > len(
+            authored_paragraphs
+        )
     caps = recipe_quiet_limits(timeline, result.plan, sections)
     assert 7_999 in caps.values()
     assert 16_000 in caps.values()

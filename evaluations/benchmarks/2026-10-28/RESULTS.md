@@ -125,7 +125,7 @@ comparison. It represents no named real person.
 | MLX Qwen Ryan follow-up | Pass, WER 0 | 60.16 | 48.79 | 0.81 |
 | Chatterbox Multilingual v3, synthetic reference | Pass, WER 0 | 41.68 | 62.46 | 1.50 |
 | MOSS Local v1.5, synthetic reference | Pass, WER 0 | 51.44 | 41.69 | 0.81 |
-| VoxCPM2 designed male | Qualified by paragraph ASR plus exact assembly | 42.56 | 141.78 | 3.33 |
+| VoxCPM2 designed male | Review: full-file disagreement; positive paragraph/assembly evidence | 42.56 | 141.78 | 3.33 |
 | Native Qwen MPS Ryan | Fail under localized-error rule | 54.08 | 635.59 | 11.75 |
 | Dots SOAR | Incomplete: memory-pressure stop, no complete waveform | — | — | — |
 
@@ -138,7 +138,8 @@ larger allocations. Process RSS and accelerator allocations overlap on unified
 memory and must not be added.
 
 Independent local Whisper receives no expected-text prompt. Eight of nine
-completed full auditions qualified; Dots did not complete. The separate fresh
+completed full auditions qualified under the earlier aggregate policy; the current
+strict audition marks Vox **Review**. Dots did not complete. The separate fresh
 production Sherpa Kokoro control (speaker 16, native speed 0.6) passed under the
 earlier tolerance with 123/123 ordered words and WER 0.00813, reflecting one added
 initial word. The strict policy now marks that control **Review**. This
@@ -157,9 +158,11 @@ Important evidence that the summary alone must not conceal:
 - Vox's original full-file recognizer omitted its final 28 words. All four native
   paragraphs independently matched 123/123 combined. The aggregate report checks
   that the raw file is exactly their ordered FLOAT32 concatenation (2,042,912
-  frames, 48 kHz mono). The original full-file failure remains. This qualifies the
-  words through segment evidence; it does not claim full-file ASR succeeded or
-  that joins sound natural.
+  frames, 48 kHz mono). The original full-file failure remains. This is positive
+  paragraph/assembly evidence. The current strict audition still marks Vox
+  **Review** for the full-file 28-word tail disagreement. That disagreement is
+  not proof that speech is missing; it does not establish that full-file ASR
+  succeeded or that joins sound natural.
 - Dots was stopped during decoding after severe system swap pressure, before a
   speech waveform returned. Its resource failure says nothing about voice quality.
   A finite MLX allocator cap did not bound total system memory pressure. The final
@@ -169,15 +172,18 @@ Important evidence that the summary alone must not conceal:
   content recognition. Nonzero RMS, a plausible duration or a nonempty ASR
   transcript alone cannot pass this check.
 
-The prepared policy-v3 reassessment contains **8 Pass / 4 Review** across the
-listening selection: eight voice Pass results, one voice Review, and three
-writing Reviews. It reclassifies existing hash-bound recognition evidence; it
+The current strict sidecar contains **7 Pass / 5 Review** across the 12
+listening samples: seven voice Pass results, two voice Reviews (production Kokoro
+and Vox), and three writing Reviews. The earlier **8 Pass / 4 Review** v3 sidecar
+is retained as historical classification evidence. It reclassifies existing hash-bound recognition evidence; it
 contains no new recognition, audio render, or word-perfect claim. Native MPS Ryan
 remains a failure and Dots remains incomplete outside that selection. Vox retains
-its full-file failure alongside the qualified paragraph/assembly chain.
-The [voice manifest](verification/listening/manifest-policy-v3.json) and
+its full-file failure alongside its positive paragraph/assembly chain and current Review label.
+The [strict voice manifest](verification/listening/manifest-policy-v3-strict.json) and
 [writing manifest](writing-listening-policy-v3.json) retain raw/proof links and
-make the review-labelled auditions available for listening.
+make the review-labelled auditions available for listening. The generated
+[current page](review.html) preserves those statuses and proof links; audio stays
+in the local benchmark archive and is not part of this publication.
 
 See [verification/README.md](verification/README.md) for thresholds, exact reports,
 ASR limits and negative controls. Existing listening copies use constant gain

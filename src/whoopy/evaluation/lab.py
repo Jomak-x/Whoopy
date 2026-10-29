@@ -193,7 +193,8 @@ class EvaluationLab:
         existing_trials: Iterable[ProductionTrialResult] = (),
         resumable_runs: dict[UUID, UUID] | None = None,
         should_halt: Callable[[], bool] | None = None,
-        trial_completed: Callable[[tuple[ProductionTrialResult, ...]], None] | None = None,
+        trial_completed: Callable[[tuple[ProductionTrialResult, ...], ProductionTrialResult], None]
+        | None = None,
     ) -> ExperimentReport:
         """Run selected cases candidate-by-candidate through the production port.
 
@@ -255,32 +256,28 @@ class EvaluationLab:
                 )
                 existing = existing_by_key.get((case.id, candidate.candidate_id))
                 if existing is not None and trial_id not in resumable:
-                    if (
-                        candidate.candidate_id == definition.baseline_candidate_id
-                        and existing.success
-                    ):
-                        controlled_source_run_id = existing.source_run_id
-                    continue
-                if trial_id in resumable:
-                    resume = getattr(executor, "resume", None)
-                    if not callable(resume):
-                        raise EvaluationExecutionError(
-                            "production executor cannot resume the interrupted Lab trial"
-                        )
-                    result = resume(request, resumable[trial_id])
+                    result = existing
                 else:
-                    result = executor.execute(request)
-                self._validate_result(request, result)
-                if existing is None:
-                    trials.append(result)
-                else:
-                    trials[trials.index(existing)] = result
-                existing_by_key[(case.id, candidate.candidate_id)] = result
-                resumable.pop(trial_id, None)
-                if trial_completed is not None:
-                    trial_completed(tuple(trials))
-                if should_halt is not None and should_halt():
-                    raise EvaluationExecutionHalted(trials)
+                    if trial_id in resumable:
+                        resume = getattr(executor, "resume", None)
+                        if not callable(resume):
+                            raise EvaluationExecutionError(
+                                "production executor cannot resume the interrupted Lab trial"
+                            )
+                        result = resume(request, resumable[trial_id])
+                    else:
+                        result = executor.execute(request)
+                    self._validate_result(request, result)
+                    if existing is None:
+                        trials.append(result)
+                    else:
+                        trials[trials.index(existing)] = result
+                    existing_by_key[(case.id, candidate.candidate_id)] = result
+                    resumable.pop(trial_id, None)
+                    if trial_completed is not None:
+                        trial_completed(tuple(trials), result)
+                    if should_halt is not None and should_halt():
+                        raise EvaluationExecutionHalted(trials)
                 if candidate.candidate_id == definition.baseline_candidate_id and result.success:
                     controlled_source_run_id = result.source_run_id
                 elif (

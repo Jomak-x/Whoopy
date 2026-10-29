@@ -333,3 +333,65 @@ def test_delete_waits_for_replacement_pointer_and_restores_complete_revision(
     assert restored.revision == 2
     assert manager.load_revision("narrator", 1) == original
     assert (manager.root / original.audio_path).read_bytes() == original_audio
+
+
+@pytest.mark.parametrize("replace_existing", [False, True])
+@pytest.mark.parametrize("publish_before_failure", [False, True])
+def test_pointer_failure_preserves_only_published_revisions_and_allows_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    replace_existing: bool,
+    publish_before_failure: bool,
+) -> None:
+    source = tmp_path / "source.wav"
+    _wav(source, rate=24_000, seconds=1, channels=1)
+    manager = VoiceReferenceManager(tmp_path / "managed")
+    arguments: dict[str, Any] = {
+        "reference_id": "narrator",
+        "display_name": "Narrator",
+        "source_wav": source,
+        "transcript": "Original transcript.",
+        "consent": _consent(),
+    }
+    original = manager.import_wav(**arguments) if replace_existing else None
+    original_audio = (
+        (manager.root / original.audio_path).read_bytes() if original is not None else None
+    )
+    expected_revision = 2 if replace_existing else 1
+    atomic_json = voice_references._atomic_json
+
+    def fail_pointer(path: Path, document: dict[str, Any], *, root: Path) -> None:
+        if publish_before_failure:
+            atomic_json(path, document, root=root)
+        raise OSError("pointer publication interrupted")
+
+    arguments["transcript"] = "Replacement transcript."
+    operation = manager.replace if replace_existing else manager.import_wav
+    monkeypatch.setattr(voice_references, "_atomic_json", fail_pointer)
+    with pytest.raises(OSError, match="pointer publication interrupted"):
+        operation(**arguments)
+    monkeypatch.setattr(voice_references, "_atomic_json", atomic_json)
+
+    reference_directory = manager.root / "references" / "narrator"
+    assert not list(reference_directory.glob("revisions/.revision-*"))
+    if publish_before_failure:
+        assert manager.load("narrator").revision == expected_revision
+        assert manager.load_revision("narrator", expected_revision).transcript_sha256 == (
+            hashlib.sha256(b"Replacement transcript.\n").hexdigest()
+        )
+        operation = manager.replace
+        expected_revision += 1
+    elif original is not None:
+        assert manager.load("narrator") == original
+        assert not (reference_directory / "revisions" / "000002").exists()
+    else:
+        assert not reference_directory.exists()
+        assert not reference_directory.parent.exists()
+        assert manager.list() == ()
+
+    retried = operation(**arguments)
+    assert retried.revision == expected_revision
+    assert manager.load("narrator") == retried
+    if original is not None:
+        assert manager.load_revision("narrator", 1) == original
+        assert (manager.root / original.audio_path).read_bytes() == original_audio

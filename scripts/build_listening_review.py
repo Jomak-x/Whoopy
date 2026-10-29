@@ -56,9 +56,10 @@ def evidence_links(original: str, current: str, root: Path) -> str:
     return " · ".join(f'<a href="{local_url(path, root)}">{label}</a>' for path, label in links)
 
 
-def build(root: Path) -> Path:
+def build(root: Path, *, manifest_path: Path | None = None, output: Path | None = None) -> Path:
     root = root.resolve()
-    manifest = json.loads((root / "verification/listening/manifest-policy-v3.json").read_text())
+    manifest_path = manifest_path or root / "verification/listening/manifest-policy-v3-strict.json"
+    manifest = json.loads(manifest_path.read_text())
     records = manifest["records"]
     random.Random(42).shuffle(records)
     cards = []
@@ -71,6 +72,13 @@ def build(root: Path) -> Path:
         proof = evidence_links(record["original_raw_verification"], record["verification"], root)
         status = record["status"]
         description = screening_label(status)
+        if record.get("full_file_normalized_word_edit_count"):
+            description += (
+                f" Full-file ASR has {int(record['full_file_normalized_word_edit_count'])} "
+                "normalized word edits. This is a recognition disagreement, not proof that "
+                "speech is missing. Exact paragraph recognition and PCM assembly remain "
+                "positive evidence."
+            )
         cards.append(f'''<article data-key="{key}" data-status="{status}">
 <h3>{label} <small class="identity">{html.escape(record["candidate"])}</small></h3>
 <p>{description} Listening copy: -23 LUFS, constant gain only.</p>
@@ -124,7 +132,7 @@ Your notes stay in this browser. No ratings are sent anywhere.</p>
 Dots was stopped for memory pressure; Fish Drama 3 was excluded by memory preflight and Higgs by license fit.</p>
 <p><a href="voices/LICENSE-AUDIT.txt">License audit</a> · <a href="voices/excluded-candidates.json">Exclusions</a> ·
 <a href="voice-script.txt">Shared voice script</a></p></main><script>{script}</script></html>"""
-    output = root / "review.html"
+    output = output or root / "review.html"
     output.write_text(page, encoding="utf-8")
     return output
 
@@ -132,7 +140,10 @@ Dots was stopped for memory pressure; Fish Drama 3 was excluded by memory prefli
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
-    print(build(parser.parse_args().root))
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    print(build(args.root, manifest_path=args.manifest, output=args.output))
 
 
 if __name__ == "__main__":

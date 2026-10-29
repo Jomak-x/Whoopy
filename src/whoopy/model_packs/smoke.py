@@ -358,6 +358,7 @@ class OfflineModelPackSmokeRunner:
                 reference_text=reference_text,
                 consent_scope=consent_scope,
                 models_root=self.models_root,
+                hardware_requirement=pack.hardware,
             )
         )
 

@@ -152,24 +152,33 @@ def recipe_quiet_limits(
         )
         for index, section in enumerate(plan.sections)
     }
-    paragraph_limits: dict[str, int] = {}
+    paragraph_limits: dict[tuple[str, ...], int] = {}
     for section in sections:
         for paragraph in section.text.split("\n\n"):
-            text = " ".join(paragraph.split())
+            compiled = build_script_timeline(
+                run_id=timeline.run_id,
+                script=paragraph,
+                created_at=timeline.created_at,
+                source="generated_prompt",
+            )
+            chunks = tuple(
+                segment.text for segment in compiled.segments if isinstance(segment, SpeechSegment)
+            )
+            text = " ".join(chunks)
             cap = section_limits[section.section_id]
             if not _prepared_for_quiet(section.section_id, plan.meditation_kind, text):
                 cap = min(7_999, cap)
-            paragraph_limits[text] = min(paragraph_limits.get(text, cap), cap)
+            paragraph_limits[chunks] = min(paragraph_limits.get(chunks, cap), cap)
     limits: dict[str, int] = {}
-    preceding_text: str | None = None
+    preceding_chunks: list[str] = []
     for segment in timeline.segments:
         if isinstance(segment, SpeechSegment):
-            preceding_text = " ".join(segment.text.split())
+            preceding_chunks.append(segment.text)
         elif isinstance(segment, SilenceSegment):
-            limits[segment.id] = paragraph_limits.get(preceding_text or "", 7_999)
-            preceding_text = None
+            limits[segment.id] = paragraph_limits.get(tuple(preceding_chunks), 7_999)
+            preceding_chunks.clear()
         else:
-            preceding_text = None
+            preceding_chunks.clear()
     return limits
 
 

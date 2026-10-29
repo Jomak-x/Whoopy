@@ -12,7 +12,7 @@ import uuid
 import wave
 from array import array
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -369,9 +369,21 @@ class VoiceReferenceManager:
         destination = revisions_directory / f"{revision:06d}"
         if destination.exists():
             raise VoiceReferenceError(f"voice reference revision {revision} already exists")
-        revisions_directory.mkdir(parents=True, exist_ok=True)
-        staging = Path(tempfile.mkdtemp(prefix=".revision-", dir=revisions_directory))
+        created_directories = [
+            directory
+            for directory in (reference_directory.parent, reference_directory, revisions_directory)
+            if not directory.exists()
+        ]
+        staging: Path | None = None
+        active_path = reference_directory / "active.json"
+        active_document = {
+            "schema_version": 1,
+            "active_revision": revision,
+            "revision_id": revision_id,
+        }
         try:
+            revisions_directory.mkdir(parents=True, exist_ok=True)
+            staging = Path(tempfile.mkdtemp(prefix=".revision-", dir=revisions_directory))
             (staging / "reference.wav").write_bytes(canonical)
             (staging / "transcript.txt").write_bytes(transcript_payload)
             relative = destination.relative_to(self.root)
@@ -405,21 +417,26 @@ class VoiceReferenceManager:
                 record.model_dump_json(indent=2) + "\n", encoding="utf-8"
             )
             staging.replace(destination)
-            _atomic_json(
-                reference_directory / "active.json",
-                {
-                    "schema_version": 1,
-                    "active_revision": revision,
-                    "revision_id": revision_id,
-                },
-                root=self.root,
-            )
+            _atomic_json(active_path, active_document, root=self.root)
             return record
         except BaseException:
-            if staging.exists():
-                for child in staging.iterdir():
-                    child.unlink(missing_ok=True)
-                staging.rmdir()
+            try:
+                published = json.loads(active_path.read_text(encoding="utf-8")) == active_document
+            except (FileNotFoundError, ValueError):
+                published = False
+            except OSError:
+                published = True
+            cleanup = [staging]
+            if not published:
+                cleanup.append(destination)
+            for directory in cleanup:
+                if directory is not None and directory.exists():
+                    for child in directory.iterdir():
+                        child.unlink(missing_ok=True)
+                    directory.rmdir()
+            for directory in reversed(created_directories):
+                with suppress(OSError):
+                    directory.rmdir()
             raise
 
     def load(self, reference_id: str) -> VoiceReferenceRevision:

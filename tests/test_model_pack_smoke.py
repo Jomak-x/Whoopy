@@ -11,7 +11,8 @@ import yaml
 
 from whoopy.audio.models import PcmAudio
 from whoopy.audio.synthesis import FatalSynthesisError, TransientSynthesisError
-from whoopy.model_packs.manager import ManagedModelPacks, SmokeResult
+from whoopy.hardware import HardwareSnapshot
+from whoopy.model_packs.manager import ManagedModelPacks, SmokeProbeFailure, SmokeResult
 from whoopy.model_packs.operations import PerformanceRecordStore
 from whoopy.model_packs.registry import (
     ModelPackRegistry,
@@ -407,3 +408,47 @@ def test_successful_smoke_retains_a_hash_verified_playable_wave(tmp_path: Path) 
     sample.write_bytes(b"not a wave")
     with pytest.raises(ValueError, match="missing or corrupt"):
         service.smoke_sample_path("kokoro")
+
+
+@pytest.mark.parametrize("pack_id", ["qwen3-tts-custom-voice-0.6b", "qwen3-tts-voice-design-1.7b"])
+def test_qwen_smoke_refuses_low_memory_before_starting_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pack_id: str
+) -> None:
+    from whoopy.adapters.tts import qwen3_tts
+
+    registry = _registry(tmp_path, [pack_id])
+    runtime = registry.models_root / "runtime" / pack_id
+    runtime.mkdir(parents=True)
+    (runtime / "python").write_text("runtime", encoding="utf-8")
+    monkeypatch.setattr(
+        qwen3_tts.Qwen3TTSAdapter, "availability_error", staticmethod(lambda _settings: None)
+    )
+    monkeypatch.setattr(
+        qwen3_tts,
+        "inspect_hardware",
+        lambda _path: HardwareSnapshot(
+            operating_system="darwin",
+            architecture="arm64",
+            cpu_count=8,
+            total_ram_gb=48,
+            available_ram_gb=0,
+            free_disk_gb=100,
+            accelerators=["cpu"],
+        ),
+    )
+    started: list[dict[str, object]] = []
+
+    def reject_start(**kwargs: object) -> None:
+        started.append(kwargs)
+        raise AssertionError("runtime must not start with insufficient memory")
+
+    monkeypatch.setattr(qwen3_tts, "JsonLineProcessController", reject_start)
+    runner = OfflineModelPackSmokeRunner(registry)
+
+    with pytest.raises(SmokeProbeFailure, match="live resource check") as failure:
+        runner(registry.get(pack_id), tmp_path / "selected")
+
+    assert not failure.value.runtime_probe_passed
+    assert isinstance(failure.value.__cause__, TransientSynthesisError)
+    assert started == []
+    assert PerformanceRecordStore(registry.records_directory(pack_id)).list() == ()

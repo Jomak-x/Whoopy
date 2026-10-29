@@ -97,16 +97,19 @@ The separately retained `qwen-custom-ryan-policy-v2.json` reassesses the same
 hash-bound ASR evidence under the contiguous-block rule and **fails** on a
 23-operation disagreement span. The original full-file review report remains.
 
-Vox illustrates an actual recognizer limitation. Its original full-file ASR
+Vox illustrates an unresolved recognizer disagreement. Its original full-file ASR
 omitted the final 28-word paragraph. Independent ASR of that paragraph recognized
 every word; all four paragraphs then independently matched exactly (123/123
 combined). `build_segment_aggregate.py` verified that the raw decoded FLOAT32
 samples are exactly the ordered native-paragraph concatenation: 2,042,912 frames,
 48 kHz mono, no added frames. It bound generation/script/paragraph/audio/report
 hashes and wrote `voxcpm2-designed-male-aggregate.json`. The original full-file
-**fail** report is preserved. The aggregate qualifies the assembled words via
+**fail** report is preserved. The aggregate provides positive support for the assembled words via
 complete paragraph evidence plus exact PCM assembly; it does not claim that the
 full-file recognizer succeeded, or that joins and voice quality are preferred.
+The current strict audition marks Vox **Review** for its 28-word full-file tail
+disagreement. This is not proof that the speech itself is missing; listening
+must resolve the disagreement against the positive paragraph/assembly evidence.
 
 `listening/manifest.json` records constant-gain audition copies for qualified raw
 files. These target -23 LUFS, constrained to at most -1 dB true peak; only one
@@ -120,18 +123,27 @@ explicit names; `expected_text_sha256` identifies the spoken input text.
 
 [policy-v3](policy-v3/) contains 12 derived JSON receipts evaluated from the
 existing recognizer output, not new ASR or acoustic inspection. The owner prepared
-these sidecars without replacing old receipts or media. The current listening
-selection is **8 Pass / 4 Review**: eight voice Pass results, one voice Review,
-and three writing Reviews. Pass means zero normalized word edits in the retained
+these sidecars without replacing old receipts or media. The earlier sidecar classified **8 Pass / 4 Review** and remains unchanged.
+The current strict listening selection is **7 Pass / 5 Review**: seven voice
+Pass results, two voice Reviews, and three writing Reviews. Pass means zero normalized word edits in the retained
 evidence and the recorded PCM qualification; it does not establish word-perfect
 audio or listener preference. Vox uses its complete paragraph plus exact-assembly
 chain; its original full-file failure remains. Native MPS Ryan's failure and
 Dots' incomplete attempt remain separate.
 
-The source builder reads [listening/manifest-policy-v3.json](listening/manifest-policy-v3.json)
+The source builder reads [listening/manifest-policy-v3-strict.json](listening/manifest-policy-v3-strict.json)
 and [writing-listening-policy-v3.json](../writing-listening-policy-v3.json),
 including Review samples with explicit labels and original raw/proof links.
 These manifests preserve the original manifest hashes, classifications, media
 hashes and timestamps. They were copied as metadata only; no audio or old
 verification receipt was rewritten. Current source changes postdate the measured
 benchmark runs and do not retroactively certify them.
+
+The strict update adds only `policy-v3/voxcpm2-designed-male-strict-review.json`
+and `listening/manifest-policy-v3-strict.json`; previous receipts and manifests
+remain intact. The producer defaults to this strict manifest and also accepts
+`--manifest PATH`. Use `--output PATH` to write the HTML into a separate checkout
+while the benchmark root, media, and receipts remain read-only. The page uses
+relative links intended for the complete local benchmark tree; published HTML
+and JSON do not include the audio. See [the review-fix report](../REVIEW-FIXES.md)
+for this phase's validation and pending CI status.

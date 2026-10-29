@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
 
-from scripts.build_listening_review import build
+from scripts.build_listening_review import build, main
 
 
 @dataclass
@@ -80,9 +81,10 @@ def benchmark(tmp_path: Path) -> Path:
                 "original_raw_verification": f"{prefix}/verification/original.json",
                 "verification": f"{prefix}/verification/policy-v3/{status}.json",
                 "status": status,
+                "full_file_normalized_word_edit_count": 28 if status == "review" else 0,
             }
         )
-    (listening / "manifest-policy-v3.json").write_text(json.dumps({"records": records}))
+    (listening / "manifest-policy-v3-strict.json").write_text(json.dumps({"records": records}))
     (root / "writing-listening-policy-v3.json").write_text(
         json.dumps(
             {
@@ -135,6 +137,10 @@ def test_page_preserves_statuses_and_raw_proof_links(
         "verification/policy-v3/writing.json",
     } <= writing.links
     assert "verification/original.json" in writing.links
+    vox = next(card for card in page.cards if "candidate-review" in card.text)
+    assert "28 normalized word edits" in vox.text
+    assert "recognition disagreement, not proof that speech is missing" in vox.text
+    assert "Exact paragraph recognition and PCM assembly remain positive evidence" in vox.text
 
 
 def test_page_refuses_changed_listening_copy(benchmark: Path) -> None:
@@ -144,3 +150,26 @@ def test_page_refuses_changed_listening_copy(benchmark: Path) -> None:
         build(benchmark)
 
     assert not (benchmark / "review.html").exists()
+
+
+def test_cli_selects_manifest_and_writes_outside_read_only_evidence_root(
+    benchmark: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest = benchmark / "verification/listening/manifest-policy-v3-strict.json"
+    selected = json.loads(manifest.read_text())
+    selected["records"] = [record for record in selected["records"] if record["status"] == "review"]
+    chosen = tmp_path / "chosen.json"
+    chosen.write_text(json.dumps(selected))
+    original_bytes = {path: path.read_bytes() for path in benchmark.rglob("*") if path.is_file()}
+    output = tmp_path / "audition.html"
+    monkeypatch.setattr(
+        sys, "argv", ["build", str(benchmark), "--manifest", str(chosen), "--output", str(output)]
+    )
+
+    main()
+
+    page = ReviewPage(output.read_text())
+    assert [card.status for card in page.cards] == ["review", "review"]
+    assert {
+        path: path.read_bytes() for path in benchmark.rglob("*") if path.is_file()
+    } == original_bytes

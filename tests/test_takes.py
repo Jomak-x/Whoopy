@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Event
 from typing import Literal
 from uuid import UUID
 
@@ -27,10 +29,10 @@ from whoopy.pipeline.runs import (
     RunStatus,
     RunStore,
 )
-from whoopy.pipeline.takes import SegmentTakeError, SegmentTakeStore
+from whoopy.pipeline.takes import SegmentTakeError, SegmentTakeManifest, SegmentTakeStore
 from whoopy.timeline import build_script_timeline
 from whoopy.webui.api import create_api
-from whoopy.webui.server import LocalWebApplication
+from whoopy.webui.server import GenerationTask, LocalWebApplication
 
 RUN_ID = UUID("40404040-4040-4040-8040-404040404040")
 NOW = datetime(2026, 8, 5, tzinfo=UTC)
@@ -342,6 +344,7 @@ def test_alternative_generation_retains_current_audio_after_an_edit(
             ),
             audio=alternative_audio,
         )
+        application._tasks[run_id] = GenerationTask(task_id=run_id, run_id=run_id)
         return {"run_id": run_id}
 
     monkeypatch.setattr(application, "regenerate_segment", regenerate)
@@ -384,3 +387,209 @@ def test_selected_take_tracks_verified_active_checkpoint(tmp_path: Path, replace
 
     assert takes.selected(RUN_ID, "speech-0001") is None
     assert takes.list(RUN_ID, "speech-0001") == [original]
+
+
+def _alternative_take(store: RunStore) -> tuple[str, str, PcmAudio]:
+    takes = SegmentTakeStore(store)
+    original = takes.capture_active(RUN_ID, "speech-0001", source="original")
+    checkpoints = SegmentCheckpointStore(store)
+    audio = PcmAudio(b"\x60\x00" * 480, 24_000)
+    checkpoint = checkpoints.completed_checkpoint(
+        run_id=RUN_ID,
+        segment_id="speech-0001",
+        cache_key=original.cache_key,
+        audio=audio,
+        attempt_count=2,
+        cache_hit=False,
+        started_at=NOW,
+        completed_at=NOW,
+    )
+    checkpoints.save(checkpoint, audio=audio)
+    alternative = takes.capture_active(
+        RUN_ID, "speech-0001", source="production_regeneration", select_if_unset=False
+    )
+    return original.take_id, alternative.take_id, audio
+
+
+@pytest.mark.parametrize("abandoned", ["cancelled", "superseded"])
+def test_abandoned_alternative_finalizer_preserves_later_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, abandoned: str
+) -> None:
+    store, _audio = _completed_run(tmp_path / "runs")
+    original, alternative, alternative_audio = _alternative_take(store)
+    takes = SegmentTakeStore(store)
+    takes.choose(RUN_ID, "speech-0001", alternative)
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=Path("runs"),
+    )
+    run_id = str(RUN_ID)
+    generation_task = GenerationTask(
+        task_id=run_id,
+        run_id=run_id,
+        launching=False,
+        cancel_requested=abandoned == "cancelled",
+    )
+    application._tasks[run_id] = (
+        generation_task
+        if abandoned == "cancelled"
+        else GenerationTask(task_id=run_id, run_id=run_id, launching=False)
+    )
+    resumed: list[str] = []
+    monkeypatch.setattr(application, "resume_run", lambda value: resumed.append(value))
+
+    application._finalize_alternative_take(generation_task, "speech-0001", original)
+
+    assert takes.selected(RUN_ID, "speech-0001") == alternative
+    assert len(takes.list(RUN_ID, "speech-0001")) == 2
+    assert SegmentCheckpointStore(store).audio_path(RUN_ID, "speech-0001").read_bytes() == (
+        alternative_audio.pcm_s16le
+    )
+    assert resumed == []
+
+
+def test_alternative_finalizer_rechecks_ownership_before_restoring_take(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _audio = _completed_run(tmp_path / "runs")
+    original, alternative, alternative_audio = _alternative_take(store)
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=Path("runs"),
+    )
+    run_id = str(RUN_ID)
+    generation_task = GenerationTask(task_id=run_id, run_id=run_id, launching=False)
+    application._tasks[run_id] = generation_task
+    completion_observed = Event()
+    selection_finished = Event()
+    task_public = application._task_public
+    resumed: list[str] = []
+
+    def observed_completion(task: GenerationTask) -> dict[str, object]:
+        state = task_public(task)
+        completion_observed.set()
+        assert selection_finished.wait(5)
+        return state
+
+    def resume(value: str) -> dict[str, str]:
+        resumed.append(value)
+        application._tasks[value] = GenerationTask(task_id=value, run_id=value)
+        return {"run_id": value}
+
+    monkeypatch.setattr(application, "_task_public", observed_completion)
+    monkeypatch.setattr(application, "resume_run", resume)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            application._finalize_alternative_take, generation_task, "speech-0001", original
+        )
+        try:
+            assert completion_observed.wait(5)
+            chosen = application.choose_segment_take(run_id, "speech-0001", alternative)
+            assert chosen is not None
+        finally:
+            selection_finished.set()
+        future.result(timeout=5)
+
+    assert SegmentTakeStore(store).selected(RUN_ID, "speech-0001") == alternative
+    assert SegmentCheckpointStore(store).audio_path(RUN_ID, "speech-0001").read_bytes() == (
+        alternative_audio.pcm_s16le
+    )
+    assert resumed == [run_id]
+
+
+def test_successful_alternative_finalizer_retains_original_and_captures_generated_audio(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, original_audio = _completed_run(tmp_path / "runs")
+    original, _alternative, alternative_audio = _alternative_take(store)
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=Path("runs"),
+    )
+    run_id = str(RUN_ID)
+    generation_task = GenerationTask(task_id=run_id, run_id=run_id, launching=False)
+    application._tasks[run_id] = generation_task
+    resumed: list[str] = []
+    monkeypatch.setattr(application, "resume_run", lambda value: resumed.append(value))
+
+    application._finalize_alternative_take(generation_task, "speech-0001", original)
+
+    takes = SegmentTakeStore(store)
+    assert takes.selected(RUN_ID, "speech-0001") == original
+    generated = takes.list(RUN_ID, "speech-0001")[-1]
+    assert generated.source == "production_regeneration"
+    assert generated.byte_count == len(alternative_audio.pcm_s16le)
+    assert SegmentCheckpointStore(store).audio_path(RUN_ID, "speech-0001").read_bytes() == (
+        original_audio.pcm_s16le
+    )
+    assert resumed == [run_id]
+
+
+def test_later_selection_waits_for_alternative_finalizer_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _audio = _completed_run(tmp_path / "runs")
+    original, alternative, _alternative_audio = _alternative_take(store)
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=Path("runs"),
+    )
+    run_id = str(RUN_ID)
+    generation_task = GenerationTask(task_id=run_id, run_id=run_id, launching=False)
+    application._tasks[run_id] = generation_task
+    commit_entered = Event()
+    finish_commit = Event()
+    selection_started = Event()
+    selection_finished = Event()
+    capture_active = SegmentTakeStore.capture_active
+
+    def capture(
+        takes: SegmentTakeStore,
+        run_id: UUID | str,
+        segment_id: str,
+        *,
+        source: Literal["original", "production_regeneration"],
+        regeneration_attempt_id: UUID | None = None,
+        select_if_unset: bool = True,
+    ) -> SegmentTakeManifest:
+        commit_entered.set()
+        assert finish_commit.wait(5)
+        return capture_active(
+            takes,
+            run_id,
+            segment_id,
+            source=source,
+            regeneration_attempt_id=regeneration_attempt_id,
+            select_if_unset=select_if_unset,
+        )
+
+    def choose() -> None:
+        selection_started.set()
+        application.choose_segment_take(run_id, "speech-0001", alternative)
+        selection_finished.set()
+
+    monkeypatch.setattr(SegmentTakeStore, "capture_active", capture)
+    monkeypatch.setattr(application, "resume_run", lambda _run_id: None)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        finalizer = executor.submit(
+            application._finalize_alternative_take, generation_task, "speech-0001", original
+        )
+        try:
+            assert commit_entered.wait(5)
+            selection = executor.submit(choose)
+            assert selection_started.wait(5)
+            assert not selection_finished.wait(0.05)
+        finally:
+            finish_commit.set()
+        finalizer.result(timeout=5)
+        selection.result(timeout=5)
+
+    assert SegmentTakeStore(store).selected(RUN_ID, "speech-0001") == alternative

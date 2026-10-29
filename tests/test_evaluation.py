@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -52,7 +52,7 @@ from whoopy.ports import (
     ScriptGenerationResult,
 )
 from whoopy.timeline import build_script_timeline
-from whoopy.webui.api import GenerationRequest
+from whoopy.webui.api import GenerationRequest, _LabApiService
 from whoopy.webui.evaluation import LocalProductionExperimentExecutor
 from whoopy.webui.server import LocalWebApplication
 
@@ -1237,7 +1237,9 @@ def test_lab_halt_preserves_completed_trials_for_explicit_resume() -> None:
     executor = RecordingProductionExecutor()
     halt = False
 
-    def trial_completed(_trials: tuple[ProductionTrialResult, ...]) -> None:
+    def trial_completed(
+        _trials: tuple[ProductionTrialResult, ...], _completed: ProductionTrialResult
+    ) -> None:
         nonlocal halt
         halt = True
 
@@ -1306,6 +1308,115 @@ def test_controlled_comparison_does_not_use_challenger_when_baseline_fails() -> 
     assert len(report.trials) == 1
     assert not report.trials[0].success
     assert report.blind_assignments == []
+
+
+@pytest.mark.parametrize("experiment_type", ["voice", "delivery", "pacing"])
+def test_controlled_resume_skips_challengers_of_failed_saved_baseline(
+    experiment_type: Literal["voice", "delivery", "pacing"],
+) -> None:
+    evaluation = load_evaluation_set(Path("config/evaluation/local-v1.yaml"))
+    case_ids = [case.id for case in evaluation.cases[:2]]
+    definition = _definition(experiment_type=experiment_type)
+    halt = False
+
+    class FailedFirstBaselineExecutor(RecordingProductionExecutor):
+        def execute(self, request: ProductionTrialRequest) -> ProductionTrialResult:
+            result = super().execute(request)
+            if request.case.id == case_ids[0]:
+                return result.model_copy(update={"success": False, "failure": "baseline failed"})
+            return result
+
+    def trial_completed(
+        _trials: tuple[ProductionTrialResult, ...], completed: ProductionTrialResult
+    ) -> None:
+        nonlocal halt
+        halt = completed.case_id == case_ids[1]
+
+    lab = EvaluationLab(evaluation_set=evaluation, platform="test")
+    with pytest.raises(EvaluationExecutionHalted) as stopped:
+        lab.run(
+            definition,
+            FailedFirstBaselineExecutor(),
+            case_ids=case_ids,
+            should_halt=lambda: halt,
+            trial_completed=trial_completed,
+        )
+
+    executor = RecordingProductionExecutor()
+    report = lab.run(definition, executor, case_ids=case_ids, existing_trials=stopped.value.trials)
+
+    assert [(request.case.id, request.candidate_id) for request in executor.requests] == [
+        (case_ids[1], "candidate")
+    ]
+    assert executor.requests[0].controlled_source_run_id == stopped.value.trials[1].source_run_id
+    assert report.trials[0] == stopped.value.trials[0]
+    assert report.incomplete_candidates_by_case == {case_ids[0]: ["baseline", "candidate"]}
+
+
+def test_lab_repeated_resume_clears_completed_trials_from_persisted_resume_map(
+    tmp_path: Path,
+) -> None:
+    definition = _definition()
+    run_statuses: dict[str, dict[str, str]] = {}
+    resumed_candidates: list[str] = []
+
+    class PausingExecutor(RecordingProductionExecutor):
+        def execute(self, request: ProductionTrialRequest) -> ProductionTrialResult:
+            result = super().execute(request)
+            run_statuses[str(result.source_run_id)] = {"status": "interrupted"}
+            service.halt(
+                experiment_id=definition.experiment_id, version=definition.version, action="pause"
+            )
+            return result.model_copy(update={"success": False, "failure": "interrupted"})
+
+        def resume(self, request: ProductionTrialRequest, run_id: UUID) -> ProductionTrialResult:
+            assert run_statuses[str(run_id)]["status"] == "interrupted"
+            resumed_candidates.append(request.candidate_id)
+            run_statuses[str(run_id)] = {"status": "completed"}
+            return super().execute(request).model_copy(update={"source_run_id": run_id})
+
+    application = SimpleNamespace(
+        runs_directory=tmp_path,
+        config_directory=Path("config"),
+        environment_status=lambda: {"system": "fixture"},
+        run=lambda run_id: run_statuses.get(run_id),
+    )
+    service = _LabApiService(application=cast(Any, application), executor=PausingExecutor())
+    service.add_definition(definition)
+    key = (definition.experiment_id, definition.version)
+
+    def execute_and_join() -> dict[str, Any]:
+        service.execute(experiment_id=key[0], version=key[1], case_ids=["grounding-3m"])
+        worker = service._worker
+        if worker is not None:
+            worker.join(5)
+            assert not worker.is_alive()
+        control = service.repository.load_execution_control(experiment_id=key[0], version=key[1])
+        assert control is not None
+        return control
+
+    first = execute_and_join()
+    assert first["status"] == "paused"
+    assert len(first["resumable_runs"]) == 1
+
+    second = execute_and_join()
+    assert second["status"] == "paused"
+    successful = second["trials"][0]
+    interrupted = second["trials"][1]
+    assert successful["success"] is True
+    assert second["resumable_runs"] == {interrupted["trial_id"]: interrupted["source_run_id"]}
+    second["trials"].reverse()
+    service._save_control(key, second)
+
+    final = execute_and_join()
+    assert final["status"] == "completed"
+    assert final["resumable_runs"] == {}
+    assert resumed_candidates == ["baseline", "candidate"]
+    assert (
+        next(trial for trial in final["trials"] if trial["candidate_id"] == "baseline")
+        == successful
+    )
+    assert all(trial["success"] for trial in final["trials"])
 
 
 def test_lab_rejects_production_evidence_for_different_controls() -> None:

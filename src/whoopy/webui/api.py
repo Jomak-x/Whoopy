@@ -716,6 +716,7 @@ class _LabApiService:
 
                 def trial_completed(
                     trials: tuple[ProductionTrialResult, ...],
+                    completed: ProductionTrialResult,
                     control_key: tuple[str, int] = key,
                 ) -> None:
                     with self._control_lock:
@@ -723,12 +724,12 @@ class _LabApiService:
                         current_control["trials"] = [
                             trial.model_dump(mode="json") for trial in trials
                         ]
-                        last = trials[-1]
-                        run = self.application.run(str(last.source_run_id))
+                        resumable = current_control.setdefault("resumable_runs", {})
+                        run = self.application.run(str(completed.source_run_id))
                         if run is not None and run.get("status") == "interrupted":
-                            current_control.setdefault("resumable_runs", {})[str(last.trial_id)] = (
-                                str(last.source_run_id)
-                            )
+                            resumable[str(completed.trial_id)] = str(completed.source_run_id)
+                        else:
+                            resumable.pop(str(completed.trial_id), None)
                         self._save_control(control_key, current_control)
 
                 environment = self.application.environment_status()

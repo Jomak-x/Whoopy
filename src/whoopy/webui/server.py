@@ -1906,22 +1906,23 @@ class LocalWebApplication:
     def cancel_task(self, task_id: str) -> dict[str, Any] | None:
         """Request cancellation without losing the pre-launch race window."""
 
-        try:
-            UUID(task_id)
-        except ValueError:
-            return None
-        with self._task_lock:
-            task = self._tasks.get(task_id)
-            if task is not None and task.active:
-                task.cancel_requested = True
-                process = task.process
-            else:
-                process = None
-        if task is None or not task.active:
-            return self.cancel_run(task_id)
-        if process is not None:
-            self._stop_process(process)
-        return self._task_public(task)
+        with self._operation_admission_lock:
+            try:
+                UUID(task_id)
+            except ValueError:
+                return None
+            with self._task_lock:
+                task = self._tasks.get(task_id)
+                if task is not None and task.active:
+                    task.cancel_requested = True
+                    process = task.process
+                else:
+                    process = None
+            if task is None or not task.active:
+                return self.cancel_run(task_id)
+            if process is not None:
+                self._stop_process(process)
+            return self._task_public(task)
 
     def cancel_run(self, run_id: str) -> dict[str, Any] | None:
         """Cancel through the CLI so it also works after a web restart."""
@@ -2054,75 +2055,89 @@ class LocalWebApplication:
     def generate_alternative_take(self, run_id: str, segment_id: str) -> dict[str, Any] | None:
         """Run real cache-bypassing synthesis, retaining the selected take."""
 
-        if self._record(run_id) is None:
-            return None
-        takes = SegmentTakeStore(RunStore(self.runs_directory))
-        original = takes.capture_active(
-            run_id, segment_id, source="original", select_if_unset=False
-        )
-        selected = takes.choose(run_id, segment_id, original.take_id).selected_take_id
-        task = self.regenerate_segment(run_id, segment_id)
-        if task is None:
-            return None
-        thread = threading.Thread(
-            target=self._finalize_alternative_take,
-            args=(run_id, segment_id, selected),
-            daemon=True,
-            name=f"whoopy-take-{run_id[:8]}-{segment_id}",
-        )
-        thread.start()
-        return {
-            "original_take": original.model_dump(mode="json"),
-            "selected_take_id": selected,
-            "task": task,
-            "status": "generating",
-        }
+        with self._operation_admission_lock:
+            if self._record(run_id) is None:
+                return None
+            takes = SegmentTakeStore(RunStore(self.runs_directory))
+            original = takes.capture_active(
+                run_id, segment_id, source="original", select_if_unset=False
+            )
+            selected = takes.choose(run_id, segment_id, original.take_id).selected_take_id
+            task = self.regenerate_segment(run_id, segment_id)
+            if task is None:
+                return None
+            with self._task_lock:
+                generation_task = self._tasks[run_id]
+            thread = threading.Thread(
+                target=self._finalize_alternative_take,
+                args=(generation_task, segment_id, selected),
+                daemon=True,
+                name=f"whoopy-take-{run_id[:8]}-{segment_id}",
+            )
+            thread.start()
+            return {
+                "original_take": original.model_dump(mode="json"),
+                "selected_take_id": selected,
+                "task": task,
+                "status": "generating",
+            }
 
     def _finalize_alternative_take(
         self,
-        run_id: str,
+        generation_task: GenerationTask,
         segment_id: str,
         selected_take_id: str,
     ) -> None:
+        run_id = generation_task.run_id
         deadline = time.monotonic() + 14_400
         while time.monotonic() < deadline:
             with self._task_lock:
-                task = self._tasks.get(run_id)
-                active = task is not None and task.active
-            state = self.task(run_id)
-            if state is None:
-                return
-            if not active and state["status"] not in {"queued", "running", "interrupted"}:
+                if (
+                    self._tasks.get(run_id) is not generation_task
+                    or generation_task.cancel_requested
+                ):
+                    return
+                active = generation_task.active
+            state = self._task_public(generation_task)
+            if not active and state["status"] not in {"queued", "running"}:
                 break
             time.sleep(0.2)
         else:
             return
-        if state["status"] != "completed":
-            return
-        takes = SegmentTakeStore(RunStore(self.runs_directory))
-        regeneration_attempt_id: UUID | None = None
-        history = (self.runs_directory / run_id / "history" / "manual-regeneration").glob(
-            "*/request.json"
-        )
-        try:
-            latest = max(history, key=lambda path: path.stat().st_mtime_ns)
-            payload = json.loads(latest.read_text(encoding="utf-8"))
-            regeneration_attempt_id = UUID(payload["regeneration_attempt_id"])
-        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
-            pass
-        takes.capture_active(
-            run_id,
-            segment_id,
-            source="production_regeneration",
-            regeneration_attempt_id=regeneration_attempt_id,
-            select_if_unset=False,
-        )
-        takes.choose(run_id, segment_id, selected_take_id, action="restore")
-        RevisionStore(RunStore(self.runs_directory)).create_assembly_revision(
-            run_id,
-            note=f"Retained selected take {selected_take_id} after generating an alternative.",
-        )
-        self.resume_run(run_id)
+        with self._operation_admission_lock:
+            with self._task_lock:
+                if (
+                    self._tasks.get(run_id) is not generation_task
+                    or generation_task.cancel_requested
+                    or generation_task.active
+                ):
+                    return
+            if self._task_public(generation_task)["status"] != "completed":
+                return
+            takes = SegmentTakeStore(RunStore(self.runs_directory))
+            regeneration_attempt_id: UUID | None = None
+            history = (self.runs_directory / run_id / "history" / "manual-regeneration").glob(
+                "*/request.json"
+            )
+            try:
+                latest = max(history, key=lambda path: path.stat().st_mtime_ns)
+                payload = json.loads(latest.read_text(encoding="utf-8"))
+                regeneration_attempt_id = UUID(payload["regeneration_attempt_id"])
+            except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+                pass
+            takes.capture_active(
+                run_id,
+                segment_id,
+                source="production_regeneration",
+                regeneration_attempt_id=regeneration_attempt_id,
+                select_if_unset=False,
+            )
+            takes.choose(run_id, segment_id, selected_take_id, action="restore")
+            RevisionStore(RunStore(self.runs_directory)).create_assembly_revision(
+                run_id,
+                note=f"Retained selected take {selected_take_id} after generating an alternative.",
+            )
+            self.resume_run(run_id)
 
     def choose_segment_take(
         self,
@@ -2132,26 +2147,29 @@ class LocalWebApplication:
         *,
         undo: bool = False,
     ) -> dict[str, Any] | None:
-        if self._record(run_id) is None:
-            return None
-        takes = SegmentTakeStore(RunStore(self.runs_directory))
-        selection = (
-            takes.undo(run_id, segment_id) if undo else takes.choose(run_id, segment_id, take_id)
-        )
-        revision = RevisionStore(RunStore(self.runs_directory)).create_assembly_revision(
-            run_id,
-            note=(
-                f"Restored take {selection.selected_take_id}."
+        with self._operation_admission_lock:
+            if self._record(run_id) is None:
+                return None
+            takes = SegmentTakeStore(RunStore(self.runs_directory))
+            selection = (
+                takes.undo(run_id, segment_id)
                 if undo
-                else f"Selected take {selection.selected_take_id}."
-            ),
-        )
-        task = self.resume_run(run_id)
-        return {
-            "selection": selection.model_dump(mode="json"),
-            "revision": revision.model_dump(mode="json"),
-            "task": task,
-        }
+                else takes.choose(run_id, segment_id, take_id)
+            )
+            revision = RevisionStore(RunStore(self.runs_directory)).create_assembly_revision(
+                run_id,
+                note=(
+                    f"Restored take {selection.selected_take_id}."
+                    if undo
+                    else f"Selected take {selection.selected_take_id}."
+                ),
+            )
+            task = self.resume_run(run_id)
+            return {
+                "selection": selection.model_dump(mode="json"),
+                "revision": revision.model_dump(mode="json"),
+                "task": task,
+            }
 
     def segment_take_audio_path(
         self,
