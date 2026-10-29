@@ -164,9 +164,7 @@ def test_alternative_take_retains_admission_after_worker_finishes(
 
 
 @pytest.mark.parametrize("status", ["interrupted", "completed"])
-def test_delete_rejects_registered_or_finalizing_worker(
-    tmp_path: Path, status: str
-) -> None:
+def test_delete_rejects_registered_or_finalizing_worker(tmp_path: Path, status: str) -> None:
     application = LocalWebApplication(
         project_root=Path.cwd(),
         config_directory=Path.cwd() / "config",
@@ -275,4 +273,6 @@ def test_cancelled_alternative_take_releases_admission(
     application._finalize_alternative_take(task, "speech-0001", result["selected_take_id"])
 
     assert _snapshot(store.run_directory(RUN_ID)) == before
-    assert application.start_model_pack_task("smoke-test", "moss-local-5b", {})["status"] == "queued"
+    assert (
+        application.start_model_pack_task("smoke-test", "moss-local-5b", {})["status"] == "queued"
+    )

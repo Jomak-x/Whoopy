@@ -173,7 +173,9 @@ def test_page_refuses_damaged_writing_audio_and_preserves_existing_page(
     else:
         audio.unlink()
 
-    with pytest.raises((FileNotFoundError, ValueError), match="Writing sample (audio missing|changed)"):
+    with pytest.raises(
+        (FileNotFoundError, ValueError), match=r"Writing sample (audio missing|changed)"
+    ):
         build(benchmark)
 
     assert output.read_bytes() == existing_page

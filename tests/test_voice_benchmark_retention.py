@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
-import sys
+import signal
 import struct
+import sys
+import time
 import wave
 from collections.abc import Iterator
 from pathlib import Path
@@ -197,9 +199,9 @@ def test_voice_candidate_relative_output_finishes_with_resolvable_artifact_paths
     script.write_text("First paragraph.\n\nSecond paragraph.")
     monkeypatch.setattr(module, "ROOT", tmp_path)
     monkeypatch.setattr(module, "SCRIPT", script)
-    monkeypatch.setattr(module.time, "sleep", lambda _: None)
-    monkeypatch.setattr(module.signal, "signal", lambda *args: None)
-    monkeypatch.setattr(module.signal, "alarm", lambda *args: None)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    monkeypatch.setattr(signal, "signal", lambda *args: None)
+    monkeypatch.setattr(signal, "alarm", lambda *args: None)
     monkeypatch.setattr(
         module,
         "ResourceWatchdog",
@@ -207,10 +209,17 @@ def test_voice_candidate_relative_output_finishes_with_resolvable_artifact_paths
     )
     original_open = Path.open
 
-    def isolated_open(path: Path, *args: Any, **kwargs: Any) -> IO[Any]:
+    def isolated_open(
+        path: Path,
+        mode: str = "r",
+        buffering: int = -1,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> IO[Any]:
         if path == Path("/tmp/whoopy-benchmark-gpu.lock"):
             path = tmp_path / "gpu.lock"
-        return original_open(path, *args, **kwargs)
+        return original_open(path, mode, buffering, encoding, errors, newline)
 
     monkeypatch.setattr(Path, "open", isolated_open)
     mx = SimpleNamespace(

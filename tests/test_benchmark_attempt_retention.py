@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import ModuleType
@@ -42,7 +44,7 @@ def test_verification_refuses_existing_receipt_before_inference(
         pytest.fail("An occupied receipt must be rejected before starting ASR")
 
     monkeypatch.setattr(verify_benchmark_audio, "asr_worker", unexpected_inference)
-    monkeypatch.setattr(verify_benchmark_audio.subprocess, "run", unexpected_inference)
+    monkeypatch.setattr(subprocess, "run", unexpected_inference)
 
     with pytest.raises(SystemExit, match="use a new report path"):
         verify_benchmark_audio.main()
@@ -87,6 +89,7 @@ def test_raw_renderer_requires_unclaimed_attempt_directory(
     output = tmp_path / "attempt"
     output.mkdir()
     prior = output / "speech.wav"
+    entrypoint: Callable[[], int | None]
     if occupied:
         prior.write_bytes(b"native audio from the first attempt")
     if renderer == "qwen":

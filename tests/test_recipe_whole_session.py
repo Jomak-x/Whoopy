@@ -22,7 +22,7 @@ from whoopy.meditation import (
     MeditationGenerationResult,
     load_prompt_bundle,
 )
-from whoopy.meditation.models import MeditationKind, RawGenerationAttempt
+from whoopy.meditation.models import RawGenerationAttempt
 from whoopy.ports import (
     AdapterMetadata,
     ScriptGenerationRequest,

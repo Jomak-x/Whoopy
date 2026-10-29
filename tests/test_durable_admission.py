@@ -77,9 +77,8 @@ def test_restarted_app_excludes_surviving_durable_worker(
         store.save(record)
     owner = RunLock(store.run_directory(record.run_id)) if ownership != "lease" else nullcontext()
 
-    with owner:
-        with pytest.raises(ValueError, match="active"):
-            _start_operation(application, operation)
+    with owner, pytest.raises(ValueError, match="active"):
+        _start_operation(application, operation)
 
     assert application._tasks == {}
     assert application._model_pack_tasks == {}

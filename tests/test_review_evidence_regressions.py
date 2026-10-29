@@ -48,9 +48,10 @@ def test_acceptance_attests_matching_executed_package_and_resources(
 ) -> None:
     wheel = _product_fixture(tmp_path, monkeypatch)
 
-    assert local_v1_acceptance._verified_product_wheel_sha256(wheel) == hashlib.sha256(
-        wheel.read_bytes()
-    ).hexdigest()
+    assert (
+        local_v1_acceptance._verified_product_wheel_sha256(wheel)
+        == hashlib.sha256(wheel.read_bytes()).hexdigest()
+    )
 
 
 @pytest.mark.parametrize(
@@ -116,9 +117,7 @@ def test_corpus_rejects_mixed_profiles_instead_of_hiding_failed_candidate(
         evaluation_id="review-corpus",
         version=1,
         cases=[
-            EvaluationCase(
-                id="grounding", category="grounding", prompt="Rest", duration_seconds=60
-            )
+            EvaluationCase(id="grounding", category="grounding", prompt="Rest", duration_seconds=60)
         ],
     )
     metadata = AdapterMetadata(

@@ -123,9 +123,8 @@ def test_new_execution_starts_while_idle_worker_thread_is_exiting(
     release = threading.Event()
     returned = threading.Event()
     threads: list[threading.Thread] = []
-    original_thread = threading.Thread
 
-    class ExitingThread(original_thread):
+    class ExitingThread(threading.Thread):
         def run(self) -> None:
             try:
                 super().run()
