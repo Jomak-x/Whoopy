@@ -133,3 +133,26 @@ After correcting that setup without weakening assertions, both targeted cases
 passed. The sole warning was the existing Starlette/httpx deprecation. Changed
 Python files were formatted. No full test, lint, strict-type or CI gate ran in
 this phase; those remain pending with the outer executor.
+
+
+## Follow-up review corrections after 6fa81ef
+
+Five additional misses were corrected: control-marker origin shifts after chunk
+expansion, typographic negation, movement noun bypasses, raw rejected-output text
+in public validation errors, and discarded invalid MLX returns. The
+[review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-6fa81ef)
+records their causes, corrections, and regressions. Invalid numeric MLX samples
+are retained in immutable non-playable NPY files with failure metadata; they
+cannot qualify as speech or valid native WAV/PCM evidence and remain ignored.
+
+Focused verification passed **333 tests** across `test_recipe_routing.py`,
+`test_recipe_whole_session.py`, `test_revisions.py`, `test_mlx_qwen3_tts_worker.py`,
+`test_mlx_qwen_integration.py`, `test_publication_receipts.py`, and
+`test_validation_privacy.py` in 17.69 seconds. An initial command named a nonexistent
+adapter test file and ran no tests; the corrected focused batch passed. Touched
+Python files were formatted. Full repository test/lint/type and CI gates remain
+with the outer executor. No fresh inference or external receipt reconciliation
+was performed here. The owner's completed live
+campaign results remain bound to `c31d4e3` / `2e13ae4`; the outer Document/PR
+phase must consume the final evidence summary and replace earlier pending states
+without relabeling these historical receipts as final-pipeline inference.

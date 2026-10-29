@@ -48,6 +48,7 @@ evaluations/**/*.m4a
 evaluations/**/*.mp3
 evaluations/**/*.opus
 evaluations/**/*.pcm
+evaluations/**/*.npy
 evaluations/**/.cache/
 evaluations/**/*.safetensors
 evaluations/**/*.dtprofile/

@@ -272,3 +272,30 @@ paid API call, pipeline control, publication, or CI phase ran here.
 Focused verification for this round is recorded in the October 29 results file.
 Full test/lint/type gates and final-revision native CI remain the outer executor's
 responsibility. Compact receipts are historical results, not fresh certification.
+
+
+## Review fixes after 6fa81ef
+
+The five follow-up findings were confirmed in the current code before editing.
+The previous fix commits and all recorded evidence remain preserved.
+
+| Finding | Root cause and correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-CONTROL-ORIGIN-SHIFT | Control provenance compared absolute speech positions. Marker boundaries now use speech correspondence across chunk changes, retaining accepted controls only when the origin corresponds and honoring replacements. | `test_revisions.py`: marked ending after earlier paragraph expansion, rendered controls, restore and explicit marker changes. |
+| REVIEW-UNICODE-NEGATION | Two exclusion patterns differed from existing apostrophe handling. Negative sleep and box-breathing requests now accept ASCII and typographic apostrophes consistently. | `test_recipe_routing.py`: exact awake/natural-breath counterexamples and separate positive clauses. |
+| REVIEW-MOVEMENT-NOUN-BYPASS | A bare finger/toe alternative bypassed physical-action validation. That branch was removed; fingers/toes now require the same action-and-body-target matching as other body parts. | `test_recipe_whole_session.py`: resting finger/toe/body nouns rejected, actual move/stretch/wiggle/flex/curl invitations retained. |
+| REVIEW-RAW-VALIDATION-ERROR | Public error text reused rich rejected-output exceptions. Public diagnostics now contain sanitized schema locations/types and safe guidance; full exceptions and rejected output remain in local attempt evidence. | `test_validation_privacy.py`: schema values, arbitrary extra/duplicate keys, CLI/run-summary errors, checkpoint rejection and local detailed evidence. |
+| REVIEW-MLX-INVALID-OUTPUT-RETENTION | Validation rejected returned arrays before evidence ownership. Invalid numeric returns now persist as immutable non-playable NPY arrays with failure metadata and hashes, then fail closed without a valid WAV/PCM receipt. | `test_mlx_qwen3_tts_worker.py`: invalid values, shape/rate, earlier yields and repeated-attempt immutability; `test_publication_receipts.py`: Git excludes raw NPY evidence. |
+
+This phase performs no live model/ASR generation, publication, pipeline control,
+or full repository gate. Latest campaign receipts remain tied to their actual
+producer revisions (`c31d4e3` / `2e13ae4`), not this follow-up source revision.
+Document/PR reconciliation of the final external evidence summary and final CI
+is owned by the outer executor. Human listening remains pending.
+
+
+Focused verification: **333 passed in 17.69 seconds** across recipe routing,
+whole-session generation, revisions, MLX worker/integration, publication contracts,
+and validation privacy. The first invocation contained a nonexistent test target
+and ran no tests; the corrected batch passed. Touched Python files were formatted;
+full test/lint/type gates and CI were not run in this review phase.

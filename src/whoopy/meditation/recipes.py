@@ -87,14 +87,14 @@ NO_BREATH = re.compile(
 )
 SLEEP = re.compile(r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b", re.I)
 NEGATED_SLEEP = re.compile(
-    r"\b(?:no|without|avoid|skip|don't|do not|rather not)\b"
+    r"\b(?:no|without|avoid|skip|don['\u2019]t|do not|rather not)\b"
     r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?,;\n]){0,35}"
     r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b",
     re.I,
 )
 BOX_BREATHING = re.compile(r"\b(?:box|square)\s+breathing\b", re.I)
 NEGATED_BOX_BREATHING = re.compile(
-    r"\b(?:no|without|avoid|skip|don't|do not|rather not)\b"
+    r"\b(?:no|without|avoid|skip|don['\u2019]t|do not|rather not)\b"
     r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?,;\n]){0,20}"
     r"\b(?:box|square)\s+breathing\b",
     re.I,

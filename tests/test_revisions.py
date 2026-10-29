@@ -1124,3 +1124,61 @@ def test_new_script_controls_override_accepted_controls(
         PronunciationOverride(source="Welcome", pronunciation="Well-come"),
     )
     assert LocalWorker(store).resume(RUN_ID).status is RunStatus.COMPLETED
+
+
+@pytest.mark.parametrize(
+    "marker, extra_speech, expected_pace",
+    [
+        ("[pace: slow]", "", "very_slow"),
+        ("[pace: natural]", "", "natural"),
+        ("[pace: slow]\n[pace: slow]", "", "slow"),
+        ("", "", "natural"),
+        ("[pace: slow]", "Notice the sounds around you.\n\n", "slow"),
+        ("[pace: slow]", "Notice the support beneath you.\n\n", "slow"),
+    ],
+    ids=[
+        "unchanged",
+        "replacement",
+        "explicit-reset",
+        "removed",
+        "unmatched-boundary",
+        "duplicate-boundary",
+    ],
+)
+def test_shifted_control_marker_preserves_only_corresponding_accepted_controls(
+    tmp_path: Path, marker: str, extra_speech: str, expected_pace: str
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    initial_script = SCRIPT.replace("Notice", "[pace: slow]\n\nNotice", 1)
+    revisions.create(RUN_ID, RevisionRequest(script=initial_script))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    controlled = revisions.create(
+        RUN_ID,
+        RevisionRequest(timeline=TimelineEdit(pace={"speech-0002": "very_slow"})),
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    accepted = store.load_timeline(RUN_ID)
+    accepted_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    expanded_script = initial_script.replace(
+        "Welcome to this practice.", "Welcome to this practice. " * 30, 1
+    ).replace("[pace: slow]\n\n", f"{marker}\n\n{extra_speech}", 1)
+
+    revisions.create(RUN_ID, RevisionRequest(script=expanded_script))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    rendered = store.load_timeline(RUN_ID)
+    speeches = [segment for segment in rendered.segments if isinstance(segment, SpeechSegment)]
+    assert len(speeches) > 2
+    assert speeches[-1].text == "Notice the support beneath you."
+    assert all(
+        segment.pace == expected_pace
+        for segment in speeches
+        if segment.text == "Notice the support beneath you."
+    )
+
+    revisions.restore(RUN_ID, controlled.revision_id)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == accepted
+    restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    assert restored_manifest["pcm_sha256"] == accepted_manifest["pcm_sha256"]

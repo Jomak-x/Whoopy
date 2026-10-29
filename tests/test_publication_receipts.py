@@ -5,6 +5,23 @@ import subprocess
 from pathlib import Path
 
 
+def test_returned_native_arrays_are_excluded_from_publication() -> None:
+    root = Path(__file__).resolve().parents[1]
+    paths = [
+        "evaluations/benchmarks/disposable/native/returned-0000.npy",
+        ".whoopy-recovery/disposable/returned-0000.npy",
+    ]
+    result = subprocess.run(
+        ["git", "check-ignore", "--no-index", "--stdin"],
+        cwd=root,
+        input="\n".join([*paths, "src/whoopy/cli.py"]) + "\n",
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert result.stdout.splitlines() == paths
+
+
 def _assert_compact_evidence(value: object) -> None:
     if isinstance(value, dict):
         forbidden = {

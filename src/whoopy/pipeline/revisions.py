@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from collections import Counter
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -42,6 +43,20 @@ REVISION_RAW_ATTEMPTS = "raw-model-output"
 
 class RevisionError(RunStoreError):
     """Raised when an edit cannot safely replace the active revision."""
+
+
+def _same_control_origin(
+    previous: tuple[int, int] | None,
+    requested: tuple[int, int] | None,
+    speech_correspondence: dict[str, str],
+) -> bool:
+    if previous is None or requested is None:
+        return previous is requested
+    return (
+        previous[1] == requested[1]
+        and speech_correspondence.get(f"speech-{requested[0] + 1:04d}")
+        == f"speech-{previous[0] + 1:04d}"
+    )
 
 
 class TimelineEdit(BaseModel):
@@ -280,6 +295,27 @@ class RevisionStore:
                                     strict=True,
                                 )
                             )
+                    previous_speech_counts = Counter(
+                        segment.text
+                        for segment in previous_segments
+                        if isinstance(segment, SpeechSegment)
+                    )
+                    requested_speech_counts = Counter(
+                        segment.text
+                        for segment in requested_segments
+                        if isinstance(segment, SpeechSegment)
+                    )
+                    speech_correspondence: dict[str, str] = {}
+                    for new_index, old_index in correspondence.items():
+                        previous = previous_segments[old_index]
+                        requested = requested_segments[new_index]
+                        if (
+                            isinstance(previous, SpeechSegment)
+                            and isinstance(requested, SpeechSegment)
+                            and previous_speech_counts[previous.text] == 1
+                            and requested_speech_counts[requested.text] == 1
+                        ):
+                            speech_correspondence[requested.id] = previous.id
                     merged_segments = []
                     for index, requested in enumerate(requested_segments):
                         previous_index = correspondence.get(index)
@@ -298,9 +334,11 @@ class RevisionStore:
                             for name in ("delivery", "intensity", "pace", "voice_mode"):
                                 if getattr(previous, name) == getattr(
                                     requested, name
-                                ) and previous_controls[previous.id].get(
-                                    name
-                                ) == requested_controls[requested.id].get(name):
+                                ) and _same_control_origin(
+                                    previous_controls[previous.id].get(name),
+                                    requested_controls[requested.id].get(name),
+                                    speech_correspondence,
+                                ):
                                     updates[name] = getattr(current, name)
                             updates["language"] = current.language
                             updates["pronunciation_overrides"] = tuple(

@@ -11,10 +11,11 @@ import json
 import math
 import re
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, get_args
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic_core import ErrorType
 
 from whoopy.meditation.editorial import EditorialReport
 from whoopy.meditation.models import (
@@ -57,6 +58,25 @@ class WholeSessionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     sections: list[WholeSection] = Field(min_length=3, max_length=12)
+
+
+def _public_validation_error(error: ValueError | TypeError) -> str:
+    if isinstance(error, ValidationError):
+        details = []
+        for issue in error.errors(include_url=False, include_context=False, include_input=False):
+            location = (
+                ".".join(
+                    str(part)
+                    if isinstance(part, int) or part in {"sections", "section_id", "paragraphs"}
+                    else "<field>"
+                    for part in issue["loc"]
+                )
+                or "root"
+            )
+            kind = issue["type"] if issue["type"] in get_args(ErrorType) else "validation_error"
+            details.append(f"{location}: {kind}")
+        return "; ".join(details)
+    return "TypeError" if isinstance(error, TypeError) else "ValueError"
 
 
 MARKDOWN_EMPHASIS = re.compile(r"(?P<marker>\*{1,3}|_{1,3})(?=\S).+?(?<=\S)(?P=marker)")
@@ -406,10 +426,10 @@ def _validate_session(
             errors.append("taper: permit quiet rest without a new task")
     else:
         if not re.search(r"\b(?:room|surround\w*|sound\w*)\b", ending, re.I) or not re.search(
-            r"\b(?:finger\w*|toe\w*)\b|"
-            r"\b(?:move|moving|stretch(?:ing)?|lift(?:ing)?|shift(?:ing)?)\s+"
+            r"\b(?:move|moving|stretch(?:ing)?|lift(?:ing)?|shift(?:ing)?|"
+            r"wiggl(?:e|ing)|flex(?:ing)?|curl(?:ing)?)\s+"
             r"(?:(?:your|the)\s+)?"
-            r"(?:hands?|arms?|feet|foot|legs?|body|weight|position|posture)\b",
+            r"(?:fingers?|toes?|hands?|arms?|feet|foot|legs?|body|weight|position|posture)\b",
             ending,
             re.I,
         ):
@@ -717,7 +737,18 @@ def generate_whole_session(
                 candidate = WholeSessionDraft.model_validate(saved)
                 errors = _validate_session(candidate, session, slots, plan.words_per_minute)
             except (ValueError, TypeError) as error:
-                raise GenerationError(f"Invalid whole-session checkpoint: {error}") from error
+                generator.workspace.save_attempt(
+                    RawGenerationAttempt(
+                        stage="whole-session-checkpoint-validation",
+                        attempt=1,
+                        text=json.dumps(saved, ensure_ascii=False),
+                        elapsed_seconds=0,
+                        validation_error=str(error),
+                    )
+                )
+                raise GenerationError(
+                    "Invalid whole-session checkpoint: " + _public_validation_error(error)
+                ) from None
             if errors:
                 raise GenerationError("Invalid whole-session checkpoint: " + "; ".join(errors))
             draft = candidate
@@ -762,12 +793,18 @@ def generate_whole_session(
                 response_json_schema=response_schema,
             )
         )
+        validation_detail: str | None = None
         try:
             candidate = WholeSessionDraft.model_validate(_strict_json(result.text))
             errors = _validate_session(candidate, session, slots, plan.words_per_minute)
             draft = candidate if not errors else None
-        except (ValueError, TypeError, ValidationError) as error:
-            errors = [f"Corrupt structured output: {error}"]
+        except (ValueError, TypeError) as error:
+            validation_detail = str(error)
+            errors = [
+                "Corrupt structured output: "
+                + _public_validation_error(error)
+                + ". Return a complete object matching the session schema."
+            ]
             draft = None
         record = RawGenerationAttempt(
             stage="whole-session" if attempt == 1 else "whole-session-revision",
@@ -777,7 +814,7 @@ def generate_whole_session(
             request_seed=seed + attempt - 1,
             max_output_tokens=tokens,
             telemetry=result.telemetry,
-            validation_error="; ".join(errors)[:8_000] if errors else None,
+            validation_error=validation_detail or ("; ".join(errors) if errors else None),
         )
         attempts.append(record)
         if generator.workspace is not None:

@@ -221,6 +221,74 @@ class NativeOutputError(RuntimeError):
         self.evidence = evidence
 
 
+def _preserve_invalid_native(
+    outputs: list[tuple[Any, Any]],
+    *,
+    request: dict[str, Any],
+    raw_dir: Path,
+    model_path: Path,
+    kwargs: dict[str, Any],
+    stops: list[dict[str, Any]],
+    elapsed: float,
+    reason: str,
+    np: Any,
+) -> dict[str, Any]:
+    key = _safe_component(request["native_artifact_key"], "native_artifact_key")
+    attempt = uuid.uuid4().hex
+    folder = raw_dir / f"{key}-{attempt}"
+    folder.mkdir(mode=0o700)
+    arrays = []
+    for index, (audio, sample_rate) in enumerate(outputs):
+        returned: dict[str, Any] = {
+            "shape": list(audio.shape),
+            "dtype": str(audio.dtype),
+            "sample_rate_returned": repr(sample_rate),
+        }
+        if audio.dtype.kind in "biufc":
+            path = folder / f"returned-{index:04d}.npy"
+            with path.open("xb") as handle:
+                np.save(handle, audio, allow_pickle=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            path.chmod(0o444)
+            returned.update(
+                array_path=str(path),
+                sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            )
+        arrays.append(returned)
+    sidecar_path = folder / "metadata.json"
+    evidence: dict[str, Any] = {
+        "status": "invalid",
+        "playable": False,
+        "artifact_format": "numpy_npy",
+        "rejection_reason": reason,
+        "returned_outputs": arrays,
+        "sidecar_path": str(sidecar_path),
+        "inference_seconds": elapsed,
+        "attempt_id": attempt,
+        "native_artifact_key": key,
+        "segment_id": request["segment_id"],
+    }
+    metadata = {
+        **evidence,
+        "experimental": True,
+        "model_path": str(model_path),
+        "request": request,
+        "mlx_audio_revision": _MLX_AUDIO_REVISION,
+        "generation_arguments": kwargs,
+        "stop_evidence": stops,
+        "token_budget_policy": _TOKEN_BUDGET_POLICY,
+    }
+    with sidecar_path.open("x", encoding="utf-8") as handle:
+        json.dump(metadata, handle, indent=2, allow_nan=False)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    sidecar_path.chmod(0o444)
+    evidence["sidecar_sha256"] = hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
+    return evidence
+
+
 def _preserve_native(
     audio: Any,
     *,
@@ -299,20 +367,34 @@ def _synthesize(
     started = time.monotonic()
     chunks = []
     stops = []
+    outputs = []
     iterator = model.generate(**kwargs)
     for result in iterator:
         mx.eval(result.audio)
         audio = np.asarray(result.audio)
+        outputs.append((audio, result.sample_rate))
+        stops.append(_generator_stop_evidence(iterator))
         if (
-            int(result.sample_rate) != _SAMPLE_RATE
+            result.sample_rate != _SAMPLE_RATE
             or audio.ndim != 1
             or not audio.size
             or audio.dtype.kind != "f"
             or not np.isfinite(audio).all()
         ):
-            raise RuntimeError("native output must be nonempty finite mono float audio at 24000 Hz")
+            reason = "native output must be nonempty finite mono float audio at 24000 Hz"
+            evidence = _preserve_invalid_native(
+                outputs,
+                request=request,
+                raw_dir=raw_dir,
+                model_path=model_path,
+                kwargs=kwargs,
+                stops=stops,
+                elapsed=time.monotonic() - started,
+                reason=reason,
+                np=np,
+            )
+            raise NativeOutputError(reason, evidence)
         chunks.append(audio.astype(np.float32, copy=False))
-        stops.append(_generator_stop_evidence(iterator))
     elapsed = time.monotonic() - started
     if not chunks:
         raise RuntimeError("MLX Qwen returned no audio")

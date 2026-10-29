@@ -81,6 +81,11 @@ class FakeNP:
     def rint(audio: Audio) -> Audio:
         return Audio([round(x) for x in audio.samples])
 
+    @staticmethod
+    def save(handle: BinaryIO, audio: Audio, *, allow_pickle: bool) -> None:
+        assert allow_pickle is False
+        handle.write(struct.pack("<" + "f" * audio.size, *audio.samples))
+
 
 class FakeSF:
     def __init__(self) -> None:
@@ -103,7 +108,7 @@ class FakeMLX:
 
 
 class FakeModel:
-    def __init__(self, audio: Audio | None = None, rate: int = 24000, eos: bool = True) -> None:
+    def __init__(self, audio: Audio | None = None, rate: float = 24000, eos: bool = True) -> None:
         self.audio = Audio([1.25, 0.125, -1.25]) if audio is None else audio
         self.rate, self.eos = rate, eos
         self.calls: list[dict[str, Any]] = []
@@ -269,14 +274,85 @@ def test_voice_design_requires_instruction_and_rejects_preset(
         (Audio([float("inf")]), 24000),
         (Audio([1], dtype="int16"), 24000),
         (Audio([0.1]), 22050),
+        (Audio([0.1]), float("nan")),
+        (Audio([0.1]), float("inf")),
+        (Audio([0.1]), 24000.5),
     ],
 )
 def test_rejects_non_native_or_invalid_waveforms(
-    worker: dict[str, Any], payload: dict[str, Any], tmp_path: Path, audio: Audio, rate: int
+    worker: dict[str, Any], payload: dict[str, Any], tmp_path: Path, audio: Audio, rate: float
 ) -> None:
-    with pytest.raises(RuntimeError, match="native output"):
-        synthesize(worker, payload, tmp_path, FakeModel(audio, rate))
-    assert list(tmp_path.iterdir()) == []
+    model = FakeModel(audio)
+    model.rate = rate
+    sf = FakeSF()
+
+    def rejected_attempt() -> dict[str, Any]:
+        with pytest.raises(worker["NativeOutputError"], match="native output") as error:
+            worker["_synthesize"](
+                payload,
+                task=payload["task"],
+                model=model,
+                model_path=tmp_path / "checkpoint",
+                raw_dir=tmp_path,
+                mx=FakeMLX(),
+                np=FakeNP,
+                sf=sf,
+            )
+        evidence: dict[str, Any] = error.value.evidence
+        return evidence
+
+    evidence = rejected_attempt()
+    assert evidence["status"] == "invalid"
+    assert evidence["playable"] is False
+    assert evidence["artifact_format"] == "numpy_npy"
+    assert "wav_path" not in evidence
+    assert "pcm_s16le_sha256" not in evidence
+    assert sf.calls == []
+    returned = evidence["returned_outputs"][0]
+    assert returned["sample_rate_returned"] == repr(rate)
+    raw = Path(returned["array_path"])
+    assert raw.suffix == ".npy"
+    expected = struct.pack("<" + "f" * audio.size, *audio.samples)
+    assert raw.read_bytes() == expected
+    assert raw.stat().st_mode & 0o222 == 0
+    assert returned["sha256"] == hashlib.sha256(expected).hexdigest()
+    sidecar = Path(evidence["sidecar_path"])
+    metadata = json.loads(sidecar.read_text())
+    assert metadata["rejection_reason"] == (
+        "native output must be nonempty finite mono float audio at 24000 Hz"
+    )
+    assert metadata["returned_outputs"] == evidence["returned_outputs"]
+    assert metadata["request"] == payload
+    assert metadata["stop_evidence"][0]["generated_codec_steps"] == 3
+    assert sidecar.stat().st_mode & 0o222 == 0
+    original_sidecar = sidecar.read_bytes()
+    assert evidence["sidecar_sha256"] == hashlib.sha256(original_sidecar).hexdigest()
+    second = rejected_attempt()
+    assert second["attempt_id"] != evidence["attempt_id"]
+    assert second["returned_outputs"][0]["array_path"] != str(raw)
+    assert raw.read_bytes() == expected
+    assert sidecar.read_bytes() == original_sidecar
+
+
+def test_later_invalid_yield_retains_all_returned_audio_without_pcm(
+    worker: dict[str, Any], payload: dict[str, Any], tmp_path: Path
+) -> None:
+    first, invalid = Audio([0.125, -0.25]), Audio([float("nan"), float("inf")])
+    model = SimpleNamespace(
+        generate=lambda **kwargs: iter(
+            SimpleNamespace(audio=audio, sample_rate=24000) for audio in (first, invalid)
+        )
+    )
+    with pytest.raises(worker["NativeOutputError"], match="native output") as error:
+        synthesize(worker, payload, tmp_path, model)
+    evidence = error.value.evidence
+    assert evidence["status"] == "invalid"
+    assert "pcm_s16le_sha256" not in evidence
+    returned = evidence["returned_outputs"]
+    assert len(returned) == 2
+    for item, original in zip(returned, (first, invalid), strict=True):
+        assert Path(item["array_path"]).read_bytes() == struct.pack("<ff", *original.samples)
+    assert list(tmp_path.rglob("*.wav")) == []
 
 
 def test_missing_eos_preserves_native_artifact_and_fails_closed(
