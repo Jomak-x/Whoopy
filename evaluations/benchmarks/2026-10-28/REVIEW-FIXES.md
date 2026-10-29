@@ -467,3 +467,32 @@ the operator to choose a retained take. That existing selection operation restor
 its checkpoint and reassembles the selected narration; attempts and finalization
 history remain retained. No live inference, full repository test/lint/type gate,
 external receipt reconciliation, frontend change, publication or CI ran here.
+
+
+## Review fixes after 4ff4224
+
+All five selected findings were confirmed against their executable callers and
+fixed at the affected validation or state boundary. The preceding commits and
+frontend exclusion remain intact.
+
+| Finding | Correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-PENDING-TAKE-REVISION-MUTATION | Ordinary edits, restores and semantic-plan commits reject unresolved or unreadable pending alternative state before snapshots or active writes. The dedicated assembly revision remains available for validated retained-take selection. | All four pending phases preserve artifact bytes on rejected mutations; failed-finalization recovery still selects and renders the retained take. |
+| REVIEW-SLEEP-EXCLUSION-REGRESSION | Explicit mid-clause `not` exclusions are restored. Inability/history auxiliaries consume their own `not` before exclusion matching, preserving sleep intent and existing independent-clause boundaries. | The accumulated routing matrix covers explicit not-fall-asleep requests, inability/history, whitespace variants, coordinated exclusions and positive subject clauses. |
+| REVIEW-CURRENT-PLAN-FAILURE-HIDDEN | A stopped precommit plan error is shown only while its captured source record matches the durable run. Postcommit worker-construction errors persist failure only if both the activated record and revision still match under the run lock. | API run/task/list views expose current failures; executed CLI recovery and newer operations supersede them. Concurrent recovery during worker construction is not overwritten. |
+| REVIEW-NEGATED-DAYTIME-CUES-ACCEPTED | Required movement and sound cues are checked after masking explicit negated action spans in validation-only text. Contrastive clauses preserve separate positive invitations; accepted prose is untouched. | The exact three-minute draft requires revision, rejected raw prose is retained, coordinated negative cues fail and permissive positive cues remain accepted. |
+| REVIEW-TAKE-PREVIEW-UNBOUND-WAV | Preview parses the served WAV and verifies mono PCM16 format, sample rate, frame count and decoded bytes against the verified retained take. Missing or damaged files fail without repair. | API preview rejects missing, malformed, truncated, substituted and incompatible WAVs with all artifact bytes unchanged. |
+
+One focused batch passed **622 tests in 53.10 seconds**. It covered routing,
+whole-session generation, revision admission and recovery, take integrity and
+restart finalization, semantic-plan ownership/error handling, and the affected
+backend APIs. The only warning was the existing Starlette/httpx deprecation.
+Touched Python files were formatted before the batch. No further findings remain
+from this focused inspection; the related postcommit error and contrastive cue
+gaps discovered during integration were included in these fixes and regressions.
+
+No full repository test/lint/type gate, live model inference, external benchmark
+receipt reconciliation, publication or CI was performed in this review phase.
+Final Document/PR reconciliation of completed live receipts and exact CI revisions
+remains with the outer executor; this deterministic batch adds no human-quality
+or model-readiness claim.

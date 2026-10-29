@@ -117,11 +117,42 @@ NEGATABLE_ACTION = (
     rf"move(?:\s+{MOVEMENT_OBJECT}(?:\s+(?:or|and)\s+{MOVEMENT_OBJECT})*)?"
     rf"|{WAKING_ACTION}"
 )
-NEGATED_WAKING = re.compile(
+ACTION_NEGATION = (
     r"\b(?:no need to|(?:do not|don't|don\u2019t) (?:need|have) to|"
     r"do not|don't|don\u2019t|need not|needn't|needn\u2019t|never|without needing to)\s+"
-    rf"(?:{NEGATABLE_ACTION})"
+)
+NEGATED_WAKING = re.compile(
+    ACTION_NEGATION + rf"(?:{NEGATABLE_ACTION})"
     rf"(?:\s+(?:or|and)\s+(?:to\s+)?(?:{NEGATABLE_ACTION}))*\b",
+    re.I,
+)
+RETURN_SOUND = re.compile(
+    r"\b(?:hear(?:ing)?|listen(?:ing)?)\b|"
+    r"\b(?:notice|noticing|check in with|attend to|return to|become aware of)\b"
+    r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?;\n]){0,60}\bsounds?\b",
+    re.I,
+)
+RETURN_MOVEMENT = re.compile(
+    r"\b(?:move|moving|stretch(?:ing)?|lift(?:ing)?|shift(?:ing)?|"
+    r"wiggl(?:e|ing)|flex(?:ing)?|curl(?:ing)?)\s+"
+    r"(?:(?:your|the|a|an|one|both)\s+)?"
+    r"(?:fingers?|toes?|hands?|arms?|feet|foot|legs?|body|weight|position|posture)\b|"
+    r"\bstretch(?:ing)?(?:\s+(?:a little|gently|slightly))?"
+    r"(?=\s*(?:[.!?,;]|$|if you (?:wish|like|want)\b))",
+    re.I,
+)
+RETURN_ACTION = (
+    rf"(?:{RETURN_MOVEMENT.pattern}|{RETURN_SOUND.pattern}|{NEGATABLE_ACTION}|stretch)"
+    rf"(?:\s+(?:or|and)\s+{MOVEMENT_OBJECT})*"
+    r"(?:\s+(?:(?:to|the|your|some|any|surrounding|nearby|ordinary)\s+)*"
+    r"(?:sounds?|room|surroundings|around you))?"
+    r"(?:\s+(?:gently|slightly|slowly|briefly|a little|around you))*"
+)
+NEGATED_RETURN = re.compile(
+    rf"(?:{ACTION_NEGATION}|\b(?:not|without|avoid)\s+)"
+    rf"(?:(?:gently|slightly|slowly|briefly)\s+)?{RETURN_ACTION}"
+    rf"(?:\s+(?:or|and)\s+(?:to\s+)?"
+    rf"(?:(?:gently|slightly|slowly|briefly)\s+)?{RETURN_ACTION})*",
     re.I,
 )
 LYING_CONTRADICTION = re.compile(
@@ -143,6 +174,11 @@ def _has_waking_instruction(text: str) -> bool:
         not any(start <= match.start() and match.end() <= end for start, end in negated)
         for match in WAKING.finditer(text)
     )
+
+
+def _has_positive_return_cue(text: str, cue: re.Pattern[str]) -> bool:
+    positive = NEGATED_RETURN.sub(lambda match: " " * len(match.group()), text)
+    return cue.search(positive) is not None
 
 
 def _strict_json(text: str) -> object:
@@ -439,21 +475,8 @@ def _validate_session(
         if not re.search(r"\b(?:rest\w*|sleep\w*|quiet\w*)\b", ending, re.I):
             errors.append("taper: permit quiet rest without a new task")
     else:
-        if not re.search(
-            r"\b(?:hear(?:ing)?|listen(?:ing)?)\b|"
-            r"\b(?:notice|noticing|check in with|attend to|return to|become aware of)\b"
-            r"[^.!?;\n]{0,60}\bsounds?\b",
-            ending,
-            re.I,
-        ) or not re.search(
-            r"\b(?:move|moving|stretch(?:ing)?|lift(?:ing)?|shift(?:ing)?|"
-            r"wiggl(?:e|ing)|flex(?:ing)?|curl(?:ing)?)\s+"
-            r"(?:(?:your|the|a|an|one|both)\s+)?"
-            r"(?:fingers?|toes?|hands?|arms?|feet|foot|legs?|body|weight|position|posture)\b|"
-            r"\bstretch(?:ing)?(?:\s+(?:a little|gently|slightly))?"
-            r"(?=\s*(?:[.!?,;]|$|if you (?:wish|like|want)\b))",
-            ending,
-            re.I,
+        if not _has_positive_return_cue(ending, RETURN_SOUND) or not _has_positive_return_cue(
+            ending, RETURN_MOVEMENT
         ):
             errors.append("return: include surrounding sound and an optional small movement")
         if re.search(

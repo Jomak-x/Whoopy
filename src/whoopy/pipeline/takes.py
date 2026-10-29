@@ -293,10 +293,24 @@ class SegmentTakeStore:
         )
 
     def audio_path(self, run_id: UUID | str, segment_id: str, take_id: str) -> Path:
-        manifest, _checkpoint, _audio = self._load_take(
+        manifest, _checkpoint, audio = self._load_take(
             self.store.parse_run_id(run_id), segment_id, take_id
         )
-        return self._segment_root(manifest.run_id, segment_id) / take_id / "audio.wav"
+        path = self._segment_root(manifest.run_id, segment_id) / take_id / "audio.wav"
+        try:
+            with wave.open(str(path), "rb") as preview:
+                if (
+                    preview.getnchannels() != 1
+                    or preview.getsampwidth() != 2
+                    or preview.getcomptype() != "NONE"
+                    or preview.getframerate() != audio.sample_rate
+                    or preview.getnframes() != audio.frame_count
+                    or preview.readframes(audio.frame_count + 1) != audio.pcm_s16le
+                ):
+                    raise SegmentTakeError("Take preview WAV does not match its verified audio.")
+        except (OSError, EOFError, wave.Error) as error:
+            raise SegmentTakeError("Take preview WAV is missing or malformed.") from error
+        return path
 
     def _load_take(
         self,

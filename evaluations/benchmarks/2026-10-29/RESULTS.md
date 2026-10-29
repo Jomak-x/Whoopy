@@ -295,3 +295,21 @@ No new live inference or external receipt reconciliation was performed here.
 Historical model evidence retains its actual producer revisions. Full repository
 gates, native platform validation and final Document/PR reconciliation remain
 with the outer executor.
+
+
+## Review follow-up after 4ff4224
+
+The five selected follow-up findings are fixed: pending alternatives prevent
+ordinary revision mutation, sleep routing respects explicit mid-clause exclusions,
+current semantic-plan failures remain visible until superseded, daytime ending
+cues must be positive invitations, and take previews verify the actual WAV against
+the retained PCM. Dedicated retained-take recovery remains available. The
+[review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-4ff4224)
+records each finding and its behavioral coverage.
+
+One focused batch passed **622 tests in 53.10 seconds**, with only the existing
+Starlette/httpx deprecation warning. This is a focused review result, not a new
+full-suite or platform qualification. No live inference or external receipt
+reconciliation occurred here; historical producer revisions, pending human
+listening and experimental CLI-only MLX caveats remain unchanged. Full gates and
+final Document/PR reconciliation belong to the outer executor.

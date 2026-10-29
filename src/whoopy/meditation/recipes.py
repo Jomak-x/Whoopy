@@ -87,8 +87,9 @@ NO_BREATH = re.compile(
 )
 SLEEP = re.compile(r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b", re.I)
 NEGATED_SLEEP = re.compile(
-    r"(?:\b(?:no|without|avoid|skip|(?:do|is|are|should|must)n['\u2019]t|"
-    r"(?:do|is|are|should|must) not|rather not)\b|^\s*not\b)"
+    r"\b(?P<inability>(?:could|can|did|was|were)\s+not)\b|"
+    r"\b(?:no|not|without|avoid|skip|(?:do|is|are|should|must)n['\u2019]t|"
+    r"(?:do|is|are|should|must) not|rather not)\b"
     r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?;\n])*"
     r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b",
     re.I,
@@ -137,7 +138,10 @@ def route_session(
         )
     sleep = meditation_kind == "sleep" or (
         meditation_kind is None
-        and any(SLEEP.search(NEGATED_SLEEP.sub("", clause)) for clause in clauses)
+        and any(
+            SLEEP.search(NEGATED_SLEEP.sub(lambda match: match.group("inability") or "", clause))
+            for clause in clauses
+        )
     )
     if posture is None:
         if re.search(r"\b(?:lying|lie|lay)\s+(?:down|in bed)|\breclining\b", prompt, re.I):

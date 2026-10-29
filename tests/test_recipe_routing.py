@@ -75,8 +75,11 @@ def test_sleep_wording_routes_posture_and_ending(prompt: str) -> None:
     "prompt",
     [
         "I couldn't sleep; please help me drift off now.",
+        "I couldnt sleep; please help me drift off now.",
         "I couldn’t sleep; please help me drift off now.",
         "I could not sleep; please help me drift off now.",
+        "I could  not sleep; please help me drift off now.",
+        "I could\tnot sleep; please help me drift off now.",
         "I can't sleep; please help me drift off now.",
         "I cannot sleep; please help me drift off now.",
         "I did not sleep last night; help me rest now.",
@@ -258,6 +261,11 @@ def test_independent_sleep_request_keeps_breath_exclusion(prompt: str) -> None:
         "My goal is relaxation, not sleep",
         "The session shouldn't help me sleep",
         "The session must not help me sleep",
+        "Help me stay awake and not fall asleep during my meeting.",
+        "Help me relax and not sleep during my meeting.",
+        "I want relaxation and not sleep.",
+        "I prefer not to fall asleep.",
+        "No breath focus and please help me not fall asleep.",
     ],
 )
 def test_actual_sleep_negation_remains_daytime_across_clauses(prompt: str) -> None:

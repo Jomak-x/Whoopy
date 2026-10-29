@@ -10,7 +10,7 @@ import socket
 import sys
 import threading
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
@@ -3284,13 +3284,32 @@ def main(argv: Sequence[str] | None = None) -> int:
                     note=args.note,
                     blueprint_path=blueprint_path,
                 )
-            worker = _worker_for_record(
-                store,
-                store.load(existing.run_id),
-                artifact_lock_path=_artifact_lock_path(args),
-                models_dir=args.models_dir,
-                config_dir=args.config_dir,
-            )
+                activated = store.load(existing.run_id)
+            try:
+                worker = _worker_for_record(
+                    store,
+                    activated,
+                    artifact_lock_path=_artifact_lock_path(args),
+                    models_dir=args.models_dir,
+                    config_dir=args.config_dir,
+                )
+            except Exception as error:
+                with (
+                    suppress(OSError, RunStoreError, RunLockUnavailable, ValueError),
+                    RunLock(store.run_directory(existing.run_id)),
+                ):
+                    if (
+                        store.load(existing.run_id) == activated
+                        and revisions.active_revision_id(existing.run_id) == revision.revision_id
+                    ):
+                        store.save(
+                            activated.transition(
+                                RunStatus.FAILED,
+                                updated_at=datetime.now(UTC),
+                                error=f"{type(error).__name__}: {error}",
+                            )
+                        )
+                raise
             with _interruptible_sigterm():
                 record = worker.resume(existing.run_id)
         except (

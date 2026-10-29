@@ -312,6 +312,7 @@ class GenerationTask:
     prior_resume_count: int = 0
     resumed_web_launch: bool = False
     finalizing_take: bool = False
+    plan_source_record: RunRecord | None = None
 
     @property
     def active(self) -> bool:
@@ -1519,6 +1520,19 @@ class LocalWebApplication:
         }
         with self._task_lock:
             task = self._tasks.get(str(record.run_id))
+        if (
+            task is not None
+            and task.mode == "plan_regeneration"
+            and not task.active
+            and task.error is not None
+            and task.plan_source_record == record
+        ):
+            summary.update(
+                status="failed",
+                error=task.error,
+                resumable=False,
+                execution={"stage": "drafting", "message": task.error},
+            )
         pending = self._pending_take(str(record.run_id))
         if pending is not None:
             summary.update(
@@ -2651,6 +2665,7 @@ class LocalWebApplication:
     ) -> dict[str, Any]:
         task = GenerationTask(task_id=run_id, run_id=run_id, mode="plan_regeneration")
         with self._admit_generation():
+            task.plan_source_record = RunStore(self.runs_directory).load(run_id)
             input_root = self.runs_directory / run_id / "history" / "editor-inputs"
             input_root.mkdir(parents=True, exist_ok=True)
             input_path = input_root / f"{uuid4()}.plan.json"
