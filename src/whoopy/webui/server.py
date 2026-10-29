@@ -316,9 +316,9 @@ class GenerationTask:
 
     @property
     def active(self) -> bool:
-        """Include the pre-Popen window in duplicate/cancel decisions."""
+        """Retain ownership until the supervisor finishes its durable updates."""
 
-        return self.launching or (self.process is not None and self.process.poll() is None)
+        return self.launching or self.process is not None
 
 
 @dataclass
@@ -435,6 +435,10 @@ class LocalWebApplication:
             except RunLockUnavailable:
                 return True
         return False
+
+    def _owns_task(self, task: GenerationTask) -> bool:
+        with self._task_lock:
+            return self._tasks.get(task.run_id) is task
 
     def list_voice_references(self) -> dict[str, Any]:
         """Return active consented references without exposing absolute paths."""
@@ -1949,9 +1953,13 @@ class LocalWebApplication:
             try:
                 _run_created(record.run_id)
             except Exception:
-                with self._task_lock:
-                    self._tasks.pop(run_id, None)
-                self._persist_process_failure(run_id, "Could not persist generation ownership.")
+                with self._operation_admission_lock:
+                    self._persist_process_failure(
+                        run_id, "Could not persist generation ownership.", task=task
+                    )
+                    with self._task_lock:
+                        if self._tasks.get(run_id) is task:
+                            task.launching = False
                 raise
         thread = threading.Thread(
             target=self._run_generation,
@@ -2676,6 +2684,8 @@ class LocalWebApplication:
         input_path: Path,
         note: str,
     ) -> None:
+        if not self._owns_task(task):
+            return
         command = [
             sys.executable,
             "-m",
@@ -2718,11 +2728,13 @@ class LocalWebApplication:
         except OSError as error:
             task.error = f"Could not launch plan regeneration: {error}"
         finally:
-            with self._task_lock:
-                task.launching = False
-                task.process = None
-            with suppress(OSError):
-                input_path.unlink(missing_ok=True)
+            with self._operation_admission_lock:
+                if self._owns_task(task):
+                    with suppress(OSError):
+                        input_path.unlink(missing_ok=True)
+                with self._task_lock:
+                    task.launching = False
+                    task.process = None
 
     def restore_revision(self, run_id: str, revision_id: str) -> dict[str, Any] | None:
         if self._record(run_id) is None:
@@ -2949,9 +2961,11 @@ class LocalWebApplication:
         input_path: Path | None = None
         try:
             with self._task_lock:
+                if self._tasks.get(task.run_id) is not task:
+                    return
                 cancelled_before_launch = task.cancel_requested
             if cancelled_before_launch:
-                self._persist_cancel_intent(task.run_id)
+                self._persist_cancel_intent(task.run_id, task=task)
                 return
             command = [
                 sys.executable,
@@ -3059,21 +3073,28 @@ class LocalWebApplication:
             with self._task_lock:
                 cancelled = task.cancel_requested
             if cancelled:
-                self._persist_cancel_intent(task.run_id)
+                self._persist_cancel_intent(task.run_id, task=task)
             elif process.returncode not in (0, 130, 143):
-                self._persist_process_failure(task.run_id, self._friendly_process_error(stderr))
+                self._persist_process_failure(
+                    task.run_id, self._friendly_process_error(stderr), task=task
+                )
             _ = stdout
         except OSError as error:
-            self._persist_process_failure(task.run_id, f"Could not launch generation: {error}")
+            self._persist_process_failure(
+                task.run_id, f"Could not launch generation: {error}", task=task
+            )
         finally:
-            if task.resumed_web_launch:
-                self._record_resumed_web_launch(task)
-            with self._task_lock:
-                task.launching = False
-                task.process = None
-            if input_path is not None:
-                with suppress(OSError):
-                    input_path.unlink(missing_ok=True)
+            try:
+                if task.resumed_web_launch:
+                    self._record_resumed_web_launch(task)
+            finally:
+                with self._operation_admission_lock:
+                    if input_path is not None and self._owns_task(task):
+                        with suppress(OSError):
+                            input_path.unlink(missing_ok=True)
+                    with self._task_lock:
+                        task.launching = False
+                        task.process = None
 
     def _run_recovery_command(
         self,
@@ -3081,6 +3102,8 @@ class LocalWebApplication:
         command_name: str,
         segment_id: str | None,
     ) -> None:
+        if not self._owns_task(task):
+            return
         command = [
             sys.executable,
             "-m",
@@ -3126,16 +3149,18 @@ class LocalWebApplication:
             with self._task_lock:
                 cancelled = task.cancel_requested
             if cancelled:
-                self._persist_cancel_intent(task.run_id)
+                self._persist_cancel_intent(task.run_id, task=task)
             elif process.returncode not in (0, 130, 143):
                 self._persist_process_failure(
                     task.run_id,
                     self._friendly_process_error(stderr),
+                    task=task,
                 )
         except OSError as error:
             self._persist_process_failure(
                 task.run_id,
                 f"Could not launch {command_name}: {error}",
+                task=task,
             )
         finally:
             with self._task_lock:
@@ -3178,12 +3203,16 @@ class LocalWebApplication:
         except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
             return
 
-    def _persist_process_failure(self, run_id: str, message: str) -> None:
+    def _persist_process_failure(
+        self, run_id: str, message: str, *, task: GenerationTask | None = None
+    ) -> None:
         """Keep launcher/CLI failures from becoming permanently queued runs."""
 
         store = RunStore(self.runs_directory)
         try:
-            with RunLock(store.run_directory(run_id)):
+            with self._operation_admission_lock, RunLock(store.run_directory(run_id)):
+                if task is not None and not self._owns_task(task):
+                    return
                 record = store.load(run_id)
                 if record.recovery is None or record.status not in (
                     RunStatus.QUEUED,
@@ -3233,7 +3262,9 @@ class LocalWebApplication:
 
         store = RunStore(self.runs_directory)
         try:
-            with RunLock(store.run_directory(task.run_id)):
+            with self._operation_admission_lock, RunLock(store.run_directory(task.run_id)):
+                if not self._owns_task(task) or not task.resumed_web_launch:
+                    return
                 record = store.load(task.run_id)
                 if record.recovery is None or record.status in (
                     RunStatus.QUEUED,
@@ -3256,10 +3287,11 @@ class LocalWebApplication:
                     }
                 )
                 store.save(updated)
+                task.resumed_web_launch = False
         except (OSError, RunLockUnavailable, RunStoreError, ValueError):
             return
 
-    def _persist_cancel_intent(self, run_id: str) -> None:
+    def _persist_cancel_intent(self, run_id: str, *, task: GenerationTask | None = None) -> None:
         """Make a completed browser cancellation durably resumable.
 
         The native child normally records its own SIGTERM interruption.  A
@@ -3273,7 +3305,9 @@ class LocalWebApplication:
 
         store = RunStore(self.runs_directory)
         try:
-            with RunLock(store.run_directory(run_id)):
+            with self._operation_admission_lock, RunLock(store.run_directory(run_id)):
+                if task is not None and not self._owns_task(task):
+                    return
                 record = store.load(run_id)
                 if record.recovery is None or record.status not in (
                     RunStatus.QUEUED,

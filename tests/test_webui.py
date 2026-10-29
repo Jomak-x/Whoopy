@@ -119,10 +119,14 @@ def test_task_stays_running_until_completed_worker_releases_lock(
 
     active = application._task_public(task)
     task.process = Process(0)
+    exited = application._task_public(task)
+    task.process = None
     released = application._task_public(task)
 
     assert active["status"] == "running"
     assert active["execution"]["stage"] == "finalizing"
+    assert exited["status"] == "running"
+    assert exited["execution"]["stage"] == "finalizing"
     assert released["status"] == "completed"
 
 
@@ -155,10 +159,14 @@ def test_interrupted_task_stays_running_until_worker_releases_lock(
 
     active = application._task_public(task)
     task.process = Process(143)
+    exited = application._task_public(task)
+    task.process = None
     released = application._task_public(task)
 
     assert active["status"] == "running"
     assert active["execution"]["stage"] == "finalizing"
+    assert exited["status"] == "running"
+    assert exited["execution"]["stage"] == "finalizing"
     assert released["status"] == "interrupted"
 
 
@@ -760,6 +768,10 @@ def test_immediate_cancel_is_not_lost_before_process_publication(tmp_path: Path)
     assert record.status is RunStatus.INTERRUPTED
     assert record.execution is not None
     assert record.execution.interruption_kind == "user_cancelled"
+    while application._tasks[created["run_id"]].active:
+        if time.monotonic() >= deadline:
+            pytest.fail("cancel supervision did not finish")
+        time.sleep(0.01)
     summary = application.run(created["run_id"])
     assert summary is not None
     assert summary["resumable"] is True

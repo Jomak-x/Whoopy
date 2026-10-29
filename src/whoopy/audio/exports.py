@@ -172,6 +172,8 @@ def export_finished_audio(
             )
             for kind, filename, expected_codec, codec_arguments in _OUTPUT_SPECS
         )
+        for artifact in artifacts:
+            _fsync_file(staging / artifact.filename)
         manifest = ExportManifest(
             generated_at=timestamp,
             source_filename=source.name,
@@ -483,6 +485,12 @@ def _write_manifest(path: Path, manifest: ExportManifest) -> None:
         destination.write(payload)
         destination.flush()
         os.fsync(destination.fileno())
+
+
+def _fsync_file(path: Path) -> None:
+    with path.open("r+b") as artifact:
+        artifact.flush()
+        os.fsync(artifact.fileno())
 
 
 def _activate_directory(staging: Path, destination: Path, backup: Path) -> None:

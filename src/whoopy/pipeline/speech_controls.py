@@ -9,6 +9,42 @@ from whoopy.ports import SpeechCapabilities
 from whoopy.timeline import SpeechSegment, Timeline, TimelineSegment, VoiceMode
 
 
+def apply_global_speech_overrides(
+    timeline: Timeline,
+    settings: TTSRunSettings,
+    *,
+    excluded_controls: dict[str, set[str]] | None = None,
+) -> Timeline:
+    changes = {
+        key: value
+        for key, value in {
+            "delivery": settings.delivery_override,
+            "intensity": settings.intensity_override,
+            "pace": settings.pace_override,
+        }.items()
+        if value is not None
+    }
+    if not changes:
+        return timeline
+    excluded = excluded_controls or {}
+    return timeline.model_copy(
+        update={
+            "segments": [
+                segment.model_copy(
+                    update={
+                        name: value
+                        for name, value in changes.items()
+                        if name not in excluded.get(segment.id, ())
+                    }
+                )
+                if isinstance(segment, SpeechSegment)
+                else segment
+                for segment in timeline.segments
+            ]
+        }
+    )
+
+
 def apply_speech_capability_fallbacks(
     timeline: Timeline,
     capabilities: SpeechCapabilities,

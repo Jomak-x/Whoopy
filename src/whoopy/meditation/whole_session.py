@@ -165,9 +165,10 @@ NEGATED_RETURN = re.compile(
     rf"(?:(?:gently|slightly|slowly|briefly)\s+)?{RETURN_ACTION})*",
     re.I,
 )
+CHAIR_SUPPORT = r"\b(?:in|on|against) (?:the|your|a) chair\b"
 LYING_CONTRADICTION = re.compile(
     r"\b(?:sit (?:upright|tall|up)|straighten your spine|feet (?:flat )?on (?:the )?floor|"
-    r"palms? on (?:your )?(?:knees|thighs)|(?:in|on|against) (?:the|your|a) chair)\b",
+    rf"palms? on (?:your )?(?:knees|thighs)|{CHAIR_SUPPORT})\b",
     re.I,
 )
 SITTING_CONTRADICTION = re.compile(
@@ -177,7 +178,10 @@ SITTING_CONTRADICTION = re.compile(
     r"\b(?:rest|resting)\s+flat\s+on\s+(?:your|the)\s+(?:back|side|stomach)\b",
     re.I,
 )
-POSTURE_INSTRUCTION = rf"(?:{LYING_CONTRADICTION.pattern}|{SITTING_CONTRADICTION.pattern})"
+POSTURE_INSTRUCTION = (
+    rf"(?:\b(?:sit(?:ting)?|seated)\s+(?:(?:upright|tall|up)\s+)?{CHAIR_SUPPORT}|"
+    rf"{LYING_CONTRADICTION.pattern}|{SITTING_CONTRADICTION.pattern})"
+)
 NEGATED_POSTURE_INSTRUCTION = re.compile(
     rf"(?:{ACTION_NEGATION}|\b(?:not|without|avoid)\s+)(?:be\s+)?"
     rf"{POSTURE_INSTRUCTION}"

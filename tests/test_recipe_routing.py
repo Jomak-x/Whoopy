@@ -60,7 +60,16 @@ def test_explicit_practice_preserves_external_anchor_constraint() -> None:
 
 
 @pytest.mark.parametrize(
-    "prompt", ["Help me with sleeping", "Help me sleep", "Good\tnight", "I have insomnia"]
+    "prompt",
+    [
+        "Help me with sleeping",
+        "Help me sleep",
+        "Good\tnight",
+        "I have insomnia",
+        "Help me drift off now",
+        "I need help drifting off",
+        "Do not keep me awake; help me drift off",
+    ],
 )
 def test_sleep_wording_routes_posture_and_ending(prompt: str) -> None:
     session = route_session(prompt, 60)
@@ -86,6 +95,17 @@ def test_sleep_wording_routes_posture_and_ending(prompt: str) -> None:
         "I wasn't sleeping last night; help me rest now.",
         "I was not sleeping last night; help me rest now.",
         "No breath focus and I could not sleep; help me rest now.",
+        "I am not sleeping well; help me drift off now.",
+        "I'm not sleeping well.",
+        "I am not sleeping enough; help me rest now.",
+        "We are not sleeping properly; help us rest.",
+        "We aren't sleeping well; help us rest.",
+        "My partner is not sleeping well; help them rest.",
+        "My partner isn't sleeping well; help them rest.",
+        "I am not sleeping soundly these days.",
+        "I am not getting enough sleep.",
+        "I am not getting much sleep.",
+        "No breath focus and I am not sleeping well; help me drift off now.",
     ],
 )
 def test_inability_or_history_of_sleep_is_not_an_exclusion(prompt: str) -> None:
@@ -327,6 +347,18 @@ def test_independent_sleep_request_keeps_breath_exclusion(prompt: str) -> None:
         "I want relaxation and not sleep.",
         "I prefer not to fall asleep.",
         "No breath focus and please help me not fall asleep.",
+        "I am not sleeping during this meditation.",
+        "We aren't sleeping during this meditation.",
+        "Do not help me drift off.",
+        "Avoid drifting off during my meeting.",
+        "I am not sleeping well; keep me awake for my meeting.",
+        "I couldnt sleep last night; help me stay awake.",
+        "I could not sleep; help me remain awake.",
+        "I am not sleeping well and want to stay awake for my meeting.",
+        "I could not sleep and need to stay awake for work.",
+        "I am not sleeping well; I do not want to sleep now.",
+        "I am not getting enough sleep; please avoid helping me drift off now.",
+        "No breath focus or drifting off.",
     ],
 )
 def test_actual_sleep_negation_remains_daytime_across_clauses(prompt: str) -> None:

@@ -594,3 +594,34 @@ outer executor.
 The supplied completed live-evidence summary has been reflected in RESULTS.md
 with actual earlier source versions, pending human quality and experimental
 CLI-only MLX status; it is not current-source certification.
+
+
+## Review fixes after ec45495c
+
+The five selected findings were confirmed in the shared control, routing,
+supervision and export boundaries. Earlier repairs remain in place.
+
+| Finding | Correction and behavioral coverage |
+| --- | --- |
+| REVIEW-REVISION-GLOBAL-CONTROLS | Initial rendering and revisions share persisted global overrides. New implicit speech receives these defaults after protecting accepted controls and explicit marker/timeline choices, including default resets. Composed edit/render/restore cases retain normalized fixed settings and reject ambiguous reassignment of accepted controls. |
+| REVIEW-WEB-FINALIZER-OWNERSHIP | Admission and public nonterminal state last through supervisor finalization, including durable retry-count merging. Task identity guards reject stale failure, cancellation and provenance callbacks. A paused finalizer rejects an immediate second Resume and retains all three historical attempts plus the new failed launch. |
+| REVIEW-CURRENT-SLEEP-DIFFICULTY | Shared routing recognizes drift-off requests and bounded descriptions of sleep difficulty while preserving explicit sleep exclusions and awake requests. Routing regressions cover present difficulty, historical inability, positive requests and contrastive exclusions. |
+| REVIEW-NEGATED-CHAIR-GUIDANCE | Posture validation masks complete negated seated actions, including their chair support phrases. Composed generation accepts this guidance for lying sessions while rejecting independent affirmative seated instructions and allowing furniture mentions alone. |
+| REVIEW-EXPORT-MEDIA-DURABILITY | All four verified encoded artifacts are fsynced through writable handles before manifest publication and directory activation. Per-format failure injection preserves previous exports and the narration master; prior activation/rollback coverage remains. |
+
+The focused integrated batch passed **766 tests** and exposed **one routing
+regression** in 58.62 seconds: the generic `are not` exclusion matched before
+the present sleep-difficulty phrase. The difficulty alternative now consumes
+its full present-tense negation, including contractions, while the generic
+exclusion still handles actual requests not to sleep. Existing assertions were
+preserved and related present-tense/contraction cases added. The affected
+routing and whole-session suites then passed **460 tests in 3.64 seconds**.
+The initial batch reported only the existing Starlette/httpx deprecation warning.
+
+Touched Python files were formatted; the diff whitespace check passed and both
+excluded frontend trees remain identical to base `01680383`. No raw model or
+ASR traces, audio, model assets or private settings were added. Full repository
+gates, final native smoke, Document/PR reconciliation and CI remain with the
+outer executor. Completed live receipts retain their earlier source versions
+in RESULTS.md; these deterministic checks do not certify current live speech
+or human quality.

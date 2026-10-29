@@ -59,6 +59,7 @@ from whoopy.pipeline.runs import (
     RunStore,
 )
 from whoopy.pipeline.speech_controls import (
+    apply_global_speech_overrides,
     apply_speech_capability_fallbacks,
     effective_voice_mode,
     speech_capabilities,
@@ -1780,22 +1781,163 @@ def test_control_correspondence_matches_every_optimal_ordered_alignment() -> Non
 
 
 def _completed_backend_script_run(
-    root: Path, backend: Literal["kokoro", "moss-local-v1.5"]
+    root: Path,
+    backend: Literal["kokoro", "moss-local-v1.5"],
+    *,
+    script: str = SCRIPT,
+    overrides: dict[str, object] | None = None,
 ) -> RunStore:
     store = _completed_script_run(root)
     config = store.load_resolved_config(RUN_ID)
-    settings = config.tts.model_copy(update={"backend": backend})
+    settings = config.tts.model_copy(update={"backend": backend, **(overrides or {})})
     config = config.model_copy(update={"tts": settings})
     store._write_json(store.resolved_config_path(RUN_ID), config.model_dump_json(indent=2))
+    store._write_bytes(store.script_path(RUN_ID), script.encode())
     store.write_timeline(
         RUN_ID,
         apply_speech_capability_fallbacks(
-            store.load_timeline(RUN_ID),
+            apply_global_speech_overrides(
+                build_script_timeline(run_id=RUN_ID, script=script, created_at=NOW), settings
+            ),
             speech_capabilities(settings),
             voice_mode=effective_voice_mode(settings),
         ),
     )
     return store
+
+
+@pytest.mark.parametrize("backend", ["kokoro", "moss-local-v1.5"])
+@pytest.mark.parametrize("replacement", ["implicit", "marker-default", "field-default"])
+def test_revision_new_speech_uses_global_defaults_without_replacing_accepted_controls(
+    tmp_path: Path,
+    backend: Literal["kokoro", "moss-local-v1.5"],
+    replacement: str,
+) -> None:
+    store = _completed_backend_script_run(
+        tmp_path / "runs",
+        backend,
+        overrides={
+            "delivery_override": "warm",
+            "intensity_override": "moderate",
+            "pace_override": "slow",
+        },
+    )
+    settings = store.load_resolved_config(RUN_ID).tts
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    accepted_revision = revisions.create(
+        RUN_ID, RevisionRequest(timeline=TimelineEdit(pace={"speech-0001": "unhurried"}))
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    accepted = store.load_timeline(RUN_ID)
+    accepted_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    appended = "Listen to nearby sounds."
+    edits = TimelineEdit()
+    if replacement == "marker-default":
+        appended = f"[pace: natural]\n\n{appended}"
+    elif replacement == "field-default":
+        edits = TimelineEdit(pace={"speech-0003": "natural"})
+    revisions.create(
+        RUN_ID,
+        RevisionRequest(script=f"{store.load_script(RUN_ID)}\n{appended}\n", timeline=edits),
+    )
+
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    rendered = store.load_timeline(RUN_ID)
+    assert rendered.segments[:-1] == accepted.segments
+    added = rendered.segments[-1]
+    assert isinstance(added, SpeechSegment)
+    assert added.text == "Listen to nearby sounds."
+    assert added.pace == ("slow" if replacement == "implicit" else "natural")
+    assert added.delivery == ("neutral" if backend == "kokoro" else "warm")
+    assert added.intensity == ("subtle" if backend == "kokoro" else "moderate")
+    assert added.voice_mode == effective_voice_mode(settings)
+    assert store.load_resolved_config(RUN_ID).tts == settings
+    revisions.restore(RUN_ID, accepted_revision.revision_id)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == accepted
+    restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    assert restored_manifest["pcm_sha256"] == accepted_manifest["pcm_sha256"]
+
+
+def test_removed_pace_marker_resets_accepted_speech_without_changing_new_defaults(
+    tmp_path: Path,
+) -> None:
+    store = _completed_backend_script_run(
+        tmp_path / "runs",
+        "kokoro",
+        script=f"[pace: unhurried]\n\n{SCRIPT}",
+        overrides={"pace_override": "slow"},
+    )
+    RevisionStore(store).create(
+        RUN_ID,
+        RevisionRequest(script=f"{SCRIPT}\nListen to nearby sounds.\n"),
+    )
+
+    assert LocalWorker(store).resume(RUN_ID).status is RunStatus.COMPLETED
+    assert [
+        segment.pace
+        for segment in store.load_timeline(RUN_ID).segments
+        if isinstance(segment, SpeechSegment)
+    ] == ["natural", "natural", "slow"]
+
+
+@pytest.mark.parametrize("accepted_pace", [None, "unhurried", "natural"])
+@pytest.mark.parametrize("marker", ["", "[delivery: warm]\n\n"])
+def test_ambiguous_repeated_speech_compares_global_defaults_and_accepted_controls(
+    tmp_path: Path, accepted_pace: Literal["unhurried", "natural"] | None, marker: str
+) -> None:
+    repeated = "Notice the support beneath you."
+    store = _completed_backend_script_run(
+        tmp_path / "runs",
+        "kokoro",
+        script=f"{marker}{repeated}\n\n{repeated}",
+        overrides={"pace_override": "slow"},
+    )
+    revisions = RevisionStore(store)
+    if accepted_pace is not None:
+        revisions.create(
+            RUN_ID, RevisionRequest(timeline=TimelineEdit(pace={"speech-0001": accepted_pace}))
+        )
+    before = store.load_timeline(RUN_ID)
+    request = RevisionRequest(script=f"{marker}{repeated}\n\n{repeated}\n\n{repeated}")
+    if accepted_pace is not None:
+        with pytest.raises(RevisionError, match="ambiguously moves accepted controls"):
+            revisions.create(RUN_ID, request)
+        assert store.load_timeline(RUN_ID) == before
+    else:
+        revisions.create(RUN_ID, request)
+        assert LocalWorker(store).resume(RUN_ID).status is RunStatus.COMPLETED
+        speeches = [
+            segment
+            for segment in store.load_timeline(RUN_ID).segments
+            if isinstance(segment, SpeechSegment)
+        ]
+        assert len(speeches) == 3
+        assert all(segment.pace == "slow" and segment.delivery == "neutral" for segment in speeches)
+
+
+def test_wording_edit_retains_normalized_script_controls_with_global_defaults(
+    tmp_path: Path,
+) -> None:
+    script = f"[delivery: warm]\n\n{SCRIPT}"
+    store = _completed_backend_script_run(
+        tmp_path / "runs", "kokoro", script=script, overrides={"pace_override": "slow"}
+    )
+    accepted = store.load_timeline(RUN_ID)
+    RevisionStore(store).create(
+        RUN_ID,
+        RevisionRequest(script=script.replace("Notice the support", "Feel the steady support")),
+    )
+
+    assert LocalWorker(store).resume(RUN_ID).status is RunStatus.COMPLETED
+    rendered = store.load_timeline(RUN_ID)
+    assert rendered.segments[:2] == accepted.segments[:2]
+    assert all(
+        segment.delivery == "neutral" and segment.pace == "slow"
+        for segment in rendered.segments
+        if isinstance(segment, SpeechSegment)
+    )
 
 
 @pytest.mark.parametrize(

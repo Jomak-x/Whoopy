@@ -109,6 +109,9 @@ from whoopy.pipeline.revisions import (
 )
 from whoopy.pipeline.runs import RunNotFoundError, RunStoreError
 from whoopy.pipeline.speech_controls import (
+    apply_global_speech_overrides as _apply_global_speech_overrides,
+)
+from whoopy.pipeline.speech_controls import (
     apply_speech_capability_fallbacks,
     effective_voice_mode,
 )
@@ -927,32 +930,6 @@ def _real_script_worker(
     if resolved.tts.backend in MLX_QWEN_BACKENDS:
         worker.checkpoints = MlxEvidenceCheckpoints(store)
     return worker
-
-
-def _apply_global_speech_overrides(timeline: Timeline, settings: TTSRunSettings) -> Timeline:
-    """Apply durable adapter-neutral controls to every spoken timeline segment."""
-
-    changes = {
-        key: value
-        for key, value in {
-            "delivery": settings.delivery_override,
-            "intensity": settings.intensity_override,
-            "pace": settings.pace_override,
-        }.items()
-        if value is not None
-    }
-    if not changes:
-        return timeline
-    return timeline.model_copy(
-        update={
-            "segments": [
-                segment.model_copy(update=changes)
-                if isinstance(segment, SpeechSegment)
-                else segment
-                for segment in timeline.segments
-            ]
-        }
-    )
 
 
 def _worker_for_record(

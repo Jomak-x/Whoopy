@@ -22,6 +22,7 @@ from whoopy.meditation.generator import TECHNIQUE_DELIVERY
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
 from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore, RunStoreError
 from whoopy.pipeline.speech_controls import (
+    apply_global_speech_overrides,
     apply_speech_capability_fallbacks,
     effective_voice_mode,
     speech_capabilities,
@@ -315,6 +316,7 @@ class RevisionStore:
                     if isinstance(segment, SpeechSegment)
                 }
                 requested_controls_by_segment: dict[str, set[str]] = {}
+                explicit_script_controls: dict[str, set[str]] = {}
                 active_plan = current_plan
                 change_kind: Literal[
                     "initial", "assembly_only", "selective_speech", "script", "plan"
@@ -353,8 +355,25 @@ class RevisionStore:
                     ]
                     previous_segments = previous_script_timeline.segments
                     requested_segments = new_timeline.segments
+                    explicit_script_controls = {
+                        segment_id: set(origins)
+                        for segment_id, origins in requested_controls.origins.items()
+                    }
+                    defaulted_requested_segments = (
+                        apply_global_speech_overrides(
+                            new_timeline,
+                            self.store.load_resolved_config(parsed).tts,
+                            excluded_controls=explicit_script_controls,
+                        ).segments
+                        if record.source_kind != "fixture_prompt"
+                        else requested_segments
+                    )
                     effective_requested_segments = self._prepare_speech_controls(
-                        parsed, new_timeline, preserved={}, requested={}
+                        parsed,
+                        new_timeline,
+                        preserved={},
+                        requested={},
+                        script_controls=explicit_script_controls,
                     ).segments
                     current_segments = {segment.id: segment for segment in old_timeline.segments}
                     previous_keys = [
@@ -429,6 +448,7 @@ class RevisionStore:
                     merged_segments = []
                     preserved_controls = {}
                     for index, requested in enumerate(requested_segments):
+                        defaulted_requested = defaulted_requested_segments[index]
                         effective_requested = effective_requested_segments[index]
                         previous_index = correspondence.get(index)
                         candidates = (
@@ -503,7 +523,7 @@ class RevisionStore:
                                     )
                                     explicit = getattr(request.timeline, edit_name, {})
                                     if (
-                                        value != getattr(requested, name)
+                                        value != getattr(defaulted_requested, name)
                                         and value != getattr(effective_requested, name)
                                         and requested.id not in explicit
                                     ):
@@ -519,7 +539,23 @@ class RevisionStore:
                             requested_controls_by_segment[requested.id] = {
                                 name
                                 for name in ("delivery", "intensity", "pace", "voice_mode")
-                                if name in requested_controls.origins[requested.id]
+                                if (
+                                    (
+                                        name in requested_controls.origins[requested.id]
+                                        and requested_controls.origins[requested.id][name]
+                                        not in control_correspondence.get(name, {})
+                                    )
+                                    or any(
+                                        not _same_control_origin(
+                                            previous_controls.origins.get(
+                                                previous_segments[candidate].id, {}
+                                            ).get(name),
+                                            requested_controls.origins[requested.id].get(name),
+                                            control_correspondence.get(name, {}),
+                                        )
+                                        for candidate in candidates
+                                    )
+                                )
                                 and name not in updates
                             }
                     new_timeline = new_timeline.model_copy(update={"segments": merged_segments})
@@ -594,6 +630,7 @@ class RevisionStore:
                     new_timeline,
                     preserved=preserved_controls,
                     requested=requested_controls_by_segment,
+                    script_controls=explicit_script_controls,
                 )
                 current_revision = self._ensure_initial(parsed)
                 manifest = self._write_revision(
@@ -956,12 +993,26 @@ class RevisionStore:
         *,
         preserved: dict[str, dict[str, object]],
         requested: dict[str, set[str]],
+        script_controls: dict[str, set[str]] | None = None,
     ) -> Timeline:
         if self.store.load(run_id).source_kind == "fixture_prompt":
             return timeline
         settings = self.store.load_resolved_config(run_id).tts
-        normalized = apply_speech_capability_fallbacks(
+        defaulted = apply_global_speech_overrides(
             timeline,
+            settings,
+            excluded_controls={
+                segment.id: (
+                    set(preserved.get(segment.id, {}))
+                    | requested.get(segment.id, set())
+                    | (script_controls or {}).get(segment.id, set())
+                )
+                for segment in timeline.segments
+                if isinstance(segment, SpeechSegment)
+            },
+        )
+        normalized = apply_speech_capability_fallbacks(
+            defaulted,
             speech_capabilities(settings),
             voice_mode=effective_voice_mode(settings),
         )

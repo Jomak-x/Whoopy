@@ -61,6 +61,12 @@ def test_seated_furniture_support_preserves_authored_draft(need: str, comfort: s
         ("Lying down before sleep", "lying_down", "Do not sit upright."),
         ("Lying down before sleep", "lying_down", "You don't need to straighten your spine."),
         ("Lying down before sleep", "lying_down", "No need to sit tall or sit up."),
+        ("Lying down before sleep", "lying_down", "You do not need to sit in a chair."),
+        ("Lying down before sleep", "lying_down", "You don't have to sit in your chair."),
+        ("Lying down before sleep", "lying_down", "No need to sit upright in the chair."),
+        ("Lying down before sleep", "lying_down", "Avoid sitting in a chair."),
+        ("Lying down before sleep", "lying_down", "You need not be seated in your chair."),
+        ("Lying down before sleep", "lying_down", "Do not sit in a chair or sit upright."),
     ],
 )
 def test_negated_incompatible_posture_does_not_exhaust_revision(
@@ -74,6 +80,43 @@ def test_negated_incompatible_posture_does_not_exhaust_revision(
     result = run(adapter, need, 180)
 
     assert result.plan.posture == posture
+    assert len(adapter.requests) == 1
+    assert result.raw_attempts[0].validation_error is None
+    assert result.sections[0].text == comfort
+
+
+@pytest.mark.parametrize(
+    "instruction",
+    [
+        "Sit upright.",
+        "Sit in your chair.",
+        "You do not need to sit in a chair, but sit upright.",
+        "Do not sit in your chair. Now sit upright.",
+        "You need not sit in the chair and now straighten your spine.",
+    ],
+)
+def test_lying_session_rejects_independent_affirmative_seated_guidance(instruction: str) -> None:
+    comfort = f"{instruction} You may adjust your position and notice support."
+    adapter = WholeSessionAdapter(
+        lambda output: _replace_section(output, "comfort", comfort), always_mutate=True
+    )
+
+    with pytest.raises(GenerationError, match="posture contradicts lying_down"):
+        run(adapter, "Lying down before sleep", 180)
+
+    assert len(adapter.requests) == 2
+    assert "posture contradicts lying_down" in adapter.requests[1].prompt
+
+
+def test_lying_session_allows_furniture_without_seated_instruction() -> None:
+    comfort = "A chair may be nearby. You may adjust your position and notice support."
+    adapter = WholeSessionAdapter(
+        lambda output: _replace_section(output, "comfort", comfort), always_mutate=True
+    )
+
+    result = run(adapter, "Lying down before sleep", 180)
+
+    assert result.plan.posture == "lying_down"
     assert len(adapter.requests) == 1
     assert result.raw_attempts[0].validation_error is None
     assert result.sections[0].text == comfort

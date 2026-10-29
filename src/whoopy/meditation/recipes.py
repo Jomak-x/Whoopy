@@ -85,15 +85,25 @@ NO_BREATH = re.compile(
     r"\b(?:breath|breathing)\b[^.!?\n]{0,30}\b(?:uncomfortable|panic|trigger|worse)\w*\b",
     re.I,
 )
-SLEEP = re.compile(r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b", re.I)
-NEGATED_SLEEP = re.compile(
-    r"\b(?P<inability>(?:could|can|did|was|were)\s+not)\b|"
+SLEEP = re.compile(
+    r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|drift(?:ing)? off|insomnia)\b",
+    re.I,
+)
+INTENT_NEGATION = (
     r"\b(?:no|not|without|avoid|skip|(?:do|is|are|should|must)n['\u2019]t|"
     r"(?:do|is|are|should|must) not|rather not)\b"
     r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?;\n])*"
-    r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b",
+)
+NEGATED_SLEEP = re.compile(
+    r"\b(?P<difficulty>(?:could|can|did|was|were)\s+not|"
+    r"(?:(?:(?:am|is|are)\s+)?not|(?:is|are)n['\u2019]t)\s+"
+    r"(?:sleeping\s+(?:well|enough|properly|soundly)|"
+    r"getting\s+(?:enough|much|adequate)\s+sleep))\b|"
+    rf"{INTENT_NEGATION}{SLEEP.pattern}",
     re.I,
 )
+AWAKE = re.compile(r"\b(?:(?:stay|remain)|keep\s+(?:me|us))\s+awake\b", re.I)
+NEGATED_AWAKE = re.compile(rf"{INTENT_NEGATION}{AWAKE.pattern}", re.I)
 BOX_BREATHING = re.compile(r"\b(?:box|square)\s+breathing\b", re.I)
 NEGATED_BOX_BREATHING = re.compile(
     r"\b(?:no|without|avoid|skip|don['\u2019]t|do not|rather not)\b"
@@ -138,6 +148,18 @@ NEGATED_POSTURE = re.compile(
 )
 
 
+def _requests_sleep(clauses: list[str]) -> bool:
+    sleep = False
+    for clause in clauses:
+        if any(match.group("difficulty") is None for match in NEGATED_SLEEP.finditer(clause)):
+            return False
+        awake_clause = NEGATED_SLEEP.sub("", clause)
+        if AWAKE.search(NEGATED_AWAKE.sub("", awake_clause)):
+            return False
+        sleep = sleep or SLEEP.search(clause) is not None
+    return sleep
+
+
 def _requested_posture(clauses: list[str], *, sleep: bool) -> Posture:
     excluded: set[Posture] = set()
     requested: set[Posture] = set()
@@ -177,13 +199,7 @@ def route_session(
             "Box breathing is not supported by a reviewed holding protocol. "
             "Request natural breathing or gentle no-hold breathing instead."
         )
-    sleep = meditation_kind == "sleep" or (
-        meditation_kind is None
-        and any(
-            SLEEP.search(NEGATED_SLEEP.sub(lambda match: match.group("inability") or "", clause))
-            for clause in clauses
-        )
-    )
+    sleep = meditation_kind == "sleep" or (meditation_kind is None and _requests_sleep(clauses))
     if posture is None:
         posture = _requested_posture(clauses, sleep=sleep)
     if excluded or re.search(r"\b(?:sound|listen|noise|overstimulat|panic)\w*\b", prompt, re.I):

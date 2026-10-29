@@ -408,3 +408,29 @@ this review revision. This phase ran no model inference or full repository gate.
 Human quality remains unreviewed, MLX remains experimental and CLI-only, and
 final native source smoke, CI, Document/PR reconciliation and publication remain
 with the outer workflow.
+
+
+## Review follow-up after ec45495c
+
+All five selected findings are addressed: revisions inherit persisted global
+controls as defaults while preserving accepted controls and explicit resets;
+web ownership spans durable finalization and rejects stale task callbacks;
+sleep difficulty and complete negated chair guidance are interpreted at their
+shared routing/validation boundaries; every verified export media file is
+fsynced before activation.
+
+The focused integrated batch passed 766 tests with one present-tense sleep
+routing failure in 58.62 seconds. After correcting the complete negation match
+and adding related contraction cases, the affected routing and whole-session
+suites passed all 460 tests in 3.64 seconds. No assertions were weakened. The
+initial batch emitted only the existing Starlette/httpx deprecation warning.
+See the [per-finding record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-ec45495c).
+
+These are deterministic checks of this review worktree. The completed live
+results above remain tied to source `c31d4e3` and earlier focus/sleep source
+`2e13ae4`; no live inference was run in this phase. Human quality remains
+pending and MLX remains experimental and CLI-only. Excluded frontend paths
+remain identical to the original base, and publication cleanup is preserved.
+Full repository gates, guarded synchronization, native source smoke, actual
+API export validation, Document/PR reconciliation and final CI belong to the
+outer executor.
