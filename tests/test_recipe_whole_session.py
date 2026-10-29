@@ -509,7 +509,7 @@ def test_emitted_budget_contract_is_complete_and_consistent() -> None:
         assert section.section_id == beat["section_id"]
         for slot in beat["paragraphs"]:
             assert slot["minimum_words_guidance"] <= slot["target_words"] <= slot["maximum_words"]
-    assert result.plan.writing_prompt_version == 4
+    assert result.plan.writing_prompt_version == 5
 
 
 def test_unconditional_safety_assurance_is_reported_for_holistic_revision() -> None:
@@ -902,3 +902,141 @@ def test_draft_cli_uses_selected_recipe_configuration(
     assert plan["blueprint_id"] == "daytime-steadying@9"
     assert plan["blueprint_version"] == 9
     assert contract["recipe"] == plan["blueprint_id"]
+
+
+@pytest.mark.parametrize("wpm", [80, 123, 220])
+@pytest.mark.parametrize(
+    ("need", "duration"),
+    [("Seated focus with sound and no breathing", 180), ("Good-night reflection in bed", 300)],
+)
+def test_duration_word_budget_uses_planning_rate(wpm: int, need: str, duration: int) -> None:
+    import math
+
+    from whoopy.meditation.recipes import allocate_slots, route_session
+
+    adapter = WholeSessionAdapter()
+    writer = LocalMeditationGenerator(
+        adapter,
+        load_prompt_bundle(Path("config/prompts")),
+        articulation_words_per_minute=wpm,
+    )
+    result = writer.generate(
+        prompt=need,
+        duration_seconds=duration,
+        run_id=RUN_ID,
+        writing_method="recipe_whole_session",
+    )
+    contract = json.JSONDecoder().raw_decode(adapter.requests[0].prompt.split("\n", 1)[1])[0]
+    slots = [
+        slot
+        for beat in allocate_slots(route_session(need, duration), duration, wpm)
+        for slot in beat
+    ]
+    expected_minimum = max(
+        4 * len(slots),
+        math.ceil((duration * 1_000 - sum(s.maximum_quiet_ms for s in slots)) * wpm / 60_000),
+    )
+    assert contract["words_per_minute"] == wpm
+    assert contract["total_minimum_words"] == expected_minimum
+    assert expected_minimum <= contract["total_target_words"] <= contract["total_maximum_words"]
+    assert contract["total_target_words"] == sum(
+        slot["target_words"] for beat in contract["beats_in_order"] for slot in beat["paragraphs"]
+    )
+    assert "floor" in contract["word_budget_guidance"]
+    system_prompt = adapter.requests[0].system_prompt
+    assert system_prompt is not None
+    assert "Aim near the contract's total_target_words" in system_prompt
+    assert result.estimated_duration_seconds == pytest.approx(duration, abs=0.02)
+    assert len(adapter.requests) == 1
+
+
+def test_short_sleep_revision_explains_expansion_and_retains_exact_attempts() -> None:
+    from whoopy.meditation.pacing import sentence_word_count
+
+    def sparse(output: FixtureDraft) -> None:
+        for section in output["sections"]:
+            section["paragraphs"] = [
+                " ".join(word for word in text.split() if word.rstrip(".?") != "gently").rstrip(
+                    ".?"
+                )
+                + ("?" if text.endswith("?") else ".")
+                for text in section["paragraphs"]
+            ]
+        # This independent failure reduces the actual capacity and should be named.
+        output["sections"][3]["paragraphs"][0] = "An ordinary moment is enough."
+
+    adapter = WholeSessionAdapter(sparse)
+    result = run(adapter, "Good-night reflection after a busy day", 300)
+    initial_words = sum(
+        sentence_word_count(text)
+        for section in adapter.outputs[0]["sections"]
+        for text in section["paragraphs"]
+    )
+    error = result.raw_attempts[0].validation_error
+    assert error is not None
+    assert f"Too little spoken guidance: {initial_words} words" in error
+    assert "bounded prepared capacity" in error
+    assert "additional words" in error
+    assert "Expand the complete session" in error
+    assert "body paragraph 1" in error
+    assert "Shorten the complete session" not in error
+    assert (
+        "duration-derived minimum 251; target 422; absolute maximum 590"
+        in adapter.requests[1].prompt
+    )
+    assert error in adapter.requests[1].prompt
+    assert result.raw_attempts[0].text == json.dumps(adapter.outputs[0])
+    assert result.raw_attempts[1].text == json.dumps(adapter.outputs[1])
+    assert len(adapter.requests) == 2
+    for section, fixture in zip(result.sections, adapter.outputs[1]["sections"], strict=True):
+        assert section.text == "\n\n".join(fixture["paragraphs"])
+
+
+def test_overlong_revision_explains_shortening_instead_of_expansion() -> None:
+    def verbose(output: FixtureDraft) -> None:
+        for section in output["sections"]:
+            section["paragraphs"] = ["gently " * 80 + text for text in section["paragraphs"]]
+
+    adapter = WholeSessionAdapter(verbose)
+    result = run(adapter, "Good-night reflection after a busy day", 300)
+    error = result.raw_attempts[0].validation_error
+    assert error is not None
+    assert "Too much spoken guidance" in error
+    assert "fewer words" in error
+    assert "Shorten the complete session" in error
+    assert "Expand the complete session" not in error
+    assert all(message in adapter.requests[1].prompt for message in error.split("; "))
+    assert len(adapter.requests) == 2
+    assert result.raw_attempts[1].validation_error is None
+
+
+@pytest.mark.parametrize("marker", ["*", "**", "_", "__"])
+def test_emphasized_complete_question_gets_plain_prose_feedback(marker: str) -> None:
+    def emphasize(output: FixtureDraft) -> None:
+        reflection = next(
+            section for section in output["sections"] if section["section_id"] == "reflection"
+        )
+        reflection["paragraphs"][0] = marker + reflection["paragraphs"][0] + marker
+
+    adapter = WholeSessionAdapter(emphasize)
+    result = run(adapter, "Good-night reflection after a busy day", 300)
+    error = result.raw_attempts[0].validation_error
+    assert error is not None
+    assert "reflection paragraph 1: Markdown emphasis is not spoken prose" in error
+    assert "finish the final sentence" not in error
+    assert error in adapter.requests[1].prompt
+    assert result.raw_attempts[0].text == json.dumps(adapter.outputs[0])
+    assert len(adapter.requests) == 2
+    assert result.raw_attempts[1].validation_error is None
+
+
+def test_unfinished_plain_sentence_still_gets_completion_feedback() -> None:
+    def unfinished(output: FixtureDraft) -> None:
+        output["sections"][0]["paragraphs"][0] = output["sections"][0]["paragraphs"][0][:-1]
+
+    adapter = WholeSessionAdapter(unfinished)
+    result = run(adapter, duration=180)
+    assert (
+        result.raw_attempts[0].validation_error == "comfort paragraph 1: finish the final sentence"
+    )
+    assert len(adapter.requests) == 2

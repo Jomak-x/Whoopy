@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -57,6 +58,8 @@ class WholeSessionDraft(BaseModel):
 
     sections: list[WholeSection] = Field(min_length=3, max_length=12)
 
+
+MARKDOWN_EMPHASIS = re.compile(r"(?P<marker>\*{1,3}|_{1,3})(?=\S).+?(?<=\S)(?P=marker)")
 
 BREATH = re.compile(r"\b(?:breath\w*|inhale|exhale|inhalation|exhalation)\b", re.I)
 HOLD = re.compile(r"\bhold(?:ing)?\b.{0,20}\b(?:breath|inhale|exhale|count|second)\w*\b", re.I)
@@ -198,20 +201,58 @@ def _allocate_whole_quiets(
     durations: list[int] = []
     speeches: list[int] = []
     caps: list[int] = []
+    word_counts: list[int] = []
+    unprepared: list[str] = []
     for section, section_slots in zip(draft.sections, slots, strict=True):
-        for text, slot in zip(section.paragraphs, section_slots, strict=True):
+        for index, (text, slot) in enumerate(zip(section.paragraphs, section_slots, strict=True)):
             durations.append(slot.duration_ms)
-            speeches.append(round(sentence_word_count(text) * 60_000 / words_per_minute))
+            words = sentence_word_count(text)
+            word_counts.append(words)
+            speeches.append(round(words * 60_000 / words_per_minute))
             prepared = _prepared_for_quiet(section.section_id, session.kind, text)
             caps.append(slot.maximum_quiet_ms if prepared else min(7_999, slot.maximum_quiet_ms))
+            if not prepared:
+                unprepared.append(f"{section.section_id} paragraph {index + 1}")
     required = sum(durations) - sum(speeches)
     minimum = len(caps) * 1_000
     maximum = sum(caps)
     if not minimum <= required <= maximum:
+        actual_words = sum(word_counts)
+        target_words = sum(
+            round((slot.minimum_words + slot.maximum_words) / 2)
+            for section_slots in slots
+            for slot in section_slots
+        )
+        if required > maximum:
+            needed_words = math.ceil((sum(durations) - maximum) * words_per_minute / 60_000)
+            direction = (
+                f"Too little spoken guidance: {actual_words} words. With these paragraph "
+                f"endings, at least {needed_words} spoken words are needed "
+                f"(about {max(0, needed_words - actual_words)} additional words). "
+                "Expand the complete session with meaningful observation and return guidance "
+                "for the existing practice; do not add filler or new techniques. "
+            )
+            if unprepared:
+                direction += (
+                    "These endings reduce quiet capacity to less than 8 seconds each: "
+                    + ", ".join(unprepared)
+                    + ". End them with a concrete invitation to continue the familiar practice. "
+                )
+        else:
+            allowed_words = math.floor((sum(durations) - minimum) * words_per_minute / 60_000)
+            direction = (
+                f"Too much spoken guidance: {actual_words} words. At most {allowed_words} "
+                f"spoken words fit the minimum quiet (about "
+                f"{max(0, actual_words - allowed_words)} fewer words). "
+                "Shorten the complete session while preserving the practice arc and "
+                "required content. "
+            )
         raise ValueError(
             f"whole-session quiet budget requires {required / 1000:.1f}s; "
             f"bounded prepared capacity is {minimum / 1000:.1f}-{maximum / 1000:.1f}s. "
-            "Revise the amount of meaningful guidance without adding new techniques."
+            + direction
+            + f"Aim for the contract's total target of {target_words} words, respecting "
+            "every paragraph maximum."
         )
     quiets = [
         min(cap, max(1_000, duration - speech))
@@ -287,7 +328,12 @@ def _validate_session(
             words = sentence_word_count(text)
             if not 4 <= words <= slot.maximum_words:
                 errors.append(f"{label}: {words} words; requires 4-{slot.maximum_words}")
-            if text[-1] not in '.!?"\u201d\u2019':
+            if MARKDOWN_EMPHASIS.search(text):
+                errors.append(
+                    f"{label}: Markdown emphasis is not spoken prose; rewrite in plain text "
+                    "without asterisks or underscore emphasis, keeping complete sentences"
+                )
+            elif text[-1] not in '.!?"\u201d\u2019':
                 errors.append(f"{label}: finish the final sentence")
             if BREATH.search(text) and (
                 session.breath_excluded or session.anchor != "natural_breath"
@@ -558,6 +604,27 @@ def generate_whole_session(
             )
         )
     contract = {
+        # This optimistic floor assumes every paragraph prepares its bounded quiet.
+        # Actual draft validation still uses each paragraph's effective quiet cap.
+        "total_minimum_words": max(
+            4 * sum(len(section_slots) for section_slots in slots),
+            math.ceil(
+                sum(
+                    slot.duration_ms - slot.maximum_quiet_ms
+                    for section_slots in slots
+                    for slot in section_slots
+                )
+                * plan.words_per_minute
+                / 60_000
+            ),
+        ),
+        "words_per_minute": plan.words_per_minute,
+        "word_budget_guidance": (
+            "Aim near total_target_words. total_minimum_words is only the duration-derived "
+            "floor when every paragraph prepares its maximum bounded quiet; it is not "
+            "the writing target. Individual paragraphs may be brief if the whole session "
+            "still fits. Develop meaningful guidance within the existing practice, not filler."
+        ),
         "total_target_words": sum(
             round((slot.minimum_words + slot.maximum_words) / 2)
             for section_slots in slots
@@ -643,7 +710,11 @@ def generate_whole_session(
                 + "Freshly write every failed paragraph; "
                 + "do not copy invalid paragraphs. Address ALL feedback:\n"
                 + "\n".join(errors)
-                + "\n\nHard paragraph limits (target, absolute maximum):\n"
+                + f"\n\nWhole-session word budget: duration-derived minimum "
+                f"{contract['total_minimum_words']}; target {contract['total_target_words']}; "
+                f"absolute maximum {contract['total_maximum_words']}. "
+                "Follow the expansion or shortening direction in the feedback."
+                + "\n\nParagraph budgets (target, absolute maximum):\n"
                 + "\n".join(
                     f"{beat.id} paragraph {index + 1}: target "
                     f"{round((slot.minimum_words + slot.maximum_words) / 2)} words; "

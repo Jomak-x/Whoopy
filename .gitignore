@@ -56,3 +56,5 @@ artifacts/
 
 # Prior audit working files are local history, not product source
 evaluations/audits/
+evaluations/benchmarks/**/overnight-e2e-*/
+evaluations/benchmarks/**/overnight-e2e-*.launch.log

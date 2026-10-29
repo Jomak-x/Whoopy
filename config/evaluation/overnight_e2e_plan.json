@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "status": "prepared_not_started",
+  "source": "/Users/jakob/.codex/worktrees/meditation-quality-review/Whoopy",
+  "publication": "/Users/jakob/.codex/worktrees/meditation-quality-review/Whoopy",
+  "assets": "/Users/jakob/codestuff/Whoopy",
+  "fresh_benchmarks_root": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-29",
+  "python": "/Users/jakob/codestuff/Whoopy/.venv/bin/python",
+  "asr_python": "/Users/jakob/codestuff/Whoopy/models/experimental/verification-2026-10-28/.venv/bin/python",
+  "asr_model": "/Users/jakob/.cache/huggingface/hub/models--mlx-community--whisper-small-mlx/snapshots/45f3915923c7a79a5a5b5a7d909d39aeb0e5630e",
+  "experimental_backend": "mlx-qwen3-custom-voice-1.7b-8bit",
+  "experimental_voice_design_backend": "mlx-qwen3-voice-design-1.7b-8bit",
+  "voice_design_preset": "grounded_meditation",
+  "voice_design_comparison_cases": [
+    "grounding-3m"
+  ],
+  "backend_status": "experimental_local_pinned_not_managed_ready",
+  "writing": {
+    "profile": "high",
+    "model": "Ministral 3 14B Q4_K_M",
+    "method": "recipe_whole_session",
+    "seed": 42,
+    "context_tokens": 32768,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "reasoning": "off",
+    "request_timeout_seconds": 300,
+    "maximum_whole_session_attempts": 2,
+    "revision_seed": 43
+  },
+  "speech": {
+    "seed": 42,
+    "pace": "slow",
+    "qwen_language": "English",
+    "kokoro_voice": "am_michael",
+    "kokoro_speed": 0.8
+  },
+  "limits": {
+    "total_hours": 8,
+    "generation_timeout_seconds": 1800,
+    "verification_timeout_seconds": 900,
+    "minimum_available_high_bytes": 17179869184,
+    "available_floor_bytes": 2147483648,
+    "floor_sustain_seconds": 2,
+    "maximum_swap_growth_bytes": 4294967296,
+    "poll_seconds": 0.5
+  },
+  "cases": [
+    {
+      "id": "grounding-3m",
+      "minutes": 3,
+      "kind": "grounding",
+      "optional": false,
+      "prompt": "A seated grounding meditation after an overstimulating workday. Use contact and ordinary sounds, develop one simple practice, and return gently to the rest of the day."
+    },
+    {
+      "id": "focus-no-breath-3m",
+      "minutes": 3,
+      "kind": "focused_attention",
+      "optional": false,
+      "prompt": "I have an important meeting soon and feel distracted. I am seated. Give me a steadying practice with sound as the anchor. I do not want to focus on breathing. Finish ready to continue my day, without promising how I will feel."
+    },
+    {
+      "id": "sleep-reflection-5m",
+      "minutes": 5,
+      "kind": "sleep",
+      "optional": true,
+      "prompt": "A gentle good-night reflection after a busy day. I am lying down in bed. Help me settle, notice my body and reflect on one ordinary moment, with room for my own answer. End with a sleep taper without waking me up."
+    }
+  ],
+  "comparison_voices": [
+    "kokoro-am_michael-080",
+    "Ryan",
+    "Aiden",
+    "Serena",
+    "VoiceDesign-grounded_meditation"
+  ],
+  "asr": {
+    "engine": "mlx-whisper",
+    "language": "en",
+    "temperature": 0.0,
+    "condition_on_previous_text": false,
+    "expected_text_prompted": false,
+    "policy": "normalized-word-mismatch-review-v3"
+  },
+  "acceptance": "Existing whole-session validator accepts without prose changes or extra revisions. Final typed timeline is transcript authority. Every normalized word mismatch requires Review; substantial omissions, possible truncation, no recognition and retained native EOS/budget failures remain Fail. Automatic screening does not supply a listening score.",
+  "locks": {
+    "runner_owner": "/tmp/whoopy-overnight-e2e.lock",
+    "worker_and_asr_gpu": "/tmp/whoopy-benchmark-gpu.lock",
+    "runtime": "/Users/jakob/codestuff/Whoopy/models/runtime-slot/heavyweight.lock",
+    "constraint": "No concurrent inference outside this serial runner. Writer has no benchmark flock; global serialization additionally depends on coordinator not launching external work."
+  }
+}

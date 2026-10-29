@@ -66,6 +66,7 @@ def test_built_wheel_contains_product_data_without_local_settings(tmp_path: Path
         files = {name.removeprefix(data_prefix) for name in names if name.startswith(data_prefix)}
         assert {
             "config/default.yaml",
+            "config/experimental_tts.yaml",
             "config/artifacts.yaml",
             "config/legacy_cleanup.yaml",
             "config/meditation_blueprints.yaml",
@@ -82,8 +83,18 @@ def test_built_wheel_contains_product_data_without_local_settings(tmp_path: Path
             "scripts/fish_speech_1_4_worker.py",
             "scripts/moss_tts_worker.py",
             "scripts/qwen3_tts_worker.py",
+            "scripts/mlx_qwen3_tts_worker.py",
+            "docs/experimental-mlx-qwen.md",
         } <= files
+        assert "whoopy/adapters/tts/mlx_installation.py" in names
+        assert "whoopy/adapters/tts/mlx_qwen3_tts.py" in names
         assert any(name.startswith("whoopy/webui/static/") for name in names)
         archive.extractall(tmp_path / "installed")
     config = tmp_path / "installed" / data_prefix / "config"
     assert load_settings(config, environment={}).tts.voice == "af_heart"
+    assert (config / "experimental_tts.yaml").read_bytes() == (
+        root / "config/experimental_tts.yaml"
+    ).read_bytes()
+    assert (config.parent / "scripts/mlx_qwen3_tts_worker.py").read_bytes() == (
+        root / "scripts/mlx_qwen3_tts_worker.py"
+    ).read_bytes()

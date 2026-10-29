@@ -71,6 +71,11 @@ Legacy methods remain available for controlled comparison. Historical CLI record
 retain their `plan_first` default; pass the new method explicitly. Automatic
 structural acceptance does not establish good teaching or listener preference.
 
+Apple Silicon also has explicit experimental MLX Qwen CustomVoice and VoiceDesign
+CLI backends. They verify pinned local assets and preserve native speech evidence;
+they do not claim managed runtime readiness. See the [MLX setup and controls](docs/experimental-mlx-qwen.md)
+and [end-to-end listening workflow](docs/overnight-e2e-review.md).
+
 ## Evaluation
 
 ```bash

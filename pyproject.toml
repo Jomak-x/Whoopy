@@ -40,6 +40,7 @@ where = ["src"]
 "share/whoopy/config" = [
   "config/artifacts.yaml",
   "config/default.yaml",
+  "config/experimental_tts.yaml",
   "config/legacy_cleanup.yaml",
   "config/meditation_blueprints.yaml",
   "config/model_packs.yaml",
@@ -57,6 +58,7 @@ where = ["src"]
 "share/whoopy/config/prompts" = ["config/prompts/*.md"]
 "share/whoopy/docs" = [
   "docs/setup.md",
+  "docs/experimental-mlx-qwen.md",
   "docs/troubleshooting.md",
   "docs/model-capabilities.md",
   "docs/privacy.md",
@@ -69,6 +71,7 @@ where = ["src"]
   "scripts/fish_speech_1_4_worker.py",
   "scripts/moss_tts_worker.py",
   "scripts/qwen3_tts_worker.py",
+  "scripts/mlx_qwen3_tts_worker.py",
 ]
 
 [tool.pytest.ini_options]

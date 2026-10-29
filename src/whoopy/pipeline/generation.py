@@ -74,6 +74,8 @@ class TTSRunSettings(BaseModel):
         "qwen3-voice-design-1.7b",
         "qwen3-base-clone-0.6b",
         "qwen3-base-clone-1.7b",
+        "mlx-qwen3-custom-voice-1.7b-8bit",
+        "mlx-qwen3-voice-design-1.7b-8bit",
     ] = "kokoro"
     voice_name: str = Field(min_length=1)
     speaker_id: int = Field(ge=0)
@@ -88,6 +90,13 @@ class TTSRunSettings(BaseModel):
     pace_override: PaceIntent | None = None
     use_reference: bool = True
     voice_mode: VoiceMode = "preset"
+    experimental_installation_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    experimental_worker_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    experimental_adapter_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    experimental_model_revision: str | None = None
+    experimental_runtime_revision: str | None = None
+    experimental_classification: Literal["experimental_local"] | None = None
+    experimental_managed_ready: Literal[False] | None = None
     qwen_model_revision: str | None = None
     qwen_runtime_revision: str | None = None
     qwen_voice_design_preset: Literal[
@@ -102,6 +111,34 @@ class TTSRunSettings(BaseModel):
 
     @model_validator(mode="after")
     def validate_qwen_contract(self) -> TTSRunSettings:
+        experimental_values = (
+            self.experimental_installation_sha256,
+            self.experimental_worker_sha256,
+            self.experimental_adapter_sha256,
+            self.experimental_model_revision,
+            self.experimental_runtime_revision,
+            self.experimental_classification,
+            self.experimental_managed_ready,
+        )
+        if self.backend.startswith("mlx-qwen3-"):
+            if any(value is None for value in experimental_values):
+                raise ValueError("Experimental MLX requires complete pinned local provenance")
+            if not self.experimental_model_revision or not self.experimental_runtime_revision:
+                raise ValueError("Experimental MLX revisions cannot be empty")
+            mode = "preset" if "custom-voice" in self.backend else "designed"
+            if self.voice_mode != mode or self.use_reference:
+                raise ValueError("Experimental MLX requires its declared mode without references")
+            if self.language != "English" or not 0 <= self.seed < 2**32:
+                raise ValueError("Experimental MLX requires English and an unsigned 32-bit seed")
+            voices = (
+                {"Ryan", "Aiden", "Serena"}
+                if mode == "preset"
+                else {"warm_meditation", "grounded_meditation", "sleep_meditation"}
+            )
+            if self.voice_name not in voices:
+                raise ValueError("Unsupported experimental MLX voice")
+        elif any(value is not None for value in experimental_values):
+            raise ValueError("Experimental provenance is valid only for experimental MLX backends")
         required_mode = _QWEN_BACKENDS.get(self.backend)
         reference_values = (
             self.reference_id,

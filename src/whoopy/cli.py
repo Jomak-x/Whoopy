@@ -36,6 +36,17 @@ from whoopy.adapters.tts import (
     SherpaOnnxSettings,
     resolve_qwen3_tts_installation,
 )
+from whoopy.adapters.tts.mlx_installation import resolve_mlx_qwen_installation
+from whoopy.adapters.tts.mlx_qwen3_tts import (
+    MLX_QWEN_BACKENDS,
+    MlxEvidenceCache,
+    MlxEvidenceCheckpoints,
+    MlxProcessedSpeech,
+    MlxQwenAdapter,
+    MlxQwenSettings,
+    adapter_source_sha256,
+    source_sha256,
+)
 from whoopy.artifacts import (
     ArtifactError,
     ArtifactInstaller,
@@ -683,6 +694,51 @@ def _qwen_adapter_from_durable(
     return Qwen3TTSAdapter(settings)
 
 
+def _mlx_adapter_from_durable(
+    durable: TTSRunSettings,
+    *,
+    models_dir: Path,
+    config_dir: Path,
+    raw_output_directory: Path,
+) -> MlxQwenAdapter:
+    """Fail closed if an explicitly experimental run's installed bytes changed."""
+    models_root = models_root_from_artifact_store(models_dir)
+    installation = resolve_mlx_qwen_installation(
+        models_root, durable.backend, manifest_path=config_dir / "experimental_tts.yaml"
+    )
+    worker = runtime_worker_script("mlx_qwen3_tts_worker.py")
+    actual = (
+        installation.installation_sha256,
+        installation.model_revision,
+        installation.runtime_revision,
+        source_sha256(worker),
+        adapter_source_sha256(),
+    )
+    expected = (
+        durable.experimental_installation_sha256,
+        durable.experimental_model_revision,
+        durable.experimental_runtime_revision,
+        durable.experimental_worker_sha256,
+        durable.experimental_adapter_sha256,
+    )
+    if actual != expected:
+        raise GenerationError(
+            "Experimental MLX installation or worker changed since this run was saved; "
+            "restore the recorded bytes before resuming."
+        )
+    return MlxQwenAdapter(
+        MlxQwenSettings(
+            installation=installation,
+            worker_script=worker,
+            raw_output_directory=raw_output_directory,
+            models_root=models_root,
+            voice=durable.voice_name,
+            language=durable.language,
+            seed=durable.seed,
+        )
+    )
+
+
 def _managed_reference_paths(
     durable: TTSRunSettings, *, models_dir: Path
 ) -> tuple[Path, Path] | None:
@@ -774,6 +830,13 @@ def _real_script_worker(
                 hardware_requirement=pack.hardware_requirement,
             )
         )
+    elif resolved.tts.backend in MLX_QWEN_BACKENDS:
+        raw_synthesizer = _mlx_adapter_from_durable(
+            resolved.tts,
+            models_dir=models_dir,
+            config_dir=pack_config_dir,
+            raw_output_directory=store.run_directory(record.run_id) / "native-speech",
+        )
     elif resolved.tts.backend in QWEN_BACKEND_VARIANTS:
         raw_synthesizer = _qwen_adapter_from_durable(
             resolved.tts, models_dir=models_dir, config_dir=pack_config_dir
@@ -794,15 +857,16 @@ def _real_script_worker(
             target=resolved.target,
             settings=tts_settings,
         )
-    synthesizer = ProcessedSpeechSynthesizer(
-        raw_synthesizer,
-        settings=resolved.processing,
+    synthesizer = (
+        MlxProcessedSpeech(raw_synthesizer, settings=resolved.processing)
+        if isinstance(raw_synthesizer, MlxQwenAdapter)
+        else ProcessedSpeechSynthesizer(raw_synthesizer, settings=resolved.processing)
     )
     if resolved.tts.backend == "fish-1.4":
         effective_voice_mode = "reference"
     elif resolved.tts.backend in {"moss-local-v1.5", "moss-v1.5"}:
         effective_voice_mode = "reference" if resolved.tts.use_reference else "designed"
-    elif resolved.tts.backend in QWEN_BACKEND_VARIANTS:
+    elif resolved.tts.backend in QWEN_BACKEND_VARIANTS or resolved.tts.backend in MLX_QWEN_BACKENDS:
         effective_voice_mode = resolved.tts.voice_mode
     else:
         effective_voice_mode = "preset"
@@ -851,13 +915,23 @@ def _real_script_worker(
             voice_mode=effective_voice_mode,
         )
 
-    return LocalWorker(
+    worker = LocalWorker(
         store,
-        cache=_segment_cache(store),
+        cache=(
+            MlxEvidenceCache(
+                store.run_directory(record.run_id) / "speech-cache",
+                store.run_directory(record.run_id) / "native-speech",
+            )
+            if resolved.tts.backend in MLX_QWEN_BACKENDS
+            else _segment_cache(store)
+        ),
         synthesizer=synthesizer,
         timeline_builder=timeline_builder,
         bypass_cache_segment_ids=bypass_cache_segment_ids,
     )
+    if resolved.tts.backend in MLX_QWEN_BACKENDS:
+        worker.checkpoints = MlxEvidenceCheckpoints(store)
+    return worker
 
 
 def _apply_global_speech_overrides(timeline: Timeline, settings: TTSRunSettings) -> Timeline:
@@ -1066,6 +1140,12 @@ def _pending_generation_resume_arguments(
         )
         if not pending.tts.use_reference:
             command.append("--moss-direct-voice")
+    elif pending.tts.backend in MLX_QWEN_BACKENDS:
+        command.extend(["--qwen-language", pending.tts.language])
+        if MLX_QWEN_BACKENDS[pending.tts.backend] == "custom_voice":
+            command.extend(["--qwen-speaker", pending.tts.voice_name])
+        else:
+            command.extend(["--qwen-voice-design-preset", pending.tts.voice_name])
     elif pending.tts.backend in QWEN_BACKEND_VARIANTS:
         command.extend(["--qwen-language", pending.tts.language])
         if pending.tts.backend.startswith("qwen3-custom-voice-"):
@@ -1573,6 +1653,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "moss-local-v1.5",
             "moss-v1.5",
             *QWEN_BACKEND_VARIANTS,
+            *MLX_QWEN_BACKENDS,
         ),
         default="kokoro",
         help="Speech model; larger experimental models require local checkpoints.",
@@ -2582,6 +2663,55 @@ def main(argv: Sequence[str] | None = None) -> int:
                     reference_consent_scope=(
                         None if managed_reference is None else managed_reference.consent.scope
                     ),
+                )
+            elif args.tts_model in MLX_QWEN_BACKENDS:
+                if args.speed is not None:
+                    raise GenerationError(
+                        "Experimental MLX Qwen does not support numeric --speed; "
+                        "use --pace for its reviewed instruction-based pacing."
+                    )
+                if args.qwen_reference is not None or args.qwen_reference_revision is not None:
+                    raise GenerationError("Experimental MLX Qwen does not accept voice references")
+                mlx_installation = resolve_mlx_qwen_installation(
+                    models_root_from_artifact_store(args.models_dir),
+                    args.tts_model,
+                    manifest_path=args.config_dir / "experimental_tts.yaml",
+                )
+                worker_script = runtime_worker_script("mlx_qwen3_tts_worker.py")
+                custom_voice = MLX_QWEN_BACKENDS[args.tts_model] == "custom_voice"
+                durable_tts = TTSRunSettings(
+                    backend=args.tts_model,
+                    voice_name=args.qwen_speaker if custom_voice else args.qwen_voice_design_preset,
+                    speaker_id=0,
+                    speed=1.0,
+                    num_threads=1,
+                    provider="mlx-metal",
+                    language=args.qwen_language,
+                    seed=args.seed,
+                    use_reference=False,
+                    voice_mode="preset" if custom_voice else "designed",
+                    experimental_installation_sha256=mlx_installation.installation_sha256,
+                    experimental_model_revision=mlx_installation.model_revision,
+                    experimental_runtime_revision=mlx_installation.runtime_revision,
+                    experimental_worker_sha256=source_sha256(worker_script),
+                    experimental_adapter_sha256=adapter_source_sha256(),
+                    experimental_classification="experimental_local",
+                    experimental_managed_ready=False,
+                    qwen_voice_design_preset=args.qwen_voice_design_preset,
+                    delivery_override=args.delivery,
+                    intensity_override=args.intensity,
+                    pace_override=args.pace,
+                )
+                raw_synthesizer = MlxQwenAdapter(
+                    MlxQwenSettings(
+                        installation=mlx_installation,
+                        worker_script=worker_script,
+                        raw_output_directory=store.run_directory(run_id) / "native-speech",
+                        models_root=models_root_from_artifact_store(args.models_dir),
+                        voice=durable_tts.voice_name,
+                        language=durable_tts.language,
+                        seed=args.seed,
+                    )
                 )
             elif args.tts_model in QWEN_BACKEND_VARIANTS:
                 variant = QWEN_BACKEND_VARIANTS[args.tts_model]
