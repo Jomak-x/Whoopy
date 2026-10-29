@@ -213,3 +213,23 @@ No live inference, raw-evidence publication, external receipt reconciliation or
 full repository test/lint/type/CI gate was performed in this review phase. Native
 Linux/Windows checks and final Document/PR reconciliation remain with the outer
 executor; historical model evidence retains its actual producer revisions.
+
+## Follow-up review corrections after 95531c4
+
+Five selected findings were corrected: repeated-prose control preservation with
+safe ambiguity rejection, independent sleep/breath clauses, current Fail audition
+cards with immutable report history, optional ratings for rejected comparisons,
+and process-tree cleanup on forced-interruption timeout or exception.
+The [review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-95531c4)
+records finding IDs, root causes and executable regressions.
+
+No new live inference or external receipt reconciliation was performed. Historical
+model evidence retains its actual producer revisions. Full repository gates,
+native Linux/Windows checks and final Document/PR reconciliation remain with the
+outer executor.
+
+The single focused batch passed **442 tests in 51.25 seconds**, covering the
+changed revision, routing, listening-report and release paths. Timeout/exception
+regressions used synthetic ordinary and detached child processes and verified
+cleanup before the next case. Touched Python files were formatted; no full
+repository test/lint/type or CI gate ran in this phase.

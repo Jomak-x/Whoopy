@@ -99,7 +99,7 @@ NEGATED_BOX_BREATHING = re.compile(
     r"\b(?:box|square)\s+breathing\b",
     re.I,
 )
-BREATH_CLAUSE_BOUNDARY = re.compile(
+REQUEST_CLAUSE_BOUNDARY = re.compile(
     r"[.!?;\n]+|,(?!\s*(?:and\b|or\b|breath\b|breathing\b|box\b|square\b))|"
     r"\b(?:but|however|yet|instead)\b|"
     r"\band\s+(?=(?:please\s+)?(?:use|try|include|allow|focus|concentrate|guide|help)\b)",
@@ -118,18 +118,16 @@ def route_session(
 ) -> RoutedSession:
     """Use need and explicit constraints before selecting the hidden grammar."""
 
-    breath_clauses = BREATH_CLAUSE_BOUNDARY.split(prompt)
-    excluded = any(NO_BREATH.search(BOX_BREATHING.sub("", clause)) for clause in breath_clauses)
-    if any(
-        BOX_BREATHING.search(NEGATED_BOX_BREATHING.sub("", clause)) for clause in breath_clauses
-    ):
+    clauses = REQUEST_CLAUSE_BOUNDARY.split(prompt)
+    excluded = any(NO_BREATH.search(BOX_BREATHING.sub("", clause)) for clause in clauses)
+    if any(BOX_BREATHING.search(NEGATED_BOX_BREATHING.sub("", clause)) for clause in clauses):
         raise ValueError(
             "Box breathing is not supported by a reviewed holding protocol. "
             "Request natural breathing or gentle no-hold breathing instead."
         )
-    sleep_constraints = NEGATED_SLEEP.sub("", prompt)
     sleep = meditation_kind == "sleep" or (
-        meditation_kind is None and bool(SLEEP.search(sleep_constraints))
+        meditation_kind is None
+        and any(SLEEP.search(NEGATED_SLEEP.sub("", clause)) for clause in clauses)
     )
     if posture is None:
         if re.search(r"\b(?:lying|lie|lay)\s+(?:down|in bed)|\breclining\b", prompt, re.I):

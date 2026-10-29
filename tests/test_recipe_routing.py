@@ -175,6 +175,43 @@ def test_negated_box_breathing_clause_preserves_separate_sleep_request(prompt: s
 @pytest.mark.parametrize(
     "prompt",
     [
+        "No breath focus and help me sleep",
+        "No breath focus, and help me sleep",
+        "Don’t use breath focus and please help me sleep",
+        "No box breathing or breath focus and help me sleep",
+        "No breath focus or box breathing; help me sleep",
+        "Help me sleep, but no breath focus",
+    ],
+)
+def test_independent_sleep_request_keeps_breath_exclusion(prompt: str) -> None:
+    session = route_session(prompt, 180)
+
+    assert session.kind == "sleep"
+    assert session.posture == "lying_down"
+    assert session.recipe.ending == "sleep_taper"
+    assert session.breath_excluded
+    assert session.anchor == "sound"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Do not fall asleep and help me focus",
+        "Don’t fall asleep; no breath focus or box breathing",
+        "No breath focus and do not fall asleep",
+    ],
+)
+def test_actual_sleep_negation_remains_daytime_across_clauses(prompt: str) -> None:
+    session = route_session(prompt, 180)
+
+    assert session.kind != "sleep"
+    assert session.posture == "sitting"
+    assert session.recipe.ending == "daytime_reorientation"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
         "No sleep; use box breathing",
         "No sleep, but use box breathing",
         "No sleep but use box breathing",

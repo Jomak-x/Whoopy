@@ -609,6 +609,103 @@ def test_acceptance_timeout_reaps_generation_child_before_next_case(
                 pass
 
 
+@pytest.mark.parametrize("failure", ["timeout", "exception"])
+@pytest.mark.parametrize(
+    "detached_child",
+    [
+        False,
+        pytest.param(
+            True,
+            marks=pytest.mark.skipif(os.name != "posix", reason="Requires POSIX sessions"),
+        ),
+    ],
+)
+def test_forced_interruption_failure_reaps_children_and_retains_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str, detached_child: bool
+) -> None:
+    child_pid = tmp_path / "child.pid"
+    marker = tmp_path / "stage.ready"
+    partial_artifact = tmp_path / "partial.txt"
+    child_script = tmp_path / "generation.py"
+    marker_write = (
+        f"pathlib.Path({str(marker)!r}).write_text('ready')\n" if failure == "exception" else ""
+    )
+    child_script.write_text(
+        "import os, pathlib, signal, sys, time\n"
+        "if os.name == 'posix':\n"
+        "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        f"pathlib.Path({str(child_pid)!r}).write_text(str(os.getpid()))\n"
+        f"pathlib.Path({str(partial_artifact)!r}).write_text('partial generation')\n"
+        "print('partial stdout', flush=True)\n"
+        "print('partial stderr', file=sys.stderr, flush=True)\n" + marker_write + "while True:\n"
+        "    time.sleep(0.02)\n",
+        encoding="utf-8",
+    )
+    wrapper = (
+        "import subprocess, sys; "
+        f"child = subprocess.Popen([sys.executable, {str(child_script)!r}], "
+        f"start_new_session={detached_child!r}); "
+        "child.wait()"
+    )
+    next_case = (
+        "import pathlib, psutil; "
+        f"pid = int(pathlib.Path({str(child_pid)!r}).read_text()); "
+        "assert not psutil.pid_exists(pid), 'generation child survived interruption'; "
+        "print('next case has exclusive process ownership')"
+    )
+    if failure == "exception":
+
+        def fail_marker(
+            case: AcceptanceCase, *, expected_process_ids: tuple[int, ...]
+        ) -> tuple[AcceptanceStageMarker | None, str | None]:
+            raise RuntimeError("marker inspection failed")
+
+        monkeypatch.setattr("whoopy.release.acceptance._load_stage_marker", fail_marker)
+    try:
+        report = run_acceptance(
+            cases=(
+                AcceptanceCase(
+                    case_id="failed-interruption",
+                    kind="forced_interruption",
+                    interruption_stage="drafting",
+                    command=(sys.executable, "-c", wrapper),
+                    ready_file=marker,
+                    recovery_command=(sys.executable, "-c", "raise AssertionError('no recovery')"),
+                    timeout_seconds=1 if failure == "timeout" else 5,
+                ),
+                AcceptanceCase(
+                    case_id="following-generation",
+                    kind="soak",
+                    command=(sys.executable, "-c", next_case),
+                    timeout_seconds=5,
+                ),
+            ),
+            offline=_passing_offline(),
+            migrations=_passing_migrations(),
+            hardware=_hardware(),
+        )
+        result = report.cases[0]
+        assert result.passed is False
+        assert result.interruption_observed is False
+        assert result.recovery is None
+        assert len(result.attempts) == 1
+        assert "partial stdout" in result.attempts[0].stdout_tail
+        assert "partial stderr" in result.attempts[0].stderr_tail
+        assert partial_artifact.read_text() == "partial generation"
+        if failure == "exception":
+            assert "RuntimeError: marker inspection failed" in result.detail
+        assert report.cases[1].passed is True
+        assert not psutil.pid_exists(int(child_pid.read_text()))
+    finally:
+        if child_pid.exists():
+            try:
+                child = psutil.Process(int(child_pid.read_text()))
+                child.kill()
+                psutil.wait_procs([child], timeout=2)
+            except psutil.NoSuchProcess:
+                pass
+
+
 def test_harness_records_missing_executable_as_failure_instead_of_losing_report() -> None:
     case = AcceptanceCase(
         case_id="missing-tool",

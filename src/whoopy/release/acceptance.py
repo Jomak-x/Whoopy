@@ -655,18 +655,13 @@ def _run_forced_interruption(case: AcceptanceCase) -> AcceptanceCaseResult:
         marker_evidence, marker_error = _load_stage_marker(
             case, expected_process_ids=(process.pid, *descendant_process_ids)
         )
-        if process.poll() is None and time.monotonic() < deadline:
-            _stop_acceptance_command(process)
-            interrupted = True
-        try:
-            stdout, stderr = process.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            stdout, stderr = process.communicate(timeout=5)
+        interrupted = process.poll() is None and time.monotonic() < deadline
+    except Exception as error:
+        marker_evidence = None
+        marker_error = f"Acceptance harness error: {type(error).__name__}: {error}"[:2_000]
     finally:
-        if process.poll() is None:
-            process.kill()
-            process.wait(timeout=5)
+        _stop_acceptance_command(process)
+        stdout, stderr = process.communicate(timeout=5)
     initial = ProcessEvidence(
         return_code=process.returncode,
         duration_seconds=round(time.monotonic() - started, 3),

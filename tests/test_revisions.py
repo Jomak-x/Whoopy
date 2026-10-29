@@ -1086,6 +1086,137 @@ def test_wording_revision_preserves_rendered_controls_and_fitted_pauses(
     assert restored_manifest["duration_ms"] == accepted_manifest["duration_ms"]
 
 
+@pytest.mark.parametrize(
+    "replacement, expected_pace",
+    [
+        ("unchanged", "very_slow"),
+        ("marker-default", "natural"),
+        ("marker-new", "slow"),
+        ("field-default", "natural"),
+        ("field-new", "slow"),
+    ],
+)
+def test_repeated_prose_controls_survive_unrelated_edit_render_and_restore(
+    tmp_path: Path, replacement: str, expected_pace: str
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    repeated = "Notice the support beneath you."
+    blocks = [repeated, "Listen to the sounds around you.", repeated, "Return when ready."]
+    revisions.create(RUN_ID, RevisionRequest(script="\n\n".join(blocks)))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    accepted_revision = revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            timeline=TimelineEdit(
+                pace={"speech-0003": "very_slow"},
+                delivery={"speech-0003": "compassionate"},
+                intensity={"speech-0003": "moderate"},
+                pronunciation_overrides={
+                    "speech-0003": (
+                        PronunciationOverride(source="beneath", pronunciation="bee-neeth"),
+                    )
+                },
+            )
+        ),
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    accepted = store.load_timeline(RUN_ID)
+    accepted_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    blocks[-1] = "Return whenever you feel ready."
+    edits = TimelineEdit()
+    if replacement.startswith("marker"):
+        blocks[2] = f"[pace: {expected_pace}]\n\n{repeated}"
+    elif replacement.startswith("field"):
+        edits = TimelineEdit.model_validate({"pace": {"speech-0003": expected_pace}})
+    edited = revisions.create(RUN_ID, RevisionRequest(script="\n\n".join(blocks), timeline=edits))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    rendered = store.load_timeline(RUN_ID)
+    assert rendered.segments[:2] == accepted.segments[:2]
+    assert rendered.segments[2] == accepted.segments[2].model_copy(update={"pace": expected_pace})
+    assert "speech-0001" not in edited.affected_speech_segment_ids
+    assert ("speech-0003" in edited.affected_speech_segment_ids) == (replacement != "unchanged")
+    revisions.restore(RUN_ID, accepted_revision.revision_id)
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    assert store.load_timeline(RUN_ID) == accepted
+    restored_manifest = json.loads(store.audio_manifest_path(RUN_ID).read_text())
+    assert restored_manifest["pcm_sha256"] == accepted_manifest["pcm_sha256"]
+    assert restored_manifest["duration_ms"] == accepted_manifest["duration_ms"]
+
+
+@pytest.mark.parametrize("structural_edit", ["insert", "delete", "reorder"])
+def test_ambiguous_repeated_prose_edit_preserves_active_artifacts(
+    tmp_path: Path, structural_edit: str
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    repeated = "Notice the support beneath you."
+    other = "Listen to the sounds around you."
+    ending = "Return when ready."
+    blocks = [repeated, other, repeated, ending]
+    controlled_id = "speech-0003"
+    if structural_edit == "delete":
+        blocks = [repeated, repeated, other, ending]
+        controlled_id = "speech-0002"
+    revisions.create(RUN_ID, RevisionRequest(script="\n\n".join(blocks)))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    revisions.create(
+        RUN_ID, RevisionRequest(timeline=TimelineEdit(pace={controlled_id: "very_slow"}))
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    if structural_edit == "insert":
+        blocks.insert(2, repeated)
+    elif structural_edit == "delete":
+        blocks.pop(0)
+    else:
+        blocks[1:3] = [repeated, other]
+    original_files = {
+        path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+        for path in store.run_directory(RUN_ID).rglob("*")
+        if path.is_file()
+    }
+    with pytest.raises(RevisionError, match="ambiguously moves accepted controls"):
+        revisions.create(RUN_ID, RevisionRequest(script="\n\n".join(blocks)))
+    assert {
+        path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+        for path in store.run_directory(RUN_ID).rglob("*")
+        if path.is_file()
+    } == original_files
+
+
+@pytest.mark.parametrize("replacement", ["marker", "field"])
+def test_explicit_reset_resolves_ambiguous_repeated_prose_controls(
+    tmp_path: Path, replacement: str
+) -> None:
+    store = _completed_script_run(tmp_path / "runs")
+    revisions = RevisionStore(store)
+    worker = LocalWorker(store)
+    repeated = "Notice the support beneath you."
+    revisions.create(RUN_ID, RevisionRequest(script=repeated))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    revisions.create(
+        RUN_ID, RevisionRequest(timeline=TimelineEdit(pace={"speech-0001": "very_slow"}))
+    )
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    script = f"{repeated}\n\n{repeated}"
+    edits = TimelineEdit()
+    if replacement == "marker":
+        script = f"[pace: natural]\n\n{script}"
+    else:
+        edits = TimelineEdit(pace={"speech-0001": "natural", "speech-0002": "natural"})
+    revisions.create(RUN_ID, RevisionRequest(script=script, timeline=edits))
+    assert worker.resume(RUN_ID).status is RunStatus.COMPLETED
+    speeches = [
+        segment
+        for segment in store.load_timeline(RUN_ID).segments
+        if isinstance(segment, SpeechSegment)
+    ]
+    assert len(speeches) == 2
+    assert all(segment.text == repeated and segment.pace == "natural" for segment in speeches)
+
+
 @pytest.mark.parametrize("pace, delivery", [("very_slow", "warm"), ("natural", "neutral")])
 @pytest.mark.parametrize("expand_paragraph", [False, True])
 def test_new_script_controls_override_accepted_controls(
@@ -1137,7 +1268,7 @@ def test_new_script_controls_override_accepted_controls(
         ("[pace: slow]\n[pace: slow]", "", "slow"),
         ("", "", "natural"),
         ("[pace: slow]", "Notice the sounds around you.\n\n", "very_slow"),
-        ("[pace: slow]", "Notice the support beneath you.\n\n", "slow"),
+        ("[pace: slow]", "Notice the support beneath you.\n\n", None),
     ],
     ids=[
         "unchanged",
@@ -1149,7 +1280,7 @@ def test_new_script_controls_override_accepted_controls(
     ],
 )
 def test_shifted_control_marker_preserves_only_corresponding_accepted_controls(
-    tmp_path: Path, marker: str, extra_speech: str, expected_pace: str
+    tmp_path: Path, marker: str, extra_speech: str, expected_pace: str | None
 ) -> None:
     store = _completed_script_run(tmp_path / "runs")
     revisions = RevisionStore(store)
@@ -1167,6 +1298,21 @@ def test_shifted_control_marker_preserves_only_corresponding_accepted_controls(
     expanded_script = initial_script.replace(
         "Welcome to this practice.", "Welcome to this practice. " * 30, 1
     ).replace("[pace: slow]\n\n", f"{marker}\n\n{extra_speech}", 1)
+
+    if expected_pace is None:
+        original_files = {
+            path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+            for path in store.run_directory(RUN_ID).rglob("*")
+            if path.is_file()
+        }
+        with pytest.raises(RevisionError, match="ambiguously moves accepted controls"):
+            revisions.create(RUN_ID, RevisionRequest(script=expanded_script))
+        assert {
+            path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+            for path in store.run_directory(RUN_ID).rglob("*")
+            if path.is_file()
+        } == original_files
+        return
 
     revisions.create(RUN_ID, RevisionRequest(script=expanded_script))
     assert worker.resume(RUN_ID).status is RunStatus.COMPLETED

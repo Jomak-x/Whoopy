@@ -56,6 +56,38 @@ def evidence_links(original: str, current: str, root: Path) -> str:
     return " · ".join(f'<a href="{local_url(path, root)}">{label}</a>' for path, label in links)
 
 
+def audio_problem(value: str, expected_hash: str | None, label: str, root: Path) -> str | None:
+    try:
+        artifact = local_path(value, root)
+        if not artifact.is_file():
+            return f"{label} missing."
+        if not expected_hash:
+            return f"{label} hash missing."
+        if hashlib.sha256(artifact.read_bytes()).hexdigest() != expected_hash:
+            return f"{label} changed."
+    except (OSError, ValueError):
+        return f"{label} unavailable."
+    return None
+
+
+def write_current_report(output: Path, page: str) -> None:
+    content = page.encode("utf-8")
+    if output.exists():
+        previous = output.read_bytes()
+        if previous == content:
+            return
+        history = output.with_name(f"{output.name}.history")
+        history.mkdir(exist_ok=True)
+        archived = history / f"{hashlib.sha256(previous).hexdigest()}.html"
+        try:
+            with archived.open("xb") as stream:
+                stream.write(previous)
+        except FileExistsError:
+            if archived.read_bytes() != previous:
+                raise ValueError(f"Historical report changed: {archived}") from None
+    output.write_bytes(content)
+
+
 def build(root: Path, *, manifest_path: Path | None = None, output: Path | None = None) -> Path:
     root = root.resolve()
     manifest_path = manifest_path or root / "verification/listening/manifest-policy-v3-strict.json"
@@ -64,21 +96,31 @@ def build(root: Path, *, manifest_path: Path | None = None, output: Path | None 
     random.Random(42).shuffle(records)
     cards = []
     for index, record in enumerate(records):
-        for field, label in (("input", "Original audio"), ("output", "Listening copy")):
-            artifact = local_path(record[field], root)
-            if not artifact.is_file():
-                raise ValueError(f"{label} missing: {artifact}")
-            if not record.get(f"{field}_sha256"):
-                raise ValueError(f"{label} hash missing: {artifact}")
-            if hashlib.sha256(artifact.read_bytes()).hexdigest() != record[f"{field}_sha256"]:
-                raise ValueError(f"{label} changed: {artifact}")
-        audio = local_path(record["output"], root)
+        problems = [
+            problem
+            for field, label in (("input", "Original audio"), ("output", "Listening copy"))
+            if (problem := audio_problem(record[field], record.get(f"{field}_sha256"), label, root))
+        ]
         key = html.escape(record["candidate"], quote=True)
         label = f"Voice {chr(65 + index)}"
-        proof = evidence_links(record["original_raw_verification"], record["verification"], root)
-        status = record["status"]
-        description = screening_label(status)
-        if record.get("full_file_normalized_word_edit_count"):
+        status = "fail" if problems else record["status"]
+        if problems:
+            description = (
+                "Fail — "
+                + " ".join(problems)
+                + " Historical screening does not qualify current audio."
+            )
+            playback = ""
+            proof = ""
+        else:
+            description = screening_label(status) + " Listening copy: -23 LUFS, constant gain only."
+            playback = f'<audio controls preload="none" aria-label="Listen to {label}" src="{local_url(record["output"], root)}"></audio>'
+            proof = (
+                f'<p><a href="{local_url(record["input"], root)}">Original audio</a> · '
+                + evidence_links(record["original_raw_verification"], record["verification"], root)
+                + "</p>"
+            )
+        if not problems and record.get("full_file_normalized_word_edit_count"):
             description += (
                 f" Full-file ASR has {int(record['full_file_normalized_word_edit_count'])} "
                 "normalized word edits. This is a recognition disagreement, not proof that "
@@ -87,10 +129,9 @@ def build(root: Path, *, manifest_path: Path | None = None, output: Path | None 
             )
         cards.append(f'''<article data-key="{key}" data-status="{status}">
 <h3>{label} <small class="identity">{html.escape(record["candidate"])}</small></h3>
-<p>{description} Listening copy: -23 LUFS, constant gain only.</p>
-<audio controls preload="none" aria-label="Listen to {label}" src="{local_url(str(audio), root)}"></audio>
-<p><a href="{local_url(record["input"], root)}">Original audio</a> ·
-{proof}</p>
+<p>{description}</p>
+{playback}
+{proof}
 <label>Your decision <select data-field="decision"><option value="">Unrated</option>
 <option>Keep</option><option>Maybe</option><option>Reject</option></select></label>
 <label>Calm, natural and comfortable (1-5) <input data-field="comfort" type="number" min="1" max="5"></label>
@@ -101,21 +142,31 @@ def build(root: Path, *, manifest_path: Path | None = None, output: Path | None 
     samples_path = root / "writing-listening-policy-v3.json"
     if samples_path.exists():
         samples = json.loads(samples_path.read_text())["samples"]
+        writing_cards = []
         for sample in samples:
-            audio = local_path(sample["audio"], root)
-            if not audio.is_file():
-                raise ValueError(f"Writing sample audio missing: {audio}")
-            if hashlib.sha256(audio.read_bytes()).hexdigest() != sample["audio_sha256"]:
-                raise ValueError(f"Writing sample changed: {audio}")
-        writing = "".join(
-            f'<article data-status="{sample["status"]}"><h3>{html.escape(sample["label"])}</h3>'
-            f"<p>{screening_label(sample['status'])}</p>"
-            f'<audio controls preload="none" src="{local_url(sample["audio"], root)}"></audio>'
-            f'<p><a href="{local_url(sample["audio"], root)}">Original audio</a> · '
-            f'<a href="{local_url(sample["script"], root)}">Script</a> · '
-            f"{evidence_links(sample['original_verification'], sample['verification'], root)}</p></article>"
-            for sample in samples
-        )
+            problem = audio_problem(
+                sample["audio"], sample.get("audio_sha256"), "Writing sample audio", root
+            )
+            status = "fail" if problem else sample["status"]
+            if problem:
+                description = (
+                    f"Fail — {problem} Historical screening does not qualify current audio."
+                )
+                playback = ""
+                proof = ""
+            else:
+                description = screening_label(status)
+                playback = f'<audio controls preload="none" src="{local_url(sample["audio"], root)}"></audio>'
+                proof = (
+                    f'<p><a href="{local_url(sample["audio"], root)}">Original audio</a> · '
+                    f'<a href="{local_url(sample["script"], root)}">Script</a> · '
+                    f"{evidence_links(sample['original_verification'], sample['verification'], root)}</p>"
+                )
+            writing_cards.append(
+                f'<article data-status="{status}"><h3>{html.escape(sample["label"])}</h3>'
+                f"<p>{description}</p>{playback}{proof}</article>"
+            )
+        writing = "".join(writing_cards)
     script = """const key='whoopy-audition-2026-10-28';
 let saved={};try{saved=JSON.parse(localStorage.getItem(key)||'{}')}catch{}
 for(const card of document.querySelectorAll('[data-key]')){
@@ -145,7 +196,7 @@ Dots was stopped for memory pressure; Fish Drama 3 was excluded by memory prefli
 <p><a href="voices/LICENSE-AUDIT.txt">License audit</a> · <a href="voices/excluded-candidates.json">Exclusions</a> ·
 <a href="voice-script.txt">Shared voice script</a></p></main><script>{script}</script></html>"""
     output = output or root / "review.html"
-    output.write_text(page, encoding="utf-8")
+    write_current_report(output, page)
     return output
 
 

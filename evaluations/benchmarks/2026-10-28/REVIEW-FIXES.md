@@ -365,3 +365,25 @@ routing, whole-session generation and listening-page evidence. The ordered-marke
 oracle additionally checked 1,600 pairs of short streams against independently
 enumerated optimal matchings. Touched Python files were formatted. No full
 repository test/lint/type gate, native Linux/Windows run or CI phase ran here.
+
+## Review fixes after 95531c4
+
+All five selected findings were confirmed against source before editing.
+
+| Finding | Root cause and correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-REPEATED-PROSE-CONTROL-LOSS | Global text uniqueness overruled stable ordered identity. Revisions now use unambiguous ordered segment correspondence; ambiguous structural edits that would lose accepted controls reject before activation unless explicit replacements resolve them. | `test_revisions.py`: A/B/A/C edit/render/restore, explicit marker and field resets, duplicate insertion/deletion/reordering, and unchanged persisted artifacts after rejection. |
+| REVIEW-POSITIVE-SLEEP-CLAUSE-NEGATED | Sleep negation consumed unrelated positive clauses. Sleep and breath routing now share independent request-clause boundaries. | `test_recipe_routing.py` and `test_recipe_whole_session.py`: positive sleep with breath exclusions, punctuation and typographic apostrophes, and actual negated sleep. |
+| REVIEW-AUDITION-DOWNGRADE | Rebuilding aborted on invalid audio and left stale qualified cards. Current voice and writing cards now downgrade to Fail and hide unverified playback/evidence links; previous HTML bytes are retained in content-addressed history. | `test_listening_review.py`: changed/missing/unbound original and listening audio, independent unaffected cards, immutable receipts and report history. |
+| REVIEW-REJECTION-RATING-GATE | The release gate applied promotion rating requirements to rejections. Only promotions require nonempty ratings; all supplied rejection ratings still require valid identity and content bindings. | `test_lab_decision_ratings.py`: complete synthetic gate with unrated/rated rejection, missing/stale supplied ratings and unrated promotion refusal. |
+| REVIEW-INTERRUPTION-TIMEOUT-CHILD | Timeout and exceptional interruption exits bypassed shared process-tree cleanup. Every exit now invokes cleanup before draining streams and proceeding. | `test_release_acceptance.py`: timeout and marker exceptions with ordinary and detached child processes, retained partial streams/artifacts and next-case process exclusivity. |
+
+No live inference, external evidence reconciliation, UI/source-license changes,
+publication or outer pipeline gates were performed in this review phase.
+
+Focused verification: **442 passed in 51.25 seconds** in one batch across
+revisions, timeline compilation, recipe routing, whole-session generation,
+listening-page evidence, Lab decision ratings, release status and acceptance
+cleanup. Synthetic child processes exercised timeout and exceptional exits,
+including detached POSIX sessions on this host. Touched Python files were
+formatted. No full repository test/lint/type or CI gate ran here.

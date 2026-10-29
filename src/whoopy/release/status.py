@@ -576,7 +576,9 @@ def assess_lab(lab_root: Path) -> tuple[AcceptanceGateStatus, AcceptanceGateStat
             invalid.append(f"Decision {decision.decision_id} report hash is missing or stale.")
         supporting = ratings_by_revision.get(key, {})
         decision_rating_ids = {str(rating_id) for rating_id in decision.rating_ids}
-        if not decision_rating_ids or not decision_rating_ids.issubset(supporting):
+        if (
+            decision.outcome == "promote" and not decision_rating_ids
+        ) or not decision_rating_ids.issubset(supporting):
             invalid.append(
                 f"Decision {decision.decision_id} lacks its durable supporting rating IDs."
             )
