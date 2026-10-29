@@ -1581,6 +1581,7 @@ class LocalWebApplication:
                 registry_path=self.config_directory / "model_packs.yaml",
                 references_path=self.config_directory / "voice_references.yaml",
                 models_root=self.model_pack_models_root,
+                resolve_reference=payload.get("voice_reference") is None,
             )
         voice_reference = payload.get("voice_reference")
         if voice_reference is not None and not isinstance(voice_reference, str):
@@ -1603,6 +1604,7 @@ class LocalWebApplication:
                 registry_path=self.config_directory / "model_packs.yaml",
                 references_path=self.config_directory / "voice_references.yaml",
                 models_root=self.model_pack_models_root,
+                resolve_reference=moss_use_reference and voice_reference is None,
             )
         if voice_reference is not None:
             if tts_model not in {"fish-1.4", "moss-local-v1.5", "moss-v1.5"}:

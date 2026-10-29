@@ -24,6 +24,7 @@ from whoopy.meditation.models import (
     DeliveryIntent,
     MeditationTechnique,
     PracticeBeat,
+    RawGenerationAttempt,
 )
 from whoopy.meditation.pacing import pace_section
 from whoopy.pipeline.generation import (
@@ -571,15 +572,46 @@ def _completed_generated_run(root: Path, generated: MeditationGenerationResult) 
     return store
 
 
+@pytest.mark.parametrize(
+    "prior_edit",
+    [
+        None,
+        TimelineEdit(silence_duration_ms={"silence-0001": 9_000}),
+        TimelineEdit(delivery={"speech-0002": "compassionate"}),
+    ],
+)
 def test_semantic_plan_revision_commits_redraft_and_restores_section_artifacts(
     tmp_path: Path,
+    prior_edit: TimelineEdit | None,
 ) -> None:
     base = _plan()
     original = _generated(
         base,
         middle_text="Keep returning to one simple anchor with patient steady attention.",
     )
+    original = original.model_copy(
+        update={
+            "raw_attempts": [
+                RawGenerationAttempt(
+                    stage="section:practice", attempt=1, text="original draft", elapsed_seconds=1
+                )
+            ]
+        }
+    )
     store = _completed_generated_run(tmp_path / "runs", original)
+    revisions = RevisionStore(store)
+    prior_revision = (
+        revisions.create(RUN_ID, RevisionRequest(timeline=prior_edit))
+        if prior_edit is not None
+        else None
+    )
+    prior_timeline = store.load_timeline(RUN_ID)
+    prior_context = {
+        path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+        for root in (store.draft_sections_path(RUN_ID), store.raw_model_output_path(RUN_ID))
+        for path in root.rglob("*")
+        if path.is_file()
+    }
     changed_section = base.sections[1].model_copy(
         update={
             "technique": "noting",
@@ -616,8 +648,16 @@ def test_semantic_plan_revision_commits_redraft_and_restores_section_artifacts(
     assert execution is not None
     assert execution.stage is RunStage.SYNTHESIZING
 
-    initial = RevisionStore(store).list(RUN_ID)[0]
-    RevisionStore(store).restore(RUN_ID, initial.revision_id)
+    target = prior_revision or revisions.list(RUN_ID)[0]
+    revisions.restore(RUN_ID, target.revision_id)
+    assert store.load_timeline(RUN_ID) == prior_timeline
+    restored_context = {
+        path.relative_to(store.run_directory(RUN_ID)): path.read_bytes()
+        for root in (store.draft_sections_path(RUN_ID), store.raw_model_output_path(RUN_ID))
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+    assert restored_context == prior_context
     restored_section = DraftedSection.model_validate_json(
         (store.draft_sections_path(RUN_ID) / "practice.json").read_text()
     )

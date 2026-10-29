@@ -90,6 +90,28 @@ class SegmentTakeStore:
             take_id = payload["take_id"]
             if not isinstance(take_id, str):
                 return None
+            parsed = self.store.parse_run_id(run_id)
+            manifest = next(
+                (
+                    take
+                    for take in self.list(parsed, segment_id)
+                    if take.take_id == take_id
+                    and take.run_id == parsed
+                    and take.segment_id == segment_id
+                ),
+                None,
+            )
+            if manifest is None:
+                return None
+            active = self.checkpoints.load_completed(
+                parsed, segment_id, cache_key=manifest.cache_key
+            )
+            if (
+                active is None
+                or active.checkpoint.pcm_sha256 != manifest.pcm_sha256
+                or active.audio.sample_rate != manifest.sample_rate
+            ):
+                return None
             return take_id
         except (OSError, KeyError, TypeError, json.JSONDecodeError):
             return None

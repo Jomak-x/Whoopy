@@ -500,3 +500,56 @@ def test_default_registry_contains_all_local_v1_packs_and_fish_license() -> None
 
     with pytest.raises(ModelPackError, match="Unknown model pack"):
         registry.get("not-real")
+
+
+def test_installation_readiness_does_not_require_live_memory(tmp_path: Path) -> None:
+    payloads = {"model.bin": b"model"}
+    dependency = _pack(payloads, pack_id="codec")
+    pack = _pack(payloads, dependencies=["codec"])
+    registry = _registry(tmp_path, dependency, pack)
+    _write_runtime(tmp_path)
+    for item in (dependency, pack):
+        _write_pack(tmp_path, item, payloads)
+        _write_evidence(registry, item)
+
+    assert (
+        registry.inspect(pack.pack_id, hardware=_hardware(available=0), machine=MACHINE).state
+        == ModelPackState.RESOURCE_BLOCKED
+    )
+    assert (
+        registry.inspect(
+            pack.pack_id, hardware=_hardware(available=0), machine=MACHINE, check_resources=False
+        ).state
+        == ModelPackState.READY
+    )
+
+
+def test_runtime_receipt_rejects_changed_unlisted_runtime_source(tmp_path: Path) -> None:
+    from whoopy.model_packs.runtime import RuntimeInstallReceipt, _tree_sha256
+
+    payloads = {"model.bin": b"model"}
+    pack = _pack(payloads)
+    registry = _registry(tmp_path, pack)
+    _write_pack(tmp_path, pack, payloads)
+    _write_runtime(tmp_path)
+    runtime = tmp_path / "runtimes/test"
+    implementation = runtime / "unlisted.py"
+    implementation.write_text("original", encoding="utf-8")
+    receipt = RuntimeInstallReceipt(
+        runtime_id=pack.runtime.runtime_id,
+        revision=pack.runtime.revision,
+        upstream_revision="upstream-test",
+        target="darwin-arm64",
+        bundle_sha256="a" * 64,
+        installed_tree_sha256=_tree_sha256(runtime),
+        installed_at=NOW,
+    )
+    (runtime / ".whoopy-runtime.json").write_text(receipt.model_dump_json(), encoding="utf-8")
+    _write_evidence(registry, pack)
+    assert registry.inspect(pack.pack_id, hardware=_hardware(), machine=MACHINE).state == "ready"
+    implementation.write_text("modified", encoding="utf-8")
+    status = registry.inspect(pack.pack_id, hardware=_hardware(), machine=MACHINE)
+    assert status.state == ModelPackState.CORRUPT
+    assert any(
+        check.check == "runtime_installed_tree" and not check.passed for check in status.checks
+    )

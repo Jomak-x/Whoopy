@@ -150,7 +150,7 @@ def test_durable_reconstruction_uses_real_qwen_adapter_and_worker_contract(
     variant = QWEN_BACKEND_VARIANTS[backend]
     monkeypatch.setattr(
         "whoopy.cli.resolve_qwen3_tts_installation",
-        lambda _root, _variant: Qwen3TTSInstallation(
+        lambda _root, _variant, *, registry_path: Qwen3TTSInstallation(
             runtime_directory=tmp_path / "models/managed/runtimes/qwen3-tts",
             model_directory=(
                 tmp_path / "models/managed/model-packs" / f"qwen3-tts-{variant}" / "files"
@@ -216,7 +216,7 @@ def test_base_reconstruction_uses_the_recorded_immutable_reference_revision(
     )
     monkeypatch.setattr(
         "whoopy.cli.resolve_qwen3_tts_installation",
-        lambda _root, _variant: installation,
+        lambda _root, _variant, *, registry_path: installation,
     )
     source = tmp_path / "reference.wav"
     _reference_wav(source)
@@ -251,7 +251,7 @@ def test_base_reconstruction_uses_the_recorded_immutable_reference_revision(
 
     monkeypatch.setattr(
         "whoopy.cli.resolve_qwen3_tts_installation",
-        lambda _root, _variant: Qwen3TTSInstallation(
+        lambda _root, _variant, *, registry_path: Qwen3TTSInstallation(
             runtime_directory=installation.runtime_directory,
             model_directory=installation.model_directory,
             runtime_revision="different",
@@ -260,3 +260,54 @@ def test_base_reconstruction_uses_the_recorded_immutable_reference_revision(
     )
     with pytest.raises(GenerationError, match="revision changed"):
         _qwen_adapter_from_durable(durable, models_dir=models_dir)
+
+
+def test_qwen_reconstruction_uses_selected_registry_and_defers_live_memory_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from whoopy.audio.synthesis import TransientSynthesisError
+    from whoopy.hardware import HardwareSnapshot
+    from whoopy.model_packs.registry import HardwareRequirement
+
+    backend = "qwen3-custom-voice-0.6b"
+    models_dir = _installation(tmp_path, backend)
+    config_dir = tmp_path / "custom-config"
+    requirement = HardwareRequirement(
+        min_total_ram_gb=8,
+        min_available_ram_gb=4,
+        min_free_disk_gb=0,
+        accelerator_any_of=["cpu"],
+    )
+
+    def resolve(_root: Path, _variant: str, *, registry_path: Path) -> Qwen3TTSInstallation:
+        assert registry_path == config_dir / "model_packs.yaml"
+        return Qwen3TTSInstallation(
+            runtime_directory=tmp_path / "models/managed/runtimes/qwen3-tts",
+            model_directory=tmp_path
+            / "models/managed/model-packs/qwen3-tts-custom-voice-0.6b/files",
+            runtime_revision="runtime-test",
+            model_revision="model-test",
+            hardware_requirement=requirement,
+        )
+
+    monkeypatch.setattr("whoopy.cli.resolve_qwen3_tts_installation", resolve)
+    monkeypatch.setattr(
+        "whoopy.adapters.tts.qwen3_tts.inspect_hardware",
+        lambda _path: HardwareSnapshot(
+            operating_system="darwin",
+            architecture="arm64",
+            cpu_count=8,
+            total_ram_gb=48,
+            available_ram_gb=0,
+            free_disk_gb=100,
+            accelerators=["cpu"],
+        ),
+    )
+    adapter = _qwen_adapter_from_durable(
+        _durable(backend), models_dir=models_dir, config_dir=config_dir
+    )
+    assert adapter.runtime_process_id is None
+    with pytest.raises(TransientSynthesisError, match="live resource check"):
+        adapter.prepare()
+    assert adapter.runtime_process_id is None
+    adapter.close()

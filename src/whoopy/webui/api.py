@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import Any, ClassVar, Literal, TypeVar
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
@@ -177,6 +177,8 @@ class GenerationRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    _allow_studio_moss_instruction: ClassVar[bool] = False
+
     mode: Literal["prompt", "script"]
     text: str = Field(min_length=1, max_length=20_000)
     minutes: float = Field(default=3, ge=1, le=30)
@@ -305,6 +307,7 @@ class GenerationRequest(BaseModel):
             raise ValueError("Custom generation seeds are Lab-only")
         if (
             self.surface == "studio"
+            and not self._allow_studio_moss_instruction
             and self.moss_instruction is not None
             and self.moss_instruction != STUDIO_MOSS_INSTRUCTION
         ):
@@ -313,6 +316,8 @@ class GenerationRequest(BaseModel):
 
 
 class LegacyGenerationRequest(GenerationRequest):
+    _allow_studio_moss_instruction: ClassVar[bool] = True
+
     @model_validator(mode="before")
     @classmethod
     def discard_inactive_moss_controls(cls, value: Any) -> Any:
@@ -439,12 +444,17 @@ class _LabApiService:
         self._controls[key] = control
 
     def _active_run_changed(self, run_id: UUID | None) -> None:
+        cancel_run_id = None
         with self._control_lock:
             for key, control in self._controls.items():
                 if control.get("status") == "running":
                     control["active_run_id"] = None if run_id is None else str(run_id)
                     self._save_control(key, control)
-                    return
+                    if run_id is not None and control.get("halt_action") in {"pause", "cancel"}:
+                        cancel_run_id = str(run_id)
+                    break
+        if cancel_run_id is not None:
+            self.application.cancel_task(cancel_run_id)
 
     def capabilities(self) -> dict[str, Any]:
         provider = getattr(self.executor, "capabilities", None)

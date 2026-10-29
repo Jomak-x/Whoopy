@@ -17,8 +17,10 @@ from whoopy.evaluation import (
     VoiceConfiguration,
     load_evaluation_set,
 )
+from whoopy.pipeline import RunStore
 from whoopy.webui.api import _LabApiService
 from whoopy.webui.evaluation import LocalProductionExperimentExecutor
+from whoopy.webui.server import GenerationTask, LocalWebApplication
 
 
 def _definition(name: str = "boundary") -> ExperimentDefinition:
@@ -133,6 +135,47 @@ def test_halt_survives_queue_start_before_control_transition(
     assert persisted is not None
     assert persisted["status"] == target
     assert service.queue.entries()[0].failure == f"batch {target}"
+
+
+@pytest.mark.parametrize("action", ["pause", "cancel"])
+@pytest.mark.parametrize("halt_before_publication", [True, False])
+def test_active_run_publication_honors_pending_halt(
+    tmp_path: Path, action: Literal["pause", "cancel"], halt_before_publication: bool
+) -> None:
+    application = LocalWebApplication(
+        project_root=tmp_path,
+        config_directory=Path("config"),
+        models_directory=Path("models"),
+        runs_directory=Path("runs"),
+    )
+    executor = LocalProductionExperimentExecutor(application)
+    service = _LabApiService(application=application, executor=executor)
+    definition = _definition()
+    service.add_definition(definition)
+    key = (definition.experiment_id, definition.version)
+    control = service._new_control(definition, None)
+    control["status"] = "running"
+    service._save_control(key, control)
+    record = RunStore(application.runs_directory).create("A newly launching trial")
+    run_id = str(record.run_id)
+    task = GenerationTask(task_id=run_id, run_id=run_id)
+    application._tasks[run_id] = task
+    assert executor.active_run_changed is not None
+
+    if halt_before_publication:
+        service.halt(experiment_id=key[0], version=key[1], action=action)
+        assert task.cancel_requested is False
+    executor.active_run_changed(record.run_id)
+    if not halt_before_publication:
+        service.halt(experiment_id=key[0], version=key[1], action=action)
+
+    assert task.cancel_requested is True
+    persisted = service.repository.load_execution_control(experiment_id=key[0], version=key[1])
+    assert persisted is not None
+    assert persisted["active_run_id"] == run_id
+    assert persisted["halt_action"] == action
+    executor.active_run_changed(None)
+    assert service._controls[key]["active_run_id"] is None
 
 
 def test_delivery_comparison_rejects_qwen_without_expressive_controls() -> None:

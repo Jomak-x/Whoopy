@@ -121,37 +121,6 @@ def segment_paths(segment_directory: Path, speech_index: int) -> tuple[Path, Pat
     return segment_directory / f"{stem}.wav", segment_directory / f"{stem}.json"
 
 
-def resume_segment(
-    *,
-    segment_directory: Path,
-    speech_index: int,
-    text: str,
-    control: str,
-    seed: int,
-) -> tuple[np.ndarray, dict[str, object]] | None:
-    audio_path, report_path = segment_paths(segment_directory, speech_index)
-    if not audio_path.is_file() or not report_path.is_file():
-        return None
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    identity = {
-        "runtime": RUNTIME_REVISION,
-        "model_revision": MODEL_REVISION,
-        "text_sha256": sha256_text(text),
-        "control": control,
-        "seed": seed,
-        "cfg_value": 2.0,
-        "inference_timesteps": 10,
-        "sample_rate": NATIVE_SAMPLE_RATE,
-        "postprocessing": [],
-    }
-    if any(report.get(key) != value for key, value in identity.items()):
-        return None
-    if report.get("wav_sha256") != sha256_file(audio_path):
-        return None
-    waveform = load_segment(audio_path, expected_array_sha256=str(report["array_sha256"]))
-    return waveform, report
-
-
 def assemble_native(
     *,
     events: list[Event],
@@ -271,8 +240,6 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--device", default="mps", choices=("mps", "cpu"))
     render.add_argument("--base-seed", default=1742, type=int)
     render.add_argument("--control", default=DEFAULT_CONTROL)
-    render.add_argument("--resume", action="store_true")
-    render.add_argument("--overwrite", action="store_true")
     return parser
 
 
@@ -298,23 +265,28 @@ def main() -> int:
         )
         return 0
 
-    import torch  # type: ignore[import-not-found]
-    from voxcpm import VoxCPM  # type: ignore[import-not-found]
-
     model_path = args.model.resolve(strict=True)
     output = args.output.resolve()
     if output.suffix.lower() != ".wav":
         raise SystemExit("--output must end in .wav")
-    if output.exists() and not args.overwrite:
-        raise SystemExit(f"output already exists; pass --overwrite to replace it: {output}")
-    if args.device == "mps" and not torch.backends.mps.is_available():
-        raise SystemExit("Apple MPS is unavailable in this process")
-
+    manifest_path = output.with_suffix(".manifest.json")
+    partial = output.with_suffix(output.suffix + ".partial")
+    if any(path.exists() or path.is_symlink() for path in (output, manifest_path, partial)):
+        raise SystemExit(f"Evidence already exists; use a new output path: {output}")
     segment_directory = output.parent / f"{output.stem}-segments"
-    segment_directory.mkdir(parents=True, exist_ok=True)
+    try:
+        segment_directory.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as error:
+        raise SystemExit(f"Evidence already exists; use a new output path: {output}") from error
     control = args.control.strip().strip("()")
     if not control:
         raise SystemExit("--control cannot be blank")
+
+    import torch  # type: ignore[import-not-found]
+    from voxcpm import VoxCPM  # type: ignore[import-not-found]
+
+    if args.device == "mps" and not torch.backends.mps.is_available():
+        raise SystemExit("Apple MPS is unavailable in this process")
 
     load_started = time.monotonic()
     model = VoxCPM.from_pretrained(
@@ -336,26 +308,6 @@ def main() -> int:
                 continue
             assert event.text is not None
             seed = segment_seed(args.base_seed, speech_index)
-            resumed = (
-                resume_segment(
-                    segment_directory=segment_directory,
-                    speech_index=speech_index,
-                    text=event.text,
-                    control=control,
-                    seed=seed,
-                )
-                if args.resume
-                else None
-            )
-            if resumed is not None:
-                _, report = resumed
-                report = dict(report)
-                report["resumed"] = True
-                segment_records.append(report)
-                print(f"reused speech {speech_index + 1}/19", flush=True)
-                speech_index += 1
-                continue
-
             random.seed(seed)
             np.random.seed(seed)
             torch.manual_seed(seed)
@@ -430,7 +382,6 @@ def main() -> int:
         "speech_segments": segment_records,
         **assembly,
     }
-    manifest_path = output.with_suffix(".manifest.json")
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest, indent=2))
     return 0

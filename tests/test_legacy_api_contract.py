@@ -61,7 +61,9 @@ def test_retained_generation_payload_reaches_application(
     else:
         assert versioned.status_code == 422
         assert len(dispatched) == 1
-        assert not {"moss_language", "moss_instruction", "moss_use_reference"} & dispatched[0].keys()
+        assert (
+            not {"moss_language", "moss_instruction", "moss_use_reference"} & dispatched[0].keys()
+        )
 
 
 @pytest.mark.parametrize(
@@ -105,9 +107,7 @@ def test_retained_cancel_route_reaches_active_task(
     with TestClient(create_api(application), base_url="http://127.0.0.1") as client:
         record = RunStore(tmp_path / "runs").create("Pause.")
         task_id = str(record.run_id)
-        task = GenerationTask(
-            task_id=task_id, run_id=task_id, launching=launching, process=process
-        )
+        task = GenerationTask(task_id=task_id, run_id=task_id, launching=launching, process=process)
         application._tasks[task_id] = task
         response = client.post(f"/api/tasks/{task_id}/cancel", json={})
 
@@ -124,3 +124,37 @@ def test_retained_cancel_route_reports_unknown_task(tmp_path: Path) -> None:
 
     assert missing.status_code == 404
     assert malformed.status_code == 422
+
+
+@pytest.mark.parametrize("tts_model", ["moss-local-v1.5", "moss-v1.5"])
+@pytest.mark.parametrize("mode", ["prompt", "script"])
+def test_custom_moss_instruction_preserves_legacy_studio_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tts_model: str, mode: str
+) -> None:
+    application = _application(tmp_path)
+    dispatched: list[dict[str, Any]] = []
+
+    def start(payload: dict[str, Any]) -> dict[str, Any]:
+        dispatched.append(payload)
+        return {"task_id": "accepted"}
+
+    monkeypatch.setattr(application, "start_generation", start)
+    body = {
+        "mode": mode,
+        "text": "Notice the room around you.",
+        "tts_model": tts_model,
+        "moss_instruction": "Speak gently with a steady, low voice.",
+        "moss_use_reference": False,
+    }
+    with TestClient(create_api(application), base_url="http://127.0.0.1") as client:
+        legacy = client.post("/api/generate", json=body)
+        versioned = client.post("/api/v1/generate", json=body)
+        lab = client.post("/api/v1/generate", json={**body, "surface": "lab"})
+        wrong_seed = client.post("/api/generate", json={**body, "seed": 43})
+        overlong = client.post("/api/generate", json={**body, "moss_instruction": "x" * 301})
+
+    assert legacy.status_code == lab.status_code == 202
+    assert versioned.status_code == wrong_seed.status_code == overlong.status_code == 422
+    assert [payload["surface"] for payload in dispatched] == ["studio", "lab"]
+    assert all(payload["moss_instruction"] == body["moss_instruction"] for payload in dispatched)
+    assert all(payload["moss_use_reference"] is False for payload in dispatched)

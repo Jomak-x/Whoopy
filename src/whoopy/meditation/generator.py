@@ -38,16 +38,14 @@ from whoopy.meditation.pacing import (
     split_sentences,
 )
 from whoopy.meditation.prompts import PromptBundle
+from whoopy.meditation.recipes import SLEEP
 from whoopy.meditation.safety import ContentSafetyError, validate_meditation_text
 from whoopy.ports import ScriptGenerationRequest, ScriptGenerator
 from whoopy.timeline import SilenceSegment, Timeline, build_script_timeline
 
 WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
 MEDITATION_KIND_PATTERNS: tuple[tuple[MeditationKind, re.Pattern[str]], ...] = (
-    (
-        "sleep",
-        re.compile(r"\b(?:bedtime|fall asleep|good[\s-]?night|insomnia|sleep|sleeping)\b", re.I),
-    ),
+    ("sleep", SLEEP),
     ("body_scan", re.compile(r"\bbody[\s-]?scan\b", re.I)),
     ("self_compassion", re.compile(r"\bself[\s-]?compassion\b", re.I)),
     ("loving_kindness", re.compile(r"\b(?:loving[\s-]?kindness|goodwill)\b", re.I)),

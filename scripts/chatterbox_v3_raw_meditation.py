@@ -58,7 +58,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--pkuseg-home", type=Path, required=True)
     parser.add_argument("--device", choices=("mps", "cpu"), default="mps")
     parser.add_argument("--seed", type=int, default=1742)
-    parser.add_argument("--resume", action="store_true")
     return parser
 
 
@@ -69,8 +68,12 @@ def main() -> None:
     weights_path = args.weights.expanduser().resolve(strict=True)
     pkuseg_home = args.pkuseg_home.expanduser().resolve(strict=True)
     output_directory = args.output_directory.expanduser().resolve()
+    try:
+        output_directory.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as error:
+        raise SystemExit("Evidence already exists; use a new output directory.") from error
     segments_directory = output_directory / "segments"
-    segments_directory.mkdir(parents=True, exist_ok=True)
+    segments_directory.mkdir()
 
     # Keep runtime resources isolated and make accidental model downloads fail.
     os.environ["PKUSEG_HOME"] = str(pkuseg_home)
@@ -115,37 +118,17 @@ def main() -> None:
                 "controls": "official generate() defaults",
                 "postprocessing": [],
             }
-            resumed = False
-            if args.resume and segment_path.is_file() and segment_report_path.is_file():
-                prior = json.loads(segment_report_path.read_text(encoding="utf-8"))
-                identity_matches = all(
-                    prior.get(key) == value for key, value in expected_identity.items()
-                )
-                if identity_matches and prior.get("sha256") == sha256(segment_path):
-                    info = torchaudio.info(str(segment_path))
-                    if (
-                        info.sample_rate == model.sr
-                        and info.num_channels == 1
-                        and info.encoding == "PCM_F"
-                        and info.bits_per_sample == 32
-                    ):
-                        waveform, persisted_rate = torchaudio.load(str(segment_path))
-                        resumed = persisted_rate == model.sr
-            if resumed:
-                segment_finished = segment_started
-            else:
-                waveform = model.generate(spoken_text, language_id="en")
-                segment_finished = time.monotonic()
+            waveform = model.generate(spoken_text, language_id="en")
+            segment_finished = time.monotonic()
             if waveform.ndim != 2 or waveform.shape[0] != 1:
                 raise RuntimeError(f"Speech event {index} returned an unexpected waveform shape.")
             if not bool(torch.isfinite(waveform).all()):
                 raise RuntimeError(f"Speech event {index} returned non-finite samples.")
 
-            if not resumed:
-                torchaudio.save(str(segment_path), waveform, model.sr)
-                persisted, persisted_rate = torchaudio.load(str(segment_path))
-                if persisted_rate != model.sr or not torch.equal(waveform, persisted):
-                    raise RuntimeError(f"Speech event {index} changed during WAV persistence.")
+            torchaudio.save(str(segment_path), waveform, model.sr)
+            persisted, persisted_rate = torchaudio.load(str(segment_path))
+            if persisted_rate != model.sr or not torch.equal(waveform, persisted):
+                raise RuntimeError(f"Speech event {index} changed during WAV persistence.")
             native_parts.append(waveform)
 
             silence_samples = silence_seconds * model.sr
@@ -160,16 +143,14 @@ def main() -> None:
                 "synthesis_seconds": segment_finished - segment_started,
                 "path": str(segment_path),
                 "sha256": sha256(segment_path),
-                "resumed": resumed,
+                "resumed": False,
             }
-            if not resumed:
-                segment_report_path.write_text(
-                    json.dumps(segment_report, indent=2, sort_keys=True) + "\n",
-                    encoding="utf-8",
-                )
+            segment_report_path.write_text(
+                json.dumps(segment_report, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
             segment_reports.append(segment_report)
-            action = "reused" if resumed else "generated"
-            print(f"{action} speech {index}/19", flush=True)
+            print(f"generated speech {index}/19", flush=True)
 
         master = torch.cat(native_parts, dim=-1)
         master_path = output_directory / "chatterbox-v3-deep-male-meditation.wav"

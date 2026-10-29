@@ -842,7 +842,18 @@ def assess_package(project_root: Path, dist_directory: Path) -> AcceptanceGateSt
     if wheel.stat().st_mtime_ns < latest_input or sdist.stat().st_mtime_ns < latest_input:
         stale_reasons.append("A package input is newer than the wheel or sdist.")
     with zipfile.ZipFile(wheel) as archive:
-        wheel_names = set(archive.namelist())
+        wheel_names = {item.filename for item in archive.infolist() if not item.is_dir()}
+        expected_wheel_sources = {
+            packaged
+            for source in inputs
+            if (packaged := _wheel_member_for_source(project_root, source, version)) is not None
+        }
+        wheel_metadata = {
+            f"whoopy-{version}.dist-info/{name}"
+            for name in ("METADATA", "WHEEL", "RECORD", "entry_points.txt", "top_level.txt")
+        }
+        if wheel_names - wheel_metadata != expected_wheel_sources:
+            stale_reasons.append("Wheel source membership does not match the current source tree.")
         for source in inputs:
             packaged = _wheel_member_for_source(project_root, source, version)
             if packaged is None:
@@ -857,6 +868,39 @@ def assess_package(project_root: Path, dist_directory: Path) -> AcceptanceGateSt
             stale_reasons.append("Wheel metadata version does not match pyproject.toml.")
     with tarfile.open(sdist, "r:gz") as archive:
         members = {item.name: item for item in archive.getmembers() if item.isfile()}
+        sdist_metadata = {
+            f"whoopy-{version}/src/whoopy.egg-info/{name}"
+            for name in (
+                "PKG-INFO",
+                "SOURCES.txt",
+                "dependency_links.txt",
+                "entry_points.txt",
+                "requires.txt",
+                "top_level.txt",
+            )
+        } | {f"whoopy-{version}/PKG-INFO"}
+        if not (project_root / "setup.cfg").exists():
+            sdist_metadata.add(f"whoopy-{version}/setup.cfg")
+        for name, member in members.items():
+            if name in sdist_metadata:
+                continue
+            try:
+                relative = Path(name).relative_to(f"whoopy-{version}")
+            except ValueError:
+                stale_reasons.append(f"Source distribution contains an unexpected member: {name}")
+                break
+            source = project_root / relative
+            extracted = archive.extractfile(member)
+            if (
+                ".." in relative.parts
+                or not source.is_file()
+                or extracted is None
+                or extracted.read() != source.read_bytes()
+            ):
+                stale_reasons.append(
+                    f"Source distribution contains absent or changed source: {name}"
+                )
+                break
         for source in inputs:
             packaged = _sdist_member_for_source(project_root, source, version)
             if packaged is None:

@@ -206,8 +206,27 @@ def _git(source: Path, *args: str) -> str:
     ).stdout.strip()
 
 
+@pytest.mark.parametrize(
+    ("target", "wheel_tag", "compatible"),
+    [
+        ("darwin-arm64", "py3-none-any", True),
+        ("darwin-arm64", "cp312-cp312-macosx_14_0_arm64", True),
+        ("darwin-arm64", "cp310-abi3-macosx_11_0_universal2", True),
+        ("darwin-arm64", "cp312-cp312-manylinux_2_17_x86_64", False),
+        ("darwin-arm64", "cp312-cp312-macosx_14_0_x86_64", False),
+        ("darwin-arm64", "cp310-cp310-macosx_11_0_arm64", False),
+        ("darwin-arm64", "cp313-abi3-macosx_14_0_arm64", False),
+        ("darwin-arm64", "py2-none-any", False),
+        ("linux-x86_64", "cp312-cp312-manylinux_2_17_x86_64", True),
+        ("linux-x86_64", "cp312-cp312-macosx_14_0_arm64", False),
+        ("linux-x86_64", "cp312-cp312-manylinux_2_17_aarch64", False),
+    ],
+)
 def test_runtime_builder_snapshots_pinned_git_and_complete_hashed_wheelhouse(
     tmp_path: Path,
+    target: str,
+    wheel_tag: str,
+    compatible: bool,
 ) -> None:
     source = tmp_path / "source"
     source.mkdir()
@@ -228,7 +247,7 @@ def test_runtime_builder_snapshots_pinned_git_and_complete_hashed_wheelhouse(
 
     wheelhouse = tmp_path / "wheelhouse"
     wheelhouse.mkdir()
-    wheel = wheelhouse / "example_dependency-1.0-py3-none-any.whl"
+    wheel = wheelhouse / f"example_dependency-1.0-{wheel_tag}.whl"
     wheel.write_bytes(b"reviewed-wheel")
     digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
     lock = tmp_path / "requirements.lock"
@@ -241,8 +260,21 @@ def test_runtime_builder_snapshots_pinned_git_and_complete_hashed_wheelhouse(
         python_version="3.12.12",
         source_markers=(Path("pyproject.toml"), Path("example_runtime/__init__.py")),
         import_modules=("example_runtime",),
-        supported_targets=("darwin-arm64",),
+        supported_targets=("darwin-arm64", "linux-x86_64"),
     )
+
+    if not compatible:
+        with pytest.raises(ModelPackOperationError, match="incompatible"):
+            build_runtime_bundle(
+                recipe,
+                source=source,
+                requirements_lock=lock,
+                wheelhouse=wheelhouse,
+                output_directory=tmp_path / "first",
+                target=target,
+            )
+        assert not (tmp_path / "first").exists()
+        return
 
     first = build_runtime_bundle(
         recipe,
@@ -250,7 +282,7 @@ def test_runtime_builder_snapshots_pinned_git_and_complete_hashed_wheelhouse(
         requirements_lock=lock,
         wheelhouse=wheelhouse,
         output_directory=tmp_path / "first",
-        target="darwin-arm64",
+        target=target,
     )
     second = build_runtime_bundle(
         recipe,
@@ -258,7 +290,7 @@ def test_runtime_builder_snapshots_pinned_git_and_complete_hashed_wheelhouse(
         requirements_lock=lock,
         wheelhouse=wheelhouse,
         output_directory=tmp_path / "second",
-        target="darwin-arm64",
+        target=target,
     )
 
     assert first.sha256 == second.sha256
@@ -493,3 +525,56 @@ def test_locked_wheelhouse_install_without_builder_dependencies_creates_permanen
     assert (
         service.inspect("test-runtime", target="darwin-arm64").state is RuntimePackState.INSTALLED
     )
+
+
+def test_locked_runtime_recovers_interruption_immediately_after_promotion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive = _archive(
+        tmp_path / "runtime.tar.gz",
+        {".venv/pyvenv.cfg": b"version = 3.12.1\n", ".venv/bin/python": b"runtime"},
+    )
+    original = _service(tmp_path, archive).get("test-runtime")
+    bundle = original.bundles[0].model_copy(update={"install_mode": "locked-wheelhouse"})
+    spec = original.model_copy(update={"bundles": (bundle,)})
+    service = ManagedRuntimePacks(
+        RuntimePackManifest(schema_version=1, runtimes=(spec,)), models_root=tmp_path
+    )
+    destination = tmp_path / spec.managed_directory
+    real_replace = Path.replace
+
+    class InterruptedPromotion(BaseException):
+        pass
+
+    def interrupt_promotion(path: Path, target: Path) -> Path:
+        result = real_replace(path, target)
+        if target == destination:
+            raise InterruptedPromotion
+        return result
+
+    with monkeypatch.context() as interruption:
+        interruption.setattr(Path, "replace", interrupt_promotion)
+        with pytest.raises(InterruptedPromotion):
+            service.install(
+                "test-runtime",
+                offline_directory=tmp_path,
+                allow_network=False,
+                target="darwin-arm64",
+            )
+
+    intent = runtime_module.RuntimeInstallIntent.model_validate_json(
+        (destination / ".whoopy-installing.json").read_text("utf-8")
+    )
+    assert intent.bundle_sha256 == bundle.sha256
+    assert not (destination / ".whoopy-runtime.json").exists()
+    monkeypatch.setattr(service, "_materialize_locked_runtime", lambda *_args, **_kwargs: None)
+
+    status = service.install(
+        "test-runtime",
+        offline_directory=tmp_path,
+        allow_network=False,
+        target="darwin-arm64",
+    )
+
+    assert status.state is RuntimePackState.INSTALLED
+    assert not (destination / ".whoopy-installing.json").exists()

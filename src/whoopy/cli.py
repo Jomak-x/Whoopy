@@ -615,6 +615,7 @@ def _qwen_adapter_from_durable(
     durable: TTSRunSettings,
     *,
     models_dir: Path,
+    config_dir: Path | None = None,
 ) -> Qwen3TTSAdapter:
     """Reconstruct exactly the Qwen adapter selected before the run started."""
 
@@ -622,7 +623,11 @@ def _qwen_adapter_from_durable(
     if variant is None:
         raise GenerationError(f"Unsupported durable Qwen backend: {durable.backend}")
     models_root = models_root_from_artifact_store(models_dir)
-    installation = resolve_qwen3_tts_installation(models_root, variant)
+    installation = resolve_qwen3_tts_installation(
+        models_root,
+        variant,
+        registry_path=None if config_dir is None else config_dir / "model_packs.yaml",
+    )
     if (
         installation.model_revision != durable.qwen_model_revision
         or installation.runtime_revision != durable.qwen_runtime_revision
@@ -668,6 +673,7 @@ def _qwen_adapter_from_durable(
         consent_scope=consent_scope,
         seed=durable.seed,
         models_root=models_root,
+        hardware_requirement=installation.hardware_requirement,
     )
     error = Qwen3TTSAdapter.availability_error(settings)
     if error is not None:
@@ -715,21 +721,19 @@ def _real_script_worker(
             registry_path=pack_config_dir / "model_packs.yaml",
             references_path=pack_config_dir / "voice_references.yaml",
             models_root=models_root_from_artifact_store(models_dir),
+            resolve_reference=resolved.tts.reference_id is None,
         )
         reference_paths = _managed_reference_paths(resolved.tts, models_dir=models_dir)
+        if reference_paths is None:
+            assert pack.reference is not None
+            reference_paths = (pack.reference.audio_path, pack.reference.transcript_path)
         raw_synthesizer = FishSpeech14Adapter(
             FishSpeechSettings(
                 runtime_directory=pack.runtime_directory,
                 worker_script=runtime_worker_script("fish_speech_1_4_worker.py"),
                 checkpoint_directory=pack.checkpoint_directory,
-                reference_audio=(
-                    pack.reference.audio_path if reference_paths is None else reference_paths[0]
-                ),
-                reference_text=(
-                    pack.reference.transcript_path
-                    if reference_paths is None
-                    else reference_paths[1]
-                ),
+                reference_audio=reference_paths[0],
+                reference_text=reference_paths[1],
                 seed=resolved.tts.seed,
                 models_root=models_root_from_artifact_store(models_dir),
                 hardware_requirement=pack.hardware_requirement,
@@ -742,6 +746,7 @@ def _real_script_worker(
             registry_path=pack_config_dir / "model_packs.yaml",
             references_path=pack_config_dir / "voice_references.yaml",
             models_root=models_root_from_artifact_store(models_dir),
+            resolve_reference=resolved.tts.use_reference and resolved.tts.reference_id is None,
         )
         assert pack.codec_directory is not None
         reference_paths = _managed_reference_paths(resolved.tts, models_dir=models_dir)
@@ -753,7 +758,11 @@ def _real_script_worker(
                 codec_directory=pack.codec_directory,
                 variant=cast(MossVariant, resolved.tts.backend),
                 reference_audio=(
-                    pack.reference.audio_path if reference_paths is None else reference_paths[0]
+                    reference_paths[0]
+                    if reference_paths is not None
+                    else pack.reference.audio_path
+                    if pack.reference is not None
+                    else None
                 ),
                 language=resolved.tts.language,
                 instruction=resolved.tts.instruction,
@@ -764,7 +773,9 @@ def _real_script_worker(
             )
         )
     elif resolved.tts.backend in QWEN_BACKEND_VARIANTS:
-        raw_synthesizer = _qwen_adapter_from_durable(resolved.tts, models_dir=models_dir)
+        raw_synthesizer = _qwen_adapter_from_durable(
+            resolved.tts, models_dir=models_dir, config_dir=pack_config_dir
+        )
     else:
         tts_settings = SherpaOnnxSettings(
             voice_name=resolved.tts.voice_name,
@@ -2404,17 +2415,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                     registry_path=args.config_dir / "model_packs.yaml",
                     references_path=args.config_dir / "voice_references.yaml",
                     models_root=models_root_from_artifact_store(args.models_dir),
+                    resolve_reference=managed_reference is None,
                 )
-                fish_reference_audio = (
-                    pack.reference.audio_path
-                    if managed_reference is None
-                    else manager.root / managed_reference.audio_path
-                )
-                fish_reference_text = (
-                    pack.reference.transcript_path
-                    if managed_reference is None
-                    else manager.root / managed_reference.transcript_path
-                )
+                if managed_reference is None:
+                    assert pack.reference is not None
+                    fish_reference_audio = pack.reference.audio_path
+                    fish_reference_text = pack.reference.transcript_path
+                else:
+                    fish_reference_audio = manager.root / managed_reference.audio_path
+                    fish_reference_text = manager.root / managed_reference.transcript_path
                 fish_error = FishSpeech14Adapter.availability_error(
                     pack.runtime_directory,
                     pack.checkpoint_directory,
@@ -2474,12 +2483,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                     registry_path=args.config_dir / "model_packs.yaml",
                     references_path=args.config_dir / "voice_references.yaml",
                     models_root=models_root_from_artifact_store(args.models_dir),
+                    resolve_reference=not args.moss_direct_voice and managed_reference is None,
                 )
                 assert pack.codec_directory is not None
                 moss_reference_audio = (
-                    pack.reference.audio_path
-                    if managed_reference is None
-                    else manager.root / managed_reference.audio_path
+                    manager.root / managed_reference.audio_path
+                    if managed_reference is not None
+                    else pack.reference.audio_path
+                    if pack.reference is not None
+                    else None
                 )
                 moss_error = MossTTSAdapter.availability_error(
                     pack.runtime_directory,
@@ -2545,7 +2557,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             elif args.tts_model in QWEN_BACKEND_VARIANTS:
                 variant = QWEN_BACKEND_VARIANTS[args.tts_model]
                 installation = resolve_qwen3_tts_installation(
-                    models_root_from_artifact_store(args.models_dir), variant
+                    models_root_from_artifact_store(args.models_dir),
+                    variant,
+                    registry_path=args.config_dir / "model_packs.yaml",
                 )
                 is_clone = variant.startswith("base-clone")
                 if is_clone and args.qwen_reference is None:
@@ -2608,7 +2622,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ),
                 )
                 raw_synthesizer = _qwen_adapter_from_durable(
-                    durable_tts, models_dir=args.models_dir
+                    durable_tts, models_dir=args.models_dir, config_dir=args.config_dir
                 )
             else:
                 tts_settings = SherpaOnnxSettings(

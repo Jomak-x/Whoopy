@@ -85,7 +85,7 @@ NO_BREATH = re.compile(
     r"\b(?:breath|breathing)\b[^.!?\n]{0,30}\b(?:uncomfortable|panic|trigger|worse)\w*\b",
     re.I,
 )
-SLEEP = re.compile(r"\b(?:sleep|bedtime|good[ -]?night|fall asleep|insomnia)\b", re.I)
+SLEEP = re.compile(r"\b(?:sleep|sleeping|bedtime|good[\s-]?night|fall asleep|insomnia)\b", re.I)
 REFLECTION = re.compile(r"\b(?:reflect\w*|review the day|busy day|good[ -]?night)\b", re.I)
 
 

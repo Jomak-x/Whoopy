@@ -65,7 +65,10 @@ def _write_manifest(directory: Path, payload: dict[str, object]) -> None:
 
 def main() -> int:
     args = _arguments()
-    args.output_directory.mkdir(parents=True, exist_ok=True)
+    try:
+        args.output_directory.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as error:
+        raise SystemExit("Evidence already exists; use a new output directory.") from error
 
     import soundfile as sf  # type: ignore[import-not-found]
     import torch  # type: ignore[import-not-found]

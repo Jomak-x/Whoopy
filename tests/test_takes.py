@@ -131,6 +131,7 @@ def test_production_checkpoints_become_immutable_takes_and_choices_only_reassemb
         select_if_unset=False,
     )
 
+    takes.choose(RUN_ID, "speech-0001", original.take_id)
     selection = takes.choose(RUN_ID, "speech-0001", alternative.take_id)
     revision = RevisionStore(store).create_assembly_revision(
         RUN_ID,
@@ -355,3 +356,31 @@ def test_alternative_generation_retains_current_audio_after_an_edit(
     assert checkpoints.audio_path(RUN_ID, segment.id).read_bytes() == current_audio.pcm_s16le
     assert takes.selected(RUN_ID, segment.id) == selected
     assert len(takes.list(RUN_ID, segment.id)) == 3
+
+
+@pytest.mark.parametrize("replacement", ["cache_key", "pcm", "corrupt_pcm"])
+def test_selected_take_tracks_verified_active_checkpoint(tmp_path: Path, replacement: str) -> None:
+    store, original_audio = _completed_run(tmp_path / "runs")
+    takes = SegmentTakeStore(store)
+    original = takes.capture_active(RUN_ID, "speech-0001", source="original")
+    assert takes.selected(RUN_ID, "speech-0001") == original.take_id
+    checkpoints = SegmentCheckpointStore(store)
+    replacement_audio = (
+        PcmAudio(b"\x30\x00" * 480, 24_000) if replacement == "pcm" else original_audio
+    )
+    checkpoint = checkpoints.completed_checkpoint(
+        run_id=RUN_ID,
+        segment_id="speech-0001",
+        cache_key="0" * 64 if replacement == "cache_key" else original.cache_key,
+        audio=replacement_audio,
+        attempt_count=2,
+        cache_hit=False,
+        started_at=NOW,
+        completed_at=NOW,
+    )
+    checkpoints.save(checkpoint, audio=replacement_audio)
+    if replacement == "corrupt_pcm":
+        checkpoints.audio_path(RUN_ID, "speech-0001").write_bytes(b"corrupt")
+
+    assert takes.selected(RUN_ID, "speech-0001") is None
+    assert takes.list(RUN_ID, "speech-0001") == [original]

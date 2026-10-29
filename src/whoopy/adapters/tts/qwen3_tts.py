@@ -22,13 +22,19 @@ from whoopy.audio.synthesis import (
     InvalidSynthesisOutput,
     TransientSynthesisError,
 )
+from whoopy.hardware import inspect_hardware
 from whoopy.locations import default_config_directory
 from whoopy.model_packs.operations import (
     HeavyweightModelSlot,
     HeavyweightModelSlotUnavailable,
     models_root_for_runtime,
 )
-from whoopy.model_packs.registry import ModelPackState, load_model_pack_registry
+from whoopy.model_packs.registry import (
+    HardwareRequirement,
+    ModelPackState,
+    hardware_requirement_error,
+    load_model_pack_registry,
+)
 from whoopy.model_packs.runtime import RuntimeInstallReceipt
 from whoopy.ports import AdapterMetadata, SpeechCapabilities
 from whoopy.timeline import SpeechSegment, VoiceMode
@@ -152,6 +158,7 @@ class Qwen3TTSSettings:
     request_timeout_seconds: float = 300
     shutdown_timeout_seconds: float = 5
     models_root: Path | None = None
+    hardware_requirement: HardwareRequirement | None = None
 
     def __post_init__(self) -> None:
         task, _ = _VARIANTS[self.variant]
@@ -192,6 +199,7 @@ class Qwen3TTSInstallation:
     model_directory: Path
     runtime_revision: str
     model_revision: str
+    hardware_requirement: HardwareRequirement | None = None
 
 
 def resolve_qwen3_tts_installation(
@@ -200,14 +208,14 @@ def resolve_qwen3_tts_installation(
     *,
     registry_path: Path | None = None,
 ) -> Qwen3TTSInstallation:
-    """Resolve only a registry-verified, current-machine READY Qwen installation."""
+    """Resolve a verified Qwen installation independently of live resource admission."""
 
     pack_id = f"qwen3-tts-{variant}"
     active_registry = registry_path or default_config_directory() / "model_packs.yaml"
     try:
         registry = load_model_pack_registry(active_registry, models_root=models_root)
         pack = registry.get(pack_id)
-        status = registry.inspect(pack_id)
+        status = registry.inspect(pack_id, check_resources=False)
     except (OSError, ValueError) as error:
         raise FatalSynthesisError(
             f"Qwen3-TTS {variant} has no reviewed model-pack integration: {error}"
@@ -243,6 +251,7 @@ def resolve_qwen3_tts_installation(
         model_directory=model,
         runtime_revision=runtime_revision,
         model_revision=pack.revision,
+        hardware_requirement=pack.hardware,
     )
 
 
@@ -403,6 +412,15 @@ class Qwen3TTSAdapter:
         error = self.availability_error(self.settings)
         if error is not None:
             raise FatalSynthesisError(f"{self.settings.variant} is not ready: {error}.")
+        if self.settings.hardware_requirement is not None:
+            live_error = hardware_requirement_error(
+                self.settings.hardware_requirement,
+                inspect_hardware(self.settings.runtime_directory),
+            )
+            if live_error is not None:
+                raise TransientSynthesisError(
+                    f"Qwen3-TTS live resource check failed immediately before load: {live_error}."
+                )
         command = [
             str(_runtime_python(self.settings.runtime_directory)),
             str(self.settings.worker_script),

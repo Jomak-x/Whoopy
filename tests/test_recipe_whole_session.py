@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TypedDict
 from uuid import UUID
@@ -21,9 +22,14 @@ from whoopy.meditation import (
     MeditationGenerationResult,
     load_prompt_bundle,
 )
-from whoopy.meditation.models import MeditationKind
+from whoopy.meditation.models import MeditationKind, RawGenerationAttempt
 from whoopy.meditation.recipes import Posture, RoutedSession
-from whoopy.ports import AdapterMetadata, ScriptGenerationRequest, ScriptGenerationResult
+from whoopy.ports import (
+    AdapterMetadata,
+    ScriptGenerationRequest,
+    ScriptGenerationResult,
+    ScriptGenerationTelemetry,
+)
 
 RUN_ID = UUID("44444444-4444-4444-8444-444444444444")
 
@@ -262,6 +268,81 @@ def test_completed_whole_session_resumes_without_drafting_again(tmp_path: Path) 
     assert first.script == second.script
     assert first.sections == second.sections
     assert (tmp_path / "whole-session.json").exists()
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_failed_draft_retries_preserve_every_attempt_and_telemetry(
+    tmp_path: Path, corrupt: bool
+) -> None:
+    class MeasuredAdapter(WholeSessionAdapter):
+        def generate(self, request: ScriptGenerationRequest) -> ScriptGenerationResult:
+            result = super().generate(request)
+            return result.model_copy(
+                update={
+                    "elapsed_seconds": float(len(self.requests)),
+                    "telemetry": ScriptGenerationTelemetry(
+                        output_tokens=100 + len(self.requests),
+                        output_tokens_unavailable_reason=None,
+                    ),
+                }
+            )
+
+    def omit_section(output: FixtureDraft) -> None:
+        output["sections"].pop()
+
+    adapter = MeasuredAdapter(omit_section, always_mutate=True, corrupt=corrupt)
+    workspace = GenerationWorkspace(tmp_path)
+    prior_files: dict[Path, bytes] = {}
+    for invocation in range(2):
+        with pytest.raises(GenerationError, match="after one holistic revision"):
+            run(adapter, workspace=workspace)
+        assert len(adapter.requests) == 2 * (invocation + 1)
+        assert all(path.read_bytes() == content for path, content in prior_files.items())
+        prior_files = {path: path.read_bytes() for path in tmp_path.rglob("*.json")}
+
+    adapter.corrupt = False
+    adapter.mutation = None
+    completed = run(adapter, workspace=workspace)
+
+    assert all(path.read_bytes() == content for path, content in prior_files.items())
+    attempts = sorted(
+        (
+            RawGenerationAttempt.model_validate_json(path.read_bytes())
+            for path in (tmp_path / "raw-model-output").glob("*.json")
+        ),
+        key=lambda attempt: attempt.elapsed_seconds,
+    )
+    assert len(attempts) == len(adapter.requests) == 5
+    assert [attempt.elapsed_seconds for attempt in attempts] == [1, 2, 3, 4, 5]
+    assert [attempt.telemetry.output_tokens for attempt in attempts] == [101, 102, 103, 104, 105]
+    assert [attempt.request_seed for attempt in attempts] == [
+        request.seed for request in adapter.requests
+    ]
+    assert all(attempt.validation_error for attempt in attempts[:4])
+    assert attempts[-1] == completed.raw_attempts[0]
+    if corrupt:
+        assert all(attempt.text == "This is not JSON" for attempt in attempts[:4])
+    else:
+        assert [json.loads(attempt.text) for attempt in attempts] == adapter.outputs
+
+
+def test_concurrent_attempt_publication_keeps_all_records(tmp_path: Path) -> None:
+    workspace = GenerationWorkspace(tmp_path)
+    attempts = [
+        RawGenerationAttempt(
+            stage="whole-session", attempt=1, text=f"draft {index}", elapsed_seconds=index
+        )
+        for index in range(12)
+    ]
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        list(executor.map(workspace.save_attempt, attempts))
+
+    saved = [
+        RawGenerationAttempt.model_validate_json(path.read_bytes())
+        for path in (tmp_path / "raw-model-output").glob("*.json")
+    ]
+    assert sorted(saved, key=lambda attempt: attempt.elapsed_seconds) == attempts
 
 
 def test_prompt_content_change_invalidates_completed_checkpoint(tmp_path: Path) -> None:

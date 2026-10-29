@@ -629,9 +629,6 @@ class ManagedRuntimePacks:
                     raise ModelPackOperationError(
                         "Refusing to overwrite an existing managed runtime."
                     )
-                staging.replace(destination)
-                install_root = destination
-                promoted = True
                 intent = RuntimeInstallIntent(
                     runtime_id=spec.runtime_id,
                     revision=spec.revision,
@@ -639,9 +636,13 @@ class ManagedRuntimePacks:
                     target=target,
                     bundle_sha256=bundle.sha256,
                 )
-                (install_root / ".whoopy-installing.json").write_text(
-                    intent.model_dump_json(indent=2) + "\n", "utf-8"
-                )
+                with (staging / ".whoopy-installing.json").open("w", encoding="utf-8") as writer:
+                    writer.write(intent.model_dump_json(indent=2) + "\n")
+                    writer.flush()
+                    os.fsync(writer.fileno())
+                staging.replace(destination)
+                install_root = destination
+                promoted = True
                 self._materialize_locked_runtime(
                     install_root,
                     spec,

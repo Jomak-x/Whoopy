@@ -387,7 +387,7 @@ def test_installed_bundle_gate_binds_receipts_to_current_packaged_wheel(tmp_path
     assert "current packaged wheel digest" in " ".join(gate.blockers)
 
 
-def _write_package(project: Path) -> tuple[Path, Path]:
+def _write_package(project: Path, *, extra_module: bool = False) -> tuple[Path, Path]:
     source = project / "src/whoopy/__init__.py"
     source.parent.mkdir(parents=True)
     source.write_text('__version__ = "1.2.3"\n', "utf-8")
@@ -395,12 +395,18 @@ def _write_package(project: Path) -> tuple[Path, Path]:
         '[project]\nname = "whoopy"\nversion = "1.2.3"\n', "utf-8"
     )
     (project / "uv.lock").write_text("version = 1\n", "utf-8")
+    if extra_module:
+        (source.parent / "retired.py").write_text("VALUE = 1\n", "utf-8")
     dist = project / "dist"
     dist.mkdir()
     wheel = dist / "whoopy-1.2.3-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr("whoopy/__init__.py", source.read_bytes())
+        if extra_module:
+            archive.writestr("whoopy/retired.py", (source.parent / "retired.py").read_bytes())
         archive.writestr("whoopy-1.2.3.dist-info/METADATA", "Name: whoopy\nVersion: 1.2.3\n")
+        archive.writestr("whoopy-1.2.3.dist-info/WHEEL", "Wheel-Version: 1.0\n")
+        archive.writestr("whoopy-1.2.3.dist-info/RECORD", "")
     sdist = dist / "whoopy-1.2.3.tar.gz"
     with tarfile.open(sdist, "w:gz") as archive:
         for member_name, payload in (
@@ -410,6 +416,11 @@ def _write_package(project: Path) -> tuple[Path, Path]:
             info = tarfile.TarInfo(member_name)
             info.size = len(payload)
             archive.addfile(info, io.BytesIO(payload))
+        if extra_module:
+            archive.add(source.parent / "retired.py", arcname="whoopy-1.2.3/src/whoopy/retired.py")
+        for name in ("PKG-INFO", "setup.cfg", "src/whoopy.egg-info/SOURCES.txt"):
+            info = tarfile.TarInfo(f"whoopy-1.2.3/{name}")
+            archive.addfile(info, io.BytesIO())
     return source, dist
 
 
@@ -422,6 +433,22 @@ def test_package_freshness_compares_artifacts_to_actual_source(tmp_path: Path) -
     stale = assess_package(tmp_path, dist)
     assert stale.outcome == "stale"
     assert any("Wheel does not match current source" in blocker for blocker in stale.blockers)
+
+
+def test_package_freshness_rejects_deleted_modules_in_both_archives(tmp_path: Path) -> None:
+    source, dist = _write_package(tmp_path, extra_module=True)
+
+    assert assess_package(tmp_path, dist).outcome == "passed"
+    (source.parent / "retired.py").unlink()
+
+    stale = assess_package(tmp_path, dist)
+    assert stale.outcome == "stale"
+    assert any("Wheel source membership" in blocker for blocker in stale.blockers)
+    assert any(
+        "Source distribution contains absent or changed source" in blocker
+        and "retired.py" in blocker
+        for blocker in stale.blockers
+    )
 
 
 def test_package_freshness_covers_installed_config_and_worker_data(tmp_path: Path) -> None:

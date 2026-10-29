@@ -334,25 +334,6 @@ class RevisionStore:
                 if generated.timeline.run_id != parsed:
                     raise RevisionError("The production draft belongs to another run.")
                 current = self._ensure_initial(parsed)
-                current_directory = self._root(parsed) / current.revision_id
-                if not (current_directory / REVISION_DRAFT_SECTIONS).is_dir():
-                    current = self._write_revision(
-                        parsed,
-                        parent=current.revision_id,
-                        script=self.store.load_script(parsed),
-                        timeline=self.store.load_timeline(parsed),
-                        plan=base_plan,
-                        note="Context snapshot before semantic plan regeneration.",
-                        change_kind="assembly_only",
-                        affected=set(),
-                        snapshot_active_context=True,
-                    )
-                    self._activate(
-                        parsed,
-                        current,
-                        script=self.store.load_script(parsed),
-                        timeline=self.store.load_timeline(parsed),
-                    )
                 old_speech = {
                     segment.id: segment
                     for segment in self.store.load_timeline(parsed).segments
@@ -489,7 +470,6 @@ class RevisionStore:
         change_kind: Literal["initial", "assembly_only", "selective_speech", "script", "plan"],
         affected: set[str],
         generated: MeditationGenerationResult | None = None,
-        snapshot_active_context: bool = False,
     ) -> RevisionManifest:
         root = self._root(run_id)
         root.mkdir(parents=True, exist_ok=True)
@@ -530,7 +510,7 @@ class RevisionStore:
                         encoding="utf-8",
                     )
                 artifacts.extend((REVISION_DRAFT_SECTIONS, REVISION_RAW_ATTEMPTS))
-            elif change_kind == "initial" or snapshot_active_context:
+            else:
                 for name, source in (
                     (REVISION_DRAFT_SECTIONS, self.store.draft_sections_path(run_id)),
                     (

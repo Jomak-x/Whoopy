@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import math
+import threading
 import wave
 from array import array
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
+import whoopy.voice_references as voice_references
+from whoopy.model_packs.operations import _AdvisoryFileLock
 from whoopy.voice_references import (
     VoiceConsent,
     VoiceReferenceError,
@@ -260,3 +265,71 @@ def test_rejects_silent_or_out_of_bounds_trimmed_audio(tmp_path: Path) -> None:
             consent=_consent(),
             trim_end_ms=3_000,
         )
+
+
+def test_delete_waits_for_replacement_pointer_and_restores_complete_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.wav"
+    _wav(source, rate=24_000, seconds=1, channels=1)
+    manager = VoiceReferenceManager(tmp_path / "managed")
+    deleting_manager = VoiceReferenceManager(manager.root)
+    original = manager.import_wav(
+        reference_id="narrator",
+        display_name="Narrator",
+        source_wav=source,
+        transcript="Original transcript.",
+        consent=_consent(),
+    )
+    original_audio = (manager.root / original.audio_path).read_bytes()
+    pointer_pending = threading.Event()
+    publish_pointer = threading.Event()
+    deletion_waiting = threading.Event()
+    atomic_json = voice_references._atomic_json
+    acquire = _AdvisoryFileLock.acquire
+
+    def pause_pointer(path: Path, document: dict[str, Any], *, root: Path) -> None:
+        if path.name == "active.json" and document["active_revision"] == 2:
+            pointer_pending.set()
+            assert publish_pointer.wait(5)
+        atomic_json(path, document, root=root)
+
+    def observe_acquire(
+        lock: _AdvisoryFileLock, *, timeout_seconds: float = 0, poll_seconds: float = 0.05
+    ) -> bool:
+        deletion_waiting.set()
+        return acquire(lock, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+
+    monkeypatch.setattr(voice_references, "_atomic_json", pause_pointer)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        replacement = executor.submit(
+            manager.replace,
+            reference_id="narrator",
+            display_name="Replacement",
+            source_wav=source,
+            transcript="Replacement transcript.",
+            consent=_consent(),
+        )
+        try:
+            assert pointer_pending.wait(5)
+            monkeypatch.setattr(_AdvisoryFileLock, "acquire", observe_acquire)
+            deletion = executor.submit(
+                deleting_manager.delete,
+                "narrator",
+                confirmation=deleting_manager.delete_confirmation("narrator"),
+            )
+            assert deletion_waiting.wait(5)
+        finally:
+            publish_pointer.set()
+        second = replacement.result(timeout=5)
+        receipt = deletion.result(timeout=5)
+
+    assert manager.list() == ()
+    assert not (manager.root / receipt.original_path).exists()
+    restored = manager.restore(
+        receipt.trash_id, confirmation=manager.restore_confirmation(receipt.trash_id)
+    )
+    assert restored == second
+    assert restored.revision == 2
+    assert manager.load_revision("narrator", 1) == original
+    assert (manager.root / original.audio_path).read_bytes() == original_audio

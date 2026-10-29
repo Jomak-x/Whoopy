@@ -131,15 +131,23 @@ def main() -> int:
     )
     parser.add_argument("--asr-worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if not args.asr_worker and args.expected_file is None and args.expected_text is None:
+        parser.error("--expected-file or --expected-text is required")
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with args.report.open("x", encoding="utf-8") as receipt:
+            receipt.write(
+                json.dumps({"status": "incomplete", "reason": "Verification has not completed."})
+                + "\n"
+            )
+    except FileExistsError as error:
+        raise SystemExit("Evidence already exists; use a new report path.") from error
     if args.asr_worker:
         asr_worker(args.audio, args.model, args.report)
         return 0
-    if args.expected_file is None and args.expected_text is None:
-        parser.error("--expected-file or --expected-text is required")
     expected = (
         args.expected_file.read_text(encoding="utf-8") if args.expected_file else args.expected_text
     )
-    args.report.parent.mkdir(parents=True, exist_ok=True)
     asr, error = None, None
     with tempfile.TemporaryDirectory(prefix="whoopy-asr-") as temporary:
         raw_report = Path(temporary) / "asr.json"

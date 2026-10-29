@@ -151,7 +151,7 @@ class ResolvedTTSModelPack(BaseModel):
     runtime_directory: Path
     checkpoint_directory: Path
     codec_directory: Path | None = None
-    reference: ResolvedVoiceReference
+    reference: ResolvedVoiceReference | None
     hardware_requirement: HardwareRequirement
 
 
@@ -217,13 +217,14 @@ def resolve_tts_model_pack(
     references_path: Path,
     models_root: Path,
     require_ready: bool = True,
+    resolve_reference: bool = True,
 ) -> ResolvedTTSModelPack:
     """Resolve a selected pack without falling back to experimental constants."""
 
     registry = load_model_pack_registry(registry_path, models_root=models_root)
     pack_id = _BACKEND_PACK_IDS[backend]
     pack = registry.get(pack_id)
-    status = registry.inspect(pack_id)
+    status = registry.inspect(pack_id, check_resources=False)
     allowed = (
         {ModelPackState.READY}
         if require_ready
@@ -239,7 +240,7 @@ def resolve_tts_model_pack(
         )
     codec_directory: Path | None = None
     if backend.startswith("moss-"):
-        codec = registry.inspect("moss-audio-tokenizer-v2")
+        codec = registry.inspect("moss-audio-tokenizer-v2", check_resources=False)
         if codec.state is not ModelPackState.READY:
             raise ModelPackOperationError(
                 f"MOSS Audio Tokenizer v2 is {codec.state}; smoke-test a MOSS pack first."
@@ -252,6 +253,10 @@ def resolve_tts_model_pack(
         runtime_directory=_runtime_directory(registry, pack),
         checkpoint_directory=status.selected_directory,
         codec_directory=codec_directory,
-        reference=resolve_voice_reference(references_path, models_root=models_root),
+        reference=(
+            resolve_voice_reference(references_path, models_root=models_root)
+            if resolve_reference
+            else None
+        ),
         hardware_requirement=pack.hardware,
     )

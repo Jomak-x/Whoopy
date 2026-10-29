@@ -473,9 +473,11 @@ def test_prompt_task_preallocates_a_durable_run_and_uses_the_real_cli_contract(
     assert command[command.index("--audience") + 1] == "studio"
 
 
+@pytest.mark.parametrize("managed_reference", [True, False])
 def test_moss_controls_reach_the_real_cli_contract(
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
+    managed_reference: bool,
 ) -> None:
     application = _application(tmp_path)
     captured: dict[str, Any] = {}
@@ -495,10 +497,11 @@ def test_moss_controls_reach_the_real_cli_contract(
         def terminate(self) -> None:
             self.returncode = -15
 
-    monkeypatch.setattr(
-        "whoopy.webui.server.resolve_tts_model_pack",
-        lambda *_args, **_kwargs: None,
-    )
+    def resolve_pack(*_args: object, **kwargs: object) -> None:
+        assert kwargs["resolve_reference"] is False
+        assert not (tmp_path / "config/voice_references.yaml").exists()
+
+    monkeypatch.setattr("whoopy.webui.server.resolve_tts_model_pack", resolve_pack)
 
     class ReadyMossPacks:
         def list(self) -> dict[str, object]:
@@ -527,8 +530,8 @@ def test_moss_controls_reach_the_real_cli_contract(
             "tts_model": "moss-local-v1.5",
             "moss_language": "German",
             "moss_instruction": "Speak softly and thoughtfully.",
-            "moss_use_reference": True,
-            "voice_reference": "my-narrator",
+            "moss_use_reference": managed_reference,
+            "voice_reference": "my-narrator" if managed_reference else None,
             "intensity": "moderate",
             "pace": "very_slow",
         }
@@ -542,8 +545,12 @@ def test_moss_controls_reach_the_real_cli_contract(
     assert command[command.index("--delivery") + 1] == "calm"
     assert command[command.index("--intensity") + 1] == "moderate"
     assert command[command.index("--pace") + 1] == "very_slow"
-    assert "--moss-direct-voice" not in command
-    assert command[command.index("--voice-reference") + 1] == "my-narrator"
+    if managed_reference:
+        assert "--moss-direct-voice" not in command
+        assert command[command.index("--voice-reference") + 1] == "my-narrator"
+    else:
+        assert "--moss-direct-voice" in command
+        assert "--voice-reference" not in command
     assert command[command.index("--requested-duration-seconds") + 1] == "180"
 
 

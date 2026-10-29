@@ -95,9 +95,10 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--profile", choices=("standard", "lite", "high"), default="standard")
     args = parser.parse_args()
-    if args.output.exists() and any(args.output.iterdir()):
-        raise SystemExit("Evidence already exists; use a new output directory.")
-    args.output.mkdir(parents=True, exist_ok=True)
+    try:
+        args.output.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as error:
+        raise SystemExit("Evidence already exists; use a new output directory.") from error
     report: dict[str, Any] = {
         "created_at": datetime.now(UTC).isoformat(),
         "scope": "same_model_writing_method_comparison_not_voice_quality",

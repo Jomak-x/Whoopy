@@ -11,13 +11,19 @@ import tempfile
 import uuid
 import wave
 from array import array
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-from whoopy.model_packs.operations import ModelPackOperationError, safe_managed_path
+from whoopy.model_packs.operations import (
+    ModelPackOperationError,
+    _AdvisoryFileLock,
+    safe_managed_path,
+)
 
 _SAFE_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}\Z")
 _TARGET_RATE = 24_000
@@ -245,6 +251,18 @@ class VoiceReferenceManager:
         except ModelPackOperationError as error:
             raise VoiceReferenceError(str(error)) from error
 
+    @contextmanager
+    def _mutation(self) -> Iterator[None]:
+        lock = _AdvisoryFileLock(self.root / ".mutations.lock", safety_root=self.root)
+        try:
+            if not lock.acquire(timeout_seconds=5):
+                raise VoiceReferenceError("another voice-reference mutation is in progress")
+            yield
+        except ModelPackOperationError as error:
+            raise VoiceReferenceError(str(error)) from error
+        finally:
+            lock.release()
+
     @staticmethod
     def delete_confirmation(reference_id: str) -> str:
         return f"delete voice reference {reference_id}"
@@ -278,18 +296,19 @@ class VoiceReferenceManager:
     ) -> VoiceReferenceRevision:
         """Create the first immutable revision of a new reference."""
 
-        if self._reference_directory(reference_id).exists():
-            raise VoiceReferenceError(f"voice reference {reference_id} already exists")
-        return self._create_revision(
-            reference_id=reference_id,
-            display_name=display_name,
-            source_wav=source_wav,
-            transcript=transcript,
-            consent=consent,
-            trim_start_ms=trim_start_ms,
-            trim_end_ms=trim_end_ms,
-            parent=None,
-        )
+        with self._mutation():
+            if self._reference_directory(reference_id).exists():
+                raise VoiceReferenceError(f"voice reference {reference_id} already exists")
+            return self._create_revision(
+                reference_id=reference_id,
+                display_name=display_name,
+                source_wav=source_wav,
+                transcript=transcript,
+                consent=consent,
+                trim_start_ms=trim_start_ms,
+                trim_end_ms=trim_end_ms,
+                parent=None,
+            )
 
     def replace(
         self,
@@ -304,17 +323,18 @@ class VoiceReferenceManager:
     ) -> VoiceReferenceRevision:
         """Activate a new immutable revision without overwriting prior evidence."""
 
-        parent = self.load(reference_id)
-        return self._create_revision(
-            reference_id=reference_id,
-            display_name=display_name,
-            source_wav=source_wav,
-            transcript=transcript,
-            consent=consent,
-            trim_start_ms=trim_start_ms,
-            trim_end_ms=trim_end_ms,
-            parent=parent,
-        )
+        with self._mutation():
+            parent = self.load(reference_id)
+            return self._create_revision(
+                reference_id=reference_id,
+                display_name=display_name,
+                source_wav=source_wav,
+                transcript=transcript,
+                consent=consent,
+                trim_start_ms=trim_start_ms,
+                trim_end_ms=trim_end_ms,
+                parent=parent,
+            )
 
     def _create_revision(
         self,
@@ -475,68 +495,70 @@ class VoiceReferenceManager:
         return tuple(summaries)
 
     def delete(self, reference_id: str, *, confirmation: str) -> VoiceReferenceTrashReceipt:
-        reference_id = self._id(reference_id)
-        if confirmation != self.delete_confirmation(reference_id):
-            raise VoiceReferenceError("voice-reference deletion confirmation did not match")
-        source = self._reference_directory(reference_id)
-        if not source.is_dir() or source.is_symlink():
-            raise VoiceReferenceError(f"voice reference {reference_id} does not exist safely")
-        trash_id = f"{datetime.now(UTC).strftime('%Y%m%dt%H%M%Sz')}-{uuid.uuid4().hex[:12]}"
-        entry = self.root / ".trash" / trash_id
-        payload = entry / "reference"
-        try:
-            safe_managed_path(self.root, payload, label="voice-reference trash")
-        except ModelPackOperationError as error:
-            raise VoiceReferenceError(str(error)) from error
-        receipt = VoiceReferenceTrashReceipt(
-            trash_id=trash_id,
-            reference_id=reference_id,
-            deleted_at=datetime.now(UTC),
-            original_path=source.relative_to(self.root),
-            payload_path=payload.relative_to(self.root),
-        )
-        entry.mkdir(parents=True, exist_ok=False)
-        _atomic_json(entry / "trash.json", receipt.model_dump(mode="json"), root=self.root)
-        source.replace(payload)
-        return receipt
+        with self._mutation():
+            reference_id = self._id(reference_id)
+            if confirmation != self.delete_confirmation(reference_id):
+                raise VoiceReferenceError("voice-reference deletion confirmation did not match")
+            source = self._reference_directory(reference_id)
+            if not source.is_dir() or source.is_symlink():
+                raise VoiceReferenceError(f"voice reference {reference_id} does not exist safely")
+            trash_id = f"{datetime.now(UTC).strftime('%Y%m%dt%H%M%Sz')}-{uuid.uuid4().hex[:12]}"
+            entry = self.root / ".trash" / trash_id
+            payload = entry / "reference"
+            try:
+                safe_managed_path(self.root, payload, label="voice-reference trash")
+            except ModelPackOperationError as error:
+                raise VoiceReferenceError(str(error)) from error
+            receipt = VoiceReferenceTrashReceipt(
+                trash_id=trash_id,
+                reference_id=reference_id,
+                deleted_at=datetime.now(UTC),
+                original_path=source.relative_to(self.root),
+                payload_path=payload.relative_to(self.root),
+            )
+            entry.mkdir(parents=True, exist_ok=False)
+            _atomic_json(entry / "trash.json", receipt.model_dump(mode="json"), root=self.root)
+            source.replace(payload)
+            return receipt
 
     def restore(self, trash_id: str, *, confirmation: str) -> VoiceReferenceRevision:
-        if _SAFE_ID.fullmatch(trash_id) is None:
-            raise VoiceReferenceError(f"invalid trash ID: {trash_id!r}")
-        if confirmation != self.restore_confirmation(trash_id):
-            raise VoiceReferenceError("voice-reference restore confirmation did not match")
-        entry = self.root / ".trash" / trash_id
-        try:
-            safe_managed_path(self.root, entry, label="voice-reference trash entry")
-            receipt = VoiceReferenceTrashReceipt.model_validate_json(
-                (entry / "trash.json").read_text(encoding="utf-8")
-            )
-        except (ModelPackOperationError, OSError, ValueError) as error:
-            raise VoiceReferenceError(
-                f"could not load voice-reference trash receipt: {error}"
-            ) from error
-        expected_original = Path("references") / receipt.reference_id
-        expected_payload = Path(".trash") / trash_id / "reference"
-        if (
-            receipt.trash_id != trash_id
-            or receipt.original_path != expected_original
-            or receipt.payload_path != expected_payload
-        ):
-            raise VoiceReferenceError(
-                "voice-reference trash receipt targets do not match its entry"
-            )
-        destination = self._reference_directory(receipt.reference_id)
-        payload = self.root / receipt.payload_path
-        if destination.exists():
-            raise VoiceReferenceError("cannot restore over an existing voice reference")
-        try:
-            safe_managed_path(self.root, payload, label="voice-reference trash payload")
-        except ModelPackOperationError as error:
-            raise VoiceReferenceError(str(error)) from error
-        if not payload.is_dir() or payload.is_symlink():
-            raise VoiceReferenceError("voice-reference trash payload is missing or unsafe")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        payload.replace(destination)
-        (entry / "trash.json").unlink()
-        entry.rmdir()
-        return self.load(receipt.reference_id)
+        with self._mutation():
+            if _SAFE_ID.fullmatch(trash_id) is None:
+                raise VoiceReferenceError(f"invalid trash ID: {trash_id!r}")
+            if confirmation != self.restore_confirmation(trash_id):
+                raise VoiceReferenceError("voice-reference restore confirmation did not match")
+            entry = self.root / ".trash" / trash_id
+            try:
+                safe_managed_path(self.root, entry, label="voice-reference trash entry")
+                receipt = VoiceReferenceTrashReceipt.model_validate_json(
+                    (entry / "trash.json").read_text(encoding="utf-8")
+                )
+            except (ModelPackOperationError, OSError, ValueError) as error:
+                raise VoiceReferenceError(
+                    f"could not load voice-reference trash receipt: {error}"
+                ) from error
+            expected_original = Path("references") / receipt.reference_id
+            expected_payload = Path(".trash") / trash_id / "reference"
+            if (
+                receipt.trash_id != trash_id
+                or receipt.original_path != expected_original
+                or receipt.payload_path != expected_payload
+            ):
+                raise VoiceReferenceError(
+                    "voice-reference trash receipt targets do not match its entry"
+                )
+            destination = self._reference_directory(receipt.reference_id)
+            payload = self.root / receipt.payload_path
+            if destination.exists():
+                raise VoiceReferenceError("cannot restore over an existing voice reference")
+            try:
+                safe_managed_path(self.root, payload, label="voice-reference trash payload")
+            except ModelPackOperationError as error:
+                raise VoiceReferenceError(str(error)) from error
+            if not payload.is_dir() or payload.is_symlink():
+                raise VoiceReferenceError("voice-reference trash payload is missing or unsafe")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            payload.replace(destination)
+            (entry / "trash.json").unlink()
+            entry.rmdir()
+            return self.load(receipt.reference_id)

@@ -60,12 +60,21 @@ class GenerationWorkspace:
     def __init__(self, root: Path) -> None:
         self.root = root
 
-    def _write(self, path: Path, content: str) -> None:
+    def _write(self, path: Path, content: str, *, overwrite: bool = True) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
         try:
             temporary.write_text(content, encoding="utf-8")
-            temporary.replace(path)
+            if overwrite:
+                temporary.replace(path)
+            else:
+                destination = path
+                while True:
+                    try:
+                        destination.hardlink_to(temporary)
+                        break
+                    except FileExistsError:
+                        destination = path.with_name(f"{path.stem}-{uuid4().hex}{path.suffix}")
         except OSError as error:
             raise WorkspaceError(f"Could not write {path}: {error}") from error
         finally:
@@ -92,6 +101,7 @@ class GenerationWorkspace:
         self._write(
             self.root / "raw-model-output" / f"{safe_stage}-{attempt.attempt:02d}.json",
             attempt.model_dump_json(indent=2) + "\n",
+            overwrite=False,
         )
 
     def save_plan(self, plan: MeditationPlan) -> None:

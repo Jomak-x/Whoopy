@@ -717,6 +717,7 @@ class ModelPackRegistry:
         hardware: HardwareSnapshot | None = None,
         machine: MachineIdentity | None = None,
         verify_digests: bool = True,
+        check_resources: bool = True,
     ) -> ModelPackStatus:
         """Inspect one pack and all declared dependencies without changing disk."""
 
@@ -729,6 +730,7 @@ class ModelPackRegistry:
             verify_digests,
             {},
             set(),
+            check_resources,
         )
 
     def _existing_inspection_path(self) -> Path:
@@ -747,6 +749,7 @@ class ModelPackRegistry:
         verify_digests: bool,
         memo: dict[str, ModelPackStatus],
         visiting: set[str],
+        check_resources: bool = True,
     ) -> ModelPackStatus:
         if pack.pack_id in memo:
             return memo[pack.pack_id]
@@ -844,7 +847,9 @@ class ModelPackRegistry:
                 )
                 state = ModelPackState.INSTALLED
             else:
-                state = self._readiness_state(pack, hardware, machine, checks, memo, visiting)
+                state = self._readiness_state(
+                    pack, hardware, machine, checks, memo, visiting, check_resources
+                )
 
         status = ModelPackStatus(
             pack_id=pack.pack_id,
@@ -962,15 +967,17 @@ class ModelPackRegistry:
         checks: list[ReadinessCheck],
         memo: dict[str, ModelPackStatus],
         visiting: set[str],
+        check_resources: bool,
     ) -> ModelPackState:
-        resources_ok, resource_message = _hardware_check(pack.hardware, hardware)
-        checks.append(
-            ReadinessCheck(
-                check="hardware_preflight", passed=resources_ok, message=resource_message
+        if check_resources:
+            resources_ok, resource_message = _hardware_check(pack.hardware, hardware)
+            checks.append(
+                ReadinessCheck(
+                    check="hardware_preflight", passed=resources_ok, message=resource_message
+                )
             )
-        )
-        if not resources_ok:
-            return ModelPackState.RESOURCE_BLOCKED
+            if not resources_ok:
+                return ModelPackState.RESOURCE_BLOCKED
 
         runtime_directory = self.runtime_directory(pack)
         checks.append(
@@ -986,6 +993,33 @@ class ModelPackRegistry:
         )
         if runtime_directory is None:
             return ModelPackState.INSTALLED
+
+        receipt_path = runtime_directory / ".whoopy-runtime.json"
+        if receipt_path.exists() or pack.runtime.runtime_id == "qwen3-tts":
+            from whoopy.model_packs.runtime import RuntimeInstallReceipt, _tree_sha256
+
+            try:
+                receipt = RuntimeInstallReceipt.model_validate_json(receipt_path.read_text("utf-8"))
+                tree_matches = (
+                    receipt.runtime_id == pack.runtime.runtime_id
+                    and receipt.revision == pack.runtime.revision
+                    and receipt.installed_tree_sha256 == _tree_sha256(runtime_directory)
+                )
+            except (OSError, ValueError):
+                tree_matches = False
+            checks.append(
+                ReadinessCheck(
+                    check="runtime_installed_tree",
+                    passed=tree_matches,
+                    message=(
+                        "installed runtime tree verified"
+                        if tree_matches
+                        else "installed runtime tree does not match its receipt"
+                    ),
+                )
+            )
+            if not tree_matches:
+                return ModelPackState.CORRUPT
 
         runtime_fingerprint = _runtime_fingerprint(runtime_directory, pack.runtime)
 
@@ -1021,7 +1055,7 @@ class ModelPackRegistry:
 
         for dependency_id in pack.dependencies:
             dependency = self._inspect(
-                self.get(dependency_id), hardware, machine, True, memo, visiting
+                self.get(dependency_id), hardware, machine, True, memo, visiting, check_resources
             )
             dependency_ok = dependency.state == ModelPackState.READY
             checks.append(

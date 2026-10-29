@@ -19,6 +19,7 @@ from typing import Literal
 
 import yaml
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.tags import compatible_tags, cpython_tags, mac_platforms
 from packaging.utils import canonicalize_name, parse_wheel_filename
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -297,6 +298,34 @@ def lock_runtime_wheelhouse(wheelhouse: Path) -> bytes:
     ).encode("utf-8")
 
 
+def _validate_wheel_target(filename: str, python_version: str, target: str) -> None:
+    _, _, _, wheel_tags = parse_wheel_filename(filename)
+    platforms = {"any"}
+    for tag in wheel_tags:
+        if target == "darwin-arm64":
+            match = re.fullmatch(r"macosx_(\d+)_(\d+)_(arm64|universal2)", tag.platform)
+            if match and tag.platform in mac_platforms(
+                version=(int(match[1]), int(match[2])), arch="arm64"
+            ):
+                platforms.add(tag.platform)
+        elif target == "linux-x86_64":
+            if re.fullmatch(
+                r"(?:linux|manylinux1|manylinux2010|manylinux2014|manylinux_2_\d+)_x86_64",
+                tag.platform,
+            ):
+                platforms.add(tag.platform)
+        else:
+            raise ModelPackOperationError(f"Wheel compatibility is not defined for {target}.")
+    version = tuple(int(part) for part in python_version.split(".")[:2])
+    interpreter = f"cp{version[0]}{version[1]}"
+    supported = set(cpython_tags(version, abis=(interpreter,), platforms=sorted(platforms)))
+    supported.update(compatible_tags(version, interpreter=interpreter, platforms=sorted(platforms)))
+    if wheel_tags.isdisjoint(supported):
+        raise ModelPackOperationError(
+            f"Wheel {filename} is incompatible with Python {python_version} on {target}."
+        )
+
+
 def _git(source: Path, *arguments: str) -> bytes:
     completed = subprocess.run(
         ["git", "-C", str(source), *arguments],
@@ -384,6 +413,8 @@ def build_runtime_bundle(
         )
     lock_payload = requirements_lock.read_bytes()
     wheels = validate_hashed_requirements(lock_payload, wheelhouse)
+    for filename in wheels:
+        _validate_wheel_target(filename, recipe.python_version, target)
     record = RuntimeBundleBuildRecord(
         runtime_id=recipe.runtime_id,
         revision=recipe.revision,
