@@ -5,12 +5,13 @@ import json
 import subprocess
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
+import psutil
 import pytest
 
 from scripts import (
@@ -19,6 +20,7 @@ from scripts import (
     raw_qwen_meditation,
     verify_benchmark_audio,
 )
+from whoopy.adapters.llm.llama_cpp import LlamaCppScriptGenerator, LlamaProcessResult
 
 
 @pytest.mark.parametrize("worker", [False, True])
@@ -175,6 +177,147 @@ def test_writing_benchmark_atomically_claims_output_for_one_invocation(
     receipts = list(output.rglob("result.json"))
     assert len(receipts) == 1
     assert json.loads(receipts[0].read_text())["status"] == "waiting_for_gpu_lock"
+
+
+@pytest.mark.parametrize("returncode", [0, 7])
+@pytest.mark.parametrize("with_telemetry", [False, True])
+def test_writing_capture_preserves_each_actual_process_invocation(
+    tmp_path: Path, returncode: int, with_telemetry: bool
+) -> None:
+    inputs = {
+        "--file": ("prompt.txt", b"Original request.\n"),
+        "--system-prompt-file": ("system.txt", b"System rules.\n"),
+        "--json-schema-file": ("response-schema.json", b'{"type":"object"}\n'),
+    }
+    command = ["mock-llama"]
+    for flag, (name, data) in inputs.items():
+        path = tmp_path / name
+        path.write_bytes(data)
+        command.extend([flag, str(path)])
+    output = tmp_path / "output.txt"
+    command.extend(["--output-file", str(output), "--seed", "42"])
+    completed = subprocess.CompletedProcess(command, returncode, "raw stdout\n", "raw stderr\n")
+    expected = LlamaProcessResult(completed) if with_telemetry else completed
+
+    def run(actual_command: Sequence[str], timeout: float) -> Any:
+        assert list(actual_command) == command
+        assert timeout == 300
+        output.write_bytes(b'{"untrusted":"exact raw output"}\n')
+        return expected
+
+    root = tmp_path / "evidence"
+    capture = benchmark_writing_methods.CapturingProcessRunner(root, run)
+    assert capture(command, 300) is expected
+    before = {path.name: path.read_bytes() for path in (root / "001").iterdir()}
+    assert capture(command, 300) is expected
+    assert before == {path.name: path.read_bytes() for path in (root / "001").iterdir()}
+    assert sorted(path.name for path in root.iterdir()) == ["001", "002"]
+    for number in ("001", "002"):
+        folder = root / number
+        assert json.loads((folder / "command.json").read_text()) == command
+        for name, data in inputs.values():
+            assert (folder / name).read_bytes() == data
+        assert (folder / "output.txt").read_bytes() == output.read_bytes()
+        assert (folder / "stdout.txt").read_text() == "raw stdout\n"
+        assert (folder / "stderr.txt").read_text() == "raw stderr\n"
+        assert json.loads((folder / "process.json").read_text())["returncode"] == returncode
+
+    collision = benchmark_writing_methods.CapturingProcessRunner(root, run)
+    with pytest.raises(FileExistsError):
+        collision(command, 300)
+    assert before == {path.name: path.read_bytes() for path in (root / "001").iterdir()}
+
+
+@pytest.mark.parametrize("interrupted", [False, True])
+def test_writing_capture_keeps_partial_output_and_propagates_process_failure(
+    tmp_path: Path, interrupted: bool
+) -> None:
+    output = tmp_path / "output.txt"
+    command = ["mock-llama", "--output-file", str(output)]
+    failure = (
+        KeyboardInterrupt()
+        if interrupted
+        else subprocess.TimeoutExpired(command, 300, output=b"partial stdout", stderr=b"timeout")
+    )
+
+    def run(actual_command: Sequence[str], timeout: float) -> Any:
+        output.write_bytes(b"partial model output")
+        raise failure
+
+    capture = benchmark_writing_methods.CapturingProcessRunner(tmp_path / "evidence", run)
+    with pytest.raises(type(failure)) as caught:
+        capture(command, 300)
+    assert caught.value is failure
+    folder = tmp_path / "evidence/001"
+    receipt = json.loads((folder / "process.json").read_text())
+    assert receipt["returncode"] is None
+    assert receipt["exception_type"] == type(failure).__name__
+    assert (folder / "output.txt").read_bytes() == b"partial model output"
+    if interrupted:
+        assert "stdout_unavailable_reason" in receipt
+        assert not (folder / "stdout.txt").exists()
+    else:
+        assert (folder / "stdout.txt").read_bytes() == b"partial stdout"
+        assert (folder / "stderr.txt").read_bytes() == b"timeout"
+
+
+def test_writing_cli_passes_explicit_model_storage_and_keeps_both_failed_methods(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "fresh"
+    models = tmp_path / "existing-models"
+    calls: list[dict[str, Any]] = []
+
+    def refuse_model(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        raise RuntimeError("fixture adapter failure before inference")
+
+    monkeypatch.setattr(LlamaCppScriptGenerator, "from_artifact_store", refuse_model)
+    monkeypatch.setattr(benchmark_writing_methods, "load_artifact_lock", lambda _: None)
+    monkeypatch.setattr(benchmark_writing_methods, "_lock_exclusively", lambda _: None)
+    monkeypatch.setattr(psutil, "swap_memory", lambda: SimpleNamespace(used=0))
+    monkeypatch.setattr(
+        psutil,
+        "virtual_memory",
+        lambda: SimpleNamespace(available=32 * 1024**3),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "benchmark",
+            "--output",
+            str(output),
+            "--models-dir",
+            str(models),
+            "--case",
+            "grounding-3m",
+            "--method",
+            "plan_first",
+            "--method",
+            "recipe_whole_session",
+            "--seed",
+            "42",
+            "--profile",
+            "high",
+        ],
+    )
+
+    assert benchmark_writing_methods.main() == 1
+    assert len(calls) == 2
+    for call in calls:
+        assert call["store"].root == models
+        assert call["profile_name"] == "high"
+        settings = call["settings"]
+        assert (settings.context_tokens, settings.temperature, settings.top_p) == (32768, 0.7, 0.9)
+    report = json.loads((output / "report.json").read_text())
+    assert report["models_dir"] == str(models.resolve())
+    assert [result["writing_method"] for result in report["results"]] == [
+        "plan_first",
+        "recipe_whole_session",
+    ]
+    assert all(result["status"] == "failed" for result in report["results"])
+    assert (output / ".gitignore").read_text() == "*\n"
 
 
 @pytest.fixture

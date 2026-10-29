@@ -185,6 +185,58 @@ def test_no_breath_focus_routes_sound_and_preserves_explicit_sitting() -> None:
     assert '"breath_focus": "excluded"' in adapter.requests[0].prompt
 
 
+@pytest.mark.parametrize(
+    ("need", "anchor"),
+    [
+        (
+            "A seated grounding meditation after an overstimulating workday. "
+            "Use contact and ordinary sounds, develop one simple practice, "
+            "and return gently to the rest of the day.",
+            "sound",
+        ),
+        ("A seated grounding practice with bodily contact and support", "contact"),
+    ],
+)
+def test_grounding_writer_contract_keeps_one_selected_anchor(need: str, anchor: str) -> None:
+    adapter = WholeSessionAdapter()
+    result = run(adapter, need, 180)
+    contract = json.JSONDecoder().raw_decode(adapter.requests[0].prompt.split("\n", 1)[1])[0]
+    practice = next(beat for beat in contract["beats_in_order"] if beat["section_id"] == "practice")
+
+    assert result.plan.meditation_kind == "grounding"
+    assert result.plan.anchor == contract["anchor"] == anchor
+    assert contract["main_practice"] == (
+        "Explore the selected anchor as it is, returning to that same anchor after wandering."
+    )
+    assert practice["required_content"] == [
+        contract["main_practice"],
+        f"Continuity with the earlier {anchor} anchor",
+    ]
+
+
+def test_writer_receives_invitation_and_daytime_ending_editorial_contract() -> None:
+    adapter = WholeSessionAdapter()
+    result = run(adapter, "Seated focus with sound and no breathing", 180)
+    system_prompt = adapter.requests[0].system_prompt
+
+    assert system_prompt is not None
+    for guidance in (
+        "orientation cues, not a paired practice",
+        "an explicitly optional replacement, not a second anchor",
+        "never asserts achieved attention, independence or ability",
+        "do not assert that an anchor remains steady, unchanged or available",
+        "without naming an expected sound source",
+        "without prescribing a fixed arrangement of body parts",
+        "accepting change or no change without supplying the outcome",
+        "one concrete cue to use the same familiar practice",
+        "within the ending word budget and question_count",
+    ):
+        assert guidance in system_prompt
+    assert result.plan.writing_prompt_version == 6
+    # These assertions cover the writer's input, not the fixture's editorial quality.
+    assert len(adapter.requests) == 1
+
+
 def test_revision_receives_entire_prior_draft_and_every_gate_failure() -> None:
     def mutate(output: FixtureDraft) -> None:
         output["sections"][0]["paragraphs"][0] = "Sit upright with feet flat on the floor."
@@ -509,7 +561,7 @@ def test_emitted_budget_contract_is_complete_and_consistent() -> None:
         assert section.section_id == beat["section_id"]
         for slot in beat["paragraphs"]:
             assert slot["minimum_words_guidance"] <= slot["target_words"] <= slot["maximum_words"]
-    assert result.plan.writing_prompt_version == 5
+    assert result.plan.writing_prompt_version == 6
 
 
 def test_unconditional_safety_assurance_is_reported_for_holistic_revision() -> None:

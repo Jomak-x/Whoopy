@@ -177,7 +177,8 @@ def route_session(
                 "Notice body areas in one ordered neutral sequence without demanding relaxation."
             ),
             "grounding": (
-                "Explore concrete support and sound, returning to the same familiar anchor."
+                "Explore the selected anchor as it is, returning to that same anchor after "
+                "wandering."
             ),
             "breath_awareness": (
                 "Observe natural breathing without controlling it, or use the chosen external "

@@ -157,3 +157,9 @@ The report links raw reports, gain-only matched copies and the exact license aud
 Human listening and sustained voice quality remain pending; experimental results
 do not promote a production pack. Earlier generations are recoverably archived,
 and their old receipts are historical evidence.
+
+The controlled writer benchmark accepts `--models-dir` when verified model assets
+are stored in another checkout. Fresh outputs retain each actual llama.cpp
+invocation under `raw-invocations/`, including available command inputs, raw
+output, streams and failure metadata. Its local `.gitignore` keeps those records
+out of accidental publication; select a small factual summary for GitHub.
