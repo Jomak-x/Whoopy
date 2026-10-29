@@ -26,6 +26,7 @@ from whoopy.meditation import (
 )
 from whoopy.meditation.blueprints import BlueprintLibrary
 from whoopy.meditation.models import MeditationKind, RawGenerationAttempt
+from whoopy.meditation.recipes import RecipeLibrary
 from whoopy.ports import ScriptGenerator
 
 WORD_PATTERN = re.compile(r"\b[\w'-]+\b")
@@ -103,12 +104,14 @@ class BakeoffRunner:
         prompts: PromptBundle,
         output_directory: Path,
         blueprints: BlueprintLibrary | None = None,
+        recipes: RecipeLibrary | None = None,
         seed: int = 42,
         writing_method: WritingMethod = "plan_first",
     ) -> None:
         self.evaluation_set = evaluation_set
         self.prompts = prompts
         self.blueprints = blueprints
+        self.recipes = recipes
         self.output_directory = output_directory
         self.seed = seed
         self.writing_method = writing_method
@@ -137,6 +140,7 @@ class BakeoffRunner:
                         adapter,
                         self.prompts,
                         blueprints=self.blueprints,
+                        recipes=self.recipes,
                         workspace=workspace,
                     ).generate(
                         prompt=case.prompt,

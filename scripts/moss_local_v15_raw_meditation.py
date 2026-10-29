@@ -406,26 +406,6 @@ def segment_paths(output_directory: Path, speech_index: int) -> tuple[Path, Path
     return directory / f"{stem}.wav", directory / f"{stem}.json"
 
 
-def resume_segment(
-    *, output_directory: Path, speech_index: int, identity: dict[str, object]
-) -> tuple[Any, dict[str, Any]] | None:
-    audio_path, report_path = segment_paths(output_directory, speech_index)
-    if not audio_path.is_file() or not report_path.is_file():
-        return None
-    try:
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-        if any(report.get(key) != value for key, value in identity.items()):
-            return None
-        if report.get("wav_sha256") != sha256_file(audio_path):
-            return None
-        waveform = load_native_waveform(
-            audio_path, expected_frames_sha256=str(report["frames_sha256"])
-        )
-    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
-        return None
-    return waveform, report
-
-
 def assemble_native(
     *, events: list[Event], segment_reports: list[dict[str, Any]], output: Path
 ) -> dict[str, object]:
@@ -545,6 +525,14 @@ def render(plan: dict[str, object], events: list[Event], args: argparse.Namespac
         raise SystemExit(
             "INFERENCE BLOCKED: render requires --confirm-heavyweight after explicit approval"
         )
+    output_directory = args.output_directory.resolve()
+    try:
+        output_directory.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as error:
+        raise SystemExit("Evidence already exists; use a new output directory.") from error
+    (output_directory / "speech").mkdir()
+    write_json_atomic(output_directory / "plan.json", plan)
+
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
@@ -561,11 +549,6 @@ def render(plan: dict[str, object], events: list[Event], args: argparse.Namespac
         torch.set_default_dtype(torch.float32)
     model_path = args.model.resolve(strict=True)
     codec_path = args.codec.resolve(strict=True)
-    output_directory = args.output_directory.resolve()
-    output_directory.mkdir(parents=True, exist_ok=True)
-    (output_directory / "speech").mkdir(parents=True, exist_ok=True)
-    plan_path = output_directory / "plan.json"
-    write_json_atomic(plan_path, plan)
 
     load_started = time.monotonic()
     processor = AutoProcessor.from_pretrained(
@@ -614,24 +597,6 @@ def render(plan: dict[str, object], events: list[Event], args: argparse.Namespac
                 script_sha256=script_sha256,
                 reference_sha256=reference_sha256,
             )
-            resumed = (
-                resume_segment(
-                    output_directory=output_directory,
-                    speech_index=speech_index,
-                    identity=identity,
-                )
-                if args.resume
-                else None
-            )
-            if resumed is not None:
-                _, report = resumed
-                report = dict(report)
-                report["resumed"] = True
-                reports.append(report)
-                print(f"reused speech {speech_index + 1}/19", flush=True)
-                speech_index += 1
-                continue
-
             random.seed(seed)
             np.random.seed(seed)
             torch.manual_seed(seed)
@@ -719,7 +684,6 @@ def parser() -> argparse.ArgumentParser:
         child.add_argument("--plan-output", type=Path, default=DEFAULT_PLAN_OUTPUT)
         child.add_argument("--base-seed", type=int, default=1742)
     render_parser = subparsers.choices["render"]
-    render_parser.add_argument("--resume", action="store_true")
     render_parser.add_argument("--confirm-heavyweight", action="store_true")
     return result
 

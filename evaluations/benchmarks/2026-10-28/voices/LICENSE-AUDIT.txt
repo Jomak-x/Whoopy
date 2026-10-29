@@ -7,9 +7,18 @@ Code licenses, model declarations, conversion declarations and codec terms are
 kept separate. Runtime versions/revisions belong to each candidate report.
 
 Kokoro 82M: upstream hexgrad code Apache-2.0; official hexgrad/Kokoro-82M model
-card declares Apache-2.0. The pinned MLX conversion declares Apache-2.0.
-Commercial/local/hosted use is allowed by that license; distribution requires
-the license, retained notices, marked modifications and any applicable NOTICE.
+card declares Apache-2.0. The pinned MLX conversion declares Apache-2.0. These
+declarations do not clear the complete runtime: the actual Sherpa/Kokoro and MLX
+paths contain eSpeak/GPL dependencies. The managed archive includes 391
+espeak-ng-data entries; its top-level Apache LICENSE is not a bundle-wide audit.
+MLX Kokoro uses Misaki 0.9.4 (Apache), phonemizer-fork 3.3.2 (GPLv3), and
+espeakng-loader 0.2.4 (bundled eSpeak 1.52.0/data, no license-named file found).
+See ../../../../docs/kokoro-license-audit.md for primary source links, the
+Sherpa/piper static-link evidence, and the still-unverified installed-wheel
+source closure. Full-bundle redistribution review remains incomplete. GPL does
+not itself prohibit commercial or paid network use; distribution and linked-work
+obligations require a separate review. No legal clearance is claimed here.
+The Apache components retain their license/notice/modification obligations.
 The official card credits CC BY training datasets. Preserve its card/credits
 when redistributing model assets; do not infer either that all outputs require
 dataset attribution or that individual outputs are guaranteed cleared.

@@ -11,34 +11,72 @@ import html
 import json
 import random
 from pathlib import Path
+from urllib.parse import quote
+
+
+def local_path(value: str, root: Path) -> Path:
+    root = root.resolve()
+    path = Path(value)
+    anchor = ("evaluations", "benchmarks", root.name)
+    for index in range(len(path.parts) - len(anchor) + 1):
+        if path.parts[index : index + len(anchor)] == anchor:
+            path = Path(*path.parts[index + len(anchor) :])
+            break
+    path = (root / path).resolve()
+    path.relative_to(root)
+    return path
 
 
 def local_url(value: str, root: Path) -> str:
-    return Path(value).resolve().relative_to(root.resolve()).as_posix()
+    return quote(local_path(value, root).relative_to(root.resolve()).as_posix())
+
+
+def screening_label(status: str) -> str:
+    return {
+        "pass": "Pass — no normalized word mismatches in retained ASR evidence.",
+        "review": "Review — listening required to resolve screening concerns.",
+        "fail": "Fail — retained hard-fail screening result; not qualified.",
+    }[status]
+
+
+def evidence_links(original: str, current: str, root: Path) -> str:
+    links = [(current, "Current policy screening"), (original, "Original ASR evidence")]
+    report = json.loads(local_path(original, root).read_text())
+    if report.get("full_file_report"):
+        links.append((report["full_file_report"], "Full-file ASR disagreement"))
+    if report.get("assembly_proof"):
+        links.append((original, "Exact audio assembly proof"))
+    for index, segment in enumerate(report.get("segments", []), 1):
+        links.extend(
+            [
+                (segment["segment"], f"Paragraph {index} raw audio"),
+                (segment["report"], f"Paragraph {index} ASR evidence"),
+            ]
+        )
+    return " · ".join(f'<a href="{local_url(path, root)}">{label}</a>' for path, label in links)
 
 
 def build(root: Path) -> Path:
-    manifest = json.loads((root / "verification/listening/manifest.json").read_text())
+    root = root.resolve()
+    manifest = json.loads((root / "verification/listening/manifest-policy-v3.json").read_text())
     records = manifest["records"]
     random.Random(42).shuffle(records)
     cards = []
     for index, record in enumerate(records):
-        audio = Path(record["output"])
+        audio = local_path(record["output"], root)
         if hashlib.sha256(audio.read_bytes()).hexdigest() != record["output_sha256"]:
             raise ValueError(f"Listening copy changed: {audio}")
         key = html.escape(record["candidate"], quote=True)
         label = f"Voice {chr(65 + index)}"
-        description = (
-            "Paragraph-by-paragraph ASR plus exact audio assembly proof; full-file ASR omitted a tail."
-            if "aggregate" in key
-            else "Passed independent full-script word and signal screening."
-        )
-        cards.append(f'''<article data-key="{key}">
+        proof = evidence_links(record["original_raw_verification"], record["verification"], root)
+        status = record["status"]
+        description = screening_label(status)
+        cards.append(f'''<article data-key="{key}" data-status="{status}">
 <h3>{label} <small class="identity">{html.escape(record["candidate"])}</small></h3>
 <p>{description} Listening copy: -23 LUFS, constant gain only.</p>
 <audio controls preload="none" aria-label="Listen to {label}" src="{local_url(str(audio), root)}"></audio>
 <p><a href="{local_url(record["input"], root)}">Original audio</a> ·
-<a href="{local_url(record["raw_verification"], root)}">Verification evidence</a></p>
+{proof}</p>
 <label>Your decision <select data-field="decision"><option value="">Unrated</option>
 <option>Keep</option><option>Maybe</option><option>Reject</option></select></label>
 <label>Calm, natural and comfortable (1-5) <input data-field="comfort" type="number" min="1" max="5"></label>
@@ -46,16 +84,17 @@ def build(root: Path) -> Path:
     writing = (
         "<p>Writing comparison audio is still being prepared. Refresh for the final package.</p>"
     )
-    samples_path = root / "writing-listening.json"
+    samples_path = root / "writing-listening-policy-v3.json"
     if samples_path.exists():
         samples = json.loads(samples_path.read_text())["samples"]
         writing = "".join(
-            f"<article><h3>{html.escape(sample['label'])}</h3>"
+            f'<article data-status="{sample["status"]}"><h3>{html.escape(sample["label"])}</h3>'
+            f"<p>{screening_label(sample['status'])}</p>"
             f'<audio controls preload="none" src="{local_url(sample["audio"], root)}"></audio>'
-            f'<p><a href="{local_url(sample["script"], root)}">Script</a> · '
-            f'<a href="{local_url(sample["verification"], root)}">Speech screening</a></p></article>'
+            f'<p><a href="{local_url(sample["audio"], root)}">Original audio</a> · '
+            f'<a href="{local_url(sample["script"], root)}">Script</a> · '
+            f"{evidence_links(sample['original_verification'], sample['verification'], root)}</p></article>"
             for sample in samples
-            if sample["status"] == "pass"
         )
     script = """const key='whoopy-audition-2026-10-28';
 let saved={};try{saved=JSON.parse(localStorage.getItem(key)||'{}')}catch{}
@@ -73,7 +112,9 @@ document.querySelector('#export').addEventListener('click',()=>{
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Whoopy listening lab</title>
 <style>body{{font:17px/1.55 system-ui;margin:0;background:#f3f0e8;color:#222}}main{{max-width:1000px;margin:auto;padding:32px}}h1{{font-size:2.4rem;line-height:1.1}}article{{background:white;border:1px solid #d8d4ca;border-radius:14px;padding:22px;margin:18px 0}}audio{{width:100%}}label{{display:block;margin:12px 0}}select,input,textarea,button{{font:inherit;padding:7px;border:1px solid #aaa;border-radius:5px}}textarea{{display:block;width:95%}}a{{color:#315c57}}.identity{{display:none}}.reveal .identity{{display:block;color:#666;font-size:.85rem}}button{{cursor:pointer}}:focus-visible{{outline:3px solid #286b65;outline-offset:3px}}small{{font-weight:normal}}</style>
 <main><h1>Whoopy listening lab</h1><p>One original control script, several local voices.
-These samples passed independent speech screening. Warmth, pacing and teaching quality still need your judgment.</p>
+Each sample shows its current screening status. Every normalized word mismatch requires listening review;
+retained hard failures remain failures. These labels reassess existing receipts without new recognition
+and do not establish word-perfect speech. Warmth, pacing and teaching quality still need your judgment.</p>
 <p>Names are hidden initially to reduce expectation bias; this page is an informal audition, not a completed blind study.
 Your notes stay in this browser. No ratings are sent anywhere.</p>
 <label><input id="names" type="checkbox"> Reveal voice names and runtime variants</label>

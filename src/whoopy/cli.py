@@ -63,8 +63,10 @@ from whoopy.meditation import (
     load_blueprint_library,
     load_prompt_bundle,
 )
-from whoopy.meditation.models import MeditationKind
+from whoopy.meditation.models import DraftedSection, MeditationKind
 from whoopy.meditation.prompts import PromptLoadError
+from whoopy.meditation.recipes import load_recipe_library
+from whoopy.meditation.whole_session import recipe_quiet_limits
 from whoopy.meditation.workspace import WorkspaceError
 from whoopy.model_packs.operations import ModelPackOperationError
 from whoopy.model_packs.resolution import (
@@ -830,7 +832,19 @@ def _real_script_worker(
                 raise GenerationError(
                     "The reviewed pacing profile changed since this run was created."
                 )
-            timeline = apply_pacing_profile(timeline, profile)
+            quiet_limits = None
+            if resolved.generation.writing_method == "recipe_whole_session":
+                quiet_limits = recipe_quiet_limits(
+                    timeline,
+                    MeditationPlan.model_validate_json(
+                        store.plan_path(active_record.run_id).read_text(encoding="utf-8")
+                    ),
+                    [
+                        DraftedSection.model_validate_json(path.read_text(encoding="utf-8"))
+                        for path in store.draft_sections_path(active_record.run_id).glob("*.json")
+                    ],
+                )
+            timeline = apply_pacing_profile(timeline, profile, quiet_limits=quiet_limits)
         return _apply_speech_capability_fallbacks(
             timeline,
             raw_synthesizer.capabilities,
@@ -2154,6 +2168,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 adapter,
                 load_prompt_bundle(args.config_dir / "prompts"),
                 blueprints=load_blueprint_library(args.config_dir / "meditation_blueprints.yaml"),
+                recipes=(
+                    load_recipe_library(args.config_dir / "session_recipes.yaml")
+                    if args.writing_method == "recipe_whole_session"
+                    else None
+                ),
                 max_parallel_sections=args.parallel_sections,
                 workspace=workspace,
             ).generate(
@@ -2209,6 +2228,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 evaluation_set=evaluation_set,
                 prompts=prompts,
                 blueprints=load_blueprint_library(args.config_dir / "meditation_blueprints.yaml"),
+                recipes=(
+                    load_recipe_library(args.config_dir / "session_recipes.yaml")
+                    if args.writing_method == "recipe_whole_session"
+                    else None
+                ),
                 output_directory=args.output_dir,
                 seed=args.seed,
                 writing_method=args.writing_method,
@@ -2751,6 +2775,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 blueprints=load_blueprint_library(
                                     args.config_dir / "meditation_blueprints.yaml"
                                 ),
+                                recipes=(
+                                    load_recipe_library(args.config_dir / "session_recipes.yaml")
+                                    if args.writing_method == "recipe_whole_session"
+                                    else None
+                                ),
                                 max_parallel_sections=args.parallel_sections,
                                 # Kokoro's speech rate scales approximately with this input.
                                 articulation_words_per_minute=_planning_words_per_minute(
@@ -3030,6 +3059,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise RevisionError("Wait for generation to stop before editing the plan.")
             if existing.source_kind != "generated_prompt":
                 raise RevisionError("Only prompt-generated meditations have drafting context.")
+            revisions = RevisionStore(store)
+            base_revision_id = revisions.active_revision_id(existing.run_id)
             base_plan = MeditationPlan.model_validate_json(
                 store.plan_path(existing.run_id).read_text(encoding="utf-8")
             )
@@ -3087,6 +3118,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 llm,
                 prompts,
                 blueprints=load_blueprint_library(blueprint_path),
+                recipes=(
+                    load_recipe_library(args.config_dir / "session_recipes.yaml")
+                    if pending.writing_method == "recipe_whole_session"
+                    else None
+                ),
                 max_parallel_sections=pending.max_parallel_sections,
                 articulation_words_per_minute=base_plan.words_per_minute,
                 workspace=workspace,
@@ -3099,9 +3135,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 meditation_kind=normalized_plan.meditation_kind,
                 writing_method=pending.writing_method,
             )
-            revision = RevisionStore(store).create_semantic_plan_revision(
+            revision = revisions.create_semantic_plan_revision(
                 existing.run_id,
                 base_plan=base_plan,
+                base_revision_id=base_revision_id,
                 requested_plan=normalized_plan,
                 generated=generated,
                 note=args.note,

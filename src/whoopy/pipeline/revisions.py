@@ -179,6 +179,10 @@ class RevisionStore:
     def __init__(self, store: RunStore) -> None:
         self.store = store
 
+    def active_revision_id(self, run_id: UUID | str) -> str | None:
+        active = self._active(self.store.parse_run_id(run_id))
+        return active.revision_id if active is not None else None
+
     def list(self, run_id: UUID | str) -> list[RevisionManifest]:
         root = self._root(run_id)
         manifests: list[RevisionManifest] = []
@@ -284,6 +288,7 @@ class RevisionStore:
         run_id: UUID | str,
         *,
         base_plan: MeditationPlan,
+        base_revision_id: str | None,
         requested_plan: MeditationPlan,
         generated: MeditationGenerationResult,
         note: str,
@@ -299,6 +304,11 @@ class RevisionStore:
                     raise RevisionError("Wait for generation to stop before editing the plan.")
                 if record.source_kind != "generated_prompt":
                     raise RevisionError("Only prompt-generated meditations have drafting context.")
+                if self.active_revision_id(parsed) != base_revision_id:
+                    raise RevisionError(
+                        "The active revision changed while its replacement was drafting; "
+                        "review the newer revision before trying again."
+                    )
                 current_plan = self._load_plan(parsed)
                 if current_plan != base_plan:
                     raise RevisionError(

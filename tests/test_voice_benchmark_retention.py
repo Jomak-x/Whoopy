@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import json
 import sys
+import struct
+import wave
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
+from typing import IO, Any
 
 import pytest
 
@@ -114,6 +118,7 @@ def test_voice_candidate_refuses_partial_and_complete_existing_evidence(
     path.parent.mkdir(parents=True)
     path.write_bytes(b"original evidence")
     before = _evidence(folder)
+    monkeypatch.setattr(benchmark_voice_candidates, "ROOT", tmp_path)
     monkeypatch.setattr(benchmark_voice_candidates, "OUT", output)
     monkeypatch.setitem(sys.modules, "numpy", None)
 
@@ -143,3 +148,115 @@ def test_voice_candidate_cli_passes_fresh_retry_folder(
 
     assert calls == [("kokoro-am-michael", 43, folder)]
     assert not folder.exists()
+
+
+def test_voice_candidate_relative_output_finishes_with_resolvable_artifact_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Samples:
+        ndim = 1
+
+        def __init__(self, values: list[int]) -> None:
+            self.values = values
+            self.size = len(values)
+            self.shape = (len(values),)
+
+    def concatenate(chunks: list[Samples], *, axis: int) -> Samples:
+        assert axis == 0
+        return Samples([value for chunk in chunks for value in chunk.values])
+
+    def write_fixture_wave(path: Path, samples: Samples, rate: int, *, subtype: str) -> None:
+        assert subtype == "FLOAT"
+        with wave.open(str(path), "wb") as output:
+            output.setnchannels(1)
+            output.setsampwidth(2)
+            output.setframerate(rate)
+            output.writeframes(struct.pack(f"<{samples.size}h", *samples.values))
+
+    np = SimpleNamespace(
+        random=SimpleNamespace(seed=lambda _: None),
+        float32="fixture-dtype",
+        asarray=lambda samples, dtype: samples,
+        concatenate=concatenate,
+        isfinite=lambda samples: SimpleNamespace(all=lambda: True),
+    )
+    monkeypatch.setitem(sys.modules, "numpy", np)
+    monkeypatch.setitem(sys.modules, "soundfile", SimpleNamespace(write=write_fixture_wave))
+    monkeypatch.setitem(
+        sys.modules,
+        "psutil",
+        SimpleNamespace(
+            virtual_memory=lambda: SimpleNamespace(available=32 * 1024**3),
+            swap_memory=lambda: SimpleNamespace(used=0),
+        ),
+    )
+
+    module = benchmark_voice_candidates
+    monkeypatch.chdir(tmp_path)
+    script = tmp_path / "voice-script.txt"
+    script.write_text("First paragraph.\n\nSecond paragraph.")
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "SCRIPT", script)
+    monkeypatch.setattr(module.time, "sleep", lambda _: None)
+    monkeypatch.setattr(module.signal, "signal", lambda *args: None)
+    monkeypatch.setattr(module.signal, "alarm", lambda *args: None)
+    monkeypatch.setattr(
+        module,
+        "ResourceWatchdog",
+        lambda *args: SimpleNamespace(start=lambda: None, finish=lambda: {}, reason=None),
+    )
+    original_open = Path.open
+
+    def isolated_open(path: Path, *args: Any, **kwargs: Any) -> IO[Any]:
+        if path == Path("/tmp/whoopy-benchmark-gpu.lock"):
+            path = tmp_path / "gpu.lock"
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", isolated_open)
+    mx = SimpleNamespace(
+        random=SimpleNamespace(seed=lambda _: None),
+        set_memory_limit=lambda _: None,
+        reset_peak_memory=lambda: None,
+        get_peak_memory=lambda: 0,
+        eval=lambda _: None,
+    )
+    calls: list[str] = []
+
+    def generate(*, text: str, **kwargs: object) -> Iterator[SimpleNamespace]:
+        calls.append(text)
+        yield SimpleNamespace(audio=Samples([100, -100, 200]), sample_rate=24_000)
+
+    monkeypatch.setitem(sys.modules, "mlx", SimpleNamespace(core=mx))
+    monkeypatch.setitem(sys.modules, "mlx.core", mx)
+    monkeypatch.setitem(
+        sys.modules,
+        "mlx_audio.tts.utils",
+        SimpleNamespace(load_model=lambda _: SimpleNamespace(generate=generate)),
+    )
+
+    module.run("kokoro-am-michael", 43, output_dir=Path("evaluations/benchmarks/retry"))
+
+    report = json.loads((tmp_path / "evaluations/benchmarks/retry/report.json").read_text())
+    assert report["status"] == "complete"
+    assert calls == ["First paragraph.", "Second paragraph."]
+    assert report["raw_path"] == "evaluations/benchmarks/retry/raw.wav"
+    for segment in report["segments"]:
+        path = tmp_path / segment["path"]
+        assert path.is_file()
+        assert module.digest(path) == segment["sha256"]
+    assert module.digest(tmp_path / report["raw_path"]) == report["raw_sha256"]
+
+
+def test_voice_candidate_rejects_destination_outside_root_before_claiming(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    monkeypatch.setattr(benchmark_voice_candidates, "ROOT", root)
+    monkeypatch.setitem(sys.modules, "numpy", None)
+    output = tmp_path / "outside"
+
+    with pytest.raises(SystemExit, match="inside the benchmark project root"):
+        benchmark_voice_candidates.run("kokoro-am-michael", 43, output_dir=output)
+
+    assert not output.exists()

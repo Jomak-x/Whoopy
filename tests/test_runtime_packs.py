@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -578,3 +579,81 @@ def test_locked_runtime_recovers_interruption_immediately_after_promotion(
 
     assert status.state is RuntimePackState.INSTALLED
     assert not (destination / ".whoopy-installing.json").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="directory fsync requires POSIX")
+@pytest.mark.parametrize("interruption_stage", ["receipt_written", "receipt_published"])
+def test_locked_runtime_receipt_publication_survives_process_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, interruption_stage: str
+) -> None:
+    archive = _archive(
+        tmp_path / "runtime.tar.gz",
+        {".venv/pyvenv.cfg": b"version = 3.12.1\n", ".venv/bin/python": b"runtime"},
+    )
+    original = _service(tmp_path, archive).get("test-runtime")
+    bundle = original.bundles[0].model_copy(update={"install_mode": "locked-wheelhouse"})
+    spec = original.model_copy(update={"bundles": (bundle,)})
+    manifest = RuntimePackManifest(schema_version=1, runtimes=(spec,))
+    service = ManagedRuntimePacks(manifest, models_root=tmp_path)
+    destination = tmp_path / spec.managed_directory
+    source = """
+import os
+import sys
+from pathlib import Path
+from whoopy.model_packs.runtime import ManagedRuntimePacks, RuntimePackManifest
+
+root = Path(sys.argv[1])
+manifest = RuntimePackManifest.model_validate_json(sys.argv[2])
+stage = sys.argv[3]
+service = ManagedRuntimePacks(manifest, models_root=root)
+service._materialize_locked_runtime = lambda *_args, **_kwargs: None
+destination = root / manifest.runtimes[0].managed_directory
+real_fsync = os.fsync
+
+def interrupt_receipt(descriptor):
+    real_fsync(descriptor)
+    receipt = destination / ".whoopy-runtime.json"
+    temporary = list(destination.glob("..whoopy-runtime.json.*.tmp"))
+    if (stage == "receipt_written" and temporary) or (
+        stage == "receipt_published" and receipt.exists()
+    ):
+        os._exit(17)
+
+os.fsync = interrupt_receipt
+service.install(
+    "test-runtime", offline_directory=root, allow_network=False, target="darwin-arm64"
+)
+"""
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = os.pathsep.join(sys.path)
+    child = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            source,
+            str(tmp_path),
+            manifest.model_dump_json(),
+            interruption_stage,
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert child.returncode == 17, child.stderr
+    assert (destination / ".whoopy-installing.json").is_file()
+    receipt_path = destination / ".whoopy-runtime.json"
+    assert receipt_path.exists() == (interruption_stage == "receipt_published")
+    monkeypatch.setattr(service, "_materialize_locked_runtime", lambda *_args, **_kwargs: None)
+
+    status = service.install(
+        "test-runtime", offline_directory=tmp_path, allow_network=False, target="darwin-arm64"
+    )
+
+    assert status.state is RuntimePackState.INSTALLED
+    receipt = runtime_module.RuntimeInstallReceipt.model_validate_json(
+        receipt_path.read_text("utf-8")
+    )
+    assert receipt.bundle_sha256 == bundle.sha256

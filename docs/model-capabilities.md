@@ -165,3 +165,9 @@ declared CC-BY-NC-SA-4.0 and non-commercial. Review `config/model_packs.yaml`, `
 and the generated run's `model-metadata.json` before commercial use or redistribution; where old
 registries disagree, use the exact managed pack and saved run evidence, and resolve the discrepancy
 before publishing.
+
+Kokoro's Apache model declaration does not clear its complete runtime bundle.
+The inspected Sherpa and MLX paths contain eSpeak/GPL dependencies; exact wheel
+source closure and full-bundle redistribution review remain incomplete. See the
+[Kokoro runtime audit](kokoro-license-audit.md) for component evidence and the
+distinction between commercial use, network use, and redistribution.

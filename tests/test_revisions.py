@@ -631,6 +631,7 @@ def test_semantic_plan_revision_commits_redraft_and_restores_section_artifacts(
     revision = RevisionStore(store).create_semantic_plan_revision(
         RUN_ID,
         base_plan=base,
+        base_revision_id=revisions.active_revision_id(RUN_ID),
         requested_plan=requested,
         generated=redraft,
         note="Use reviewed noting in the practice beat.",
@@ -662,6 +663,65 @@ def test_semantic_plan_revision_commits_redraft_and_restores_section_artifacts(
         (store.draft_sections_path(RUN_ID) / "practice.json").read_text()
     )
     assert restored_section.text == original.sections[1].text
+
+
+@pytest.mark.parametrize("has_prior_revision", [False, True])
+@pytest.mark.parametrize(
+    "concurrent_edit",
+    [
+        RevisionRequest(script="Notice the sounds around you and settle comfortably."),
+        RevisionRequest(timeline=TimelineEdit(silence_duration_ms={"silence-0001": 9_000})),
+    ],
+)
+def test_semantic_plan_revision_rejects_same_plan_edit_committed_during_drafting(
+    tmp_path: Path,
+    has_prior_revision: bool,
+    concurrent_edit: RevisionRequest,
+) -> None:
+    base = _plan()
+    store = _completed_generated_run(
+        tmp_path / "runs",
+        _generated(
+            base,
+            middle_text="Keep returning to one simple anchor with patient steady attention.",
+        ),
+    )
+    revisions = RevisionStore(store)
+    if has_prior_revision:
+        revisions.create(
+            RUN_ID,
+            RevisionRequest(timeline=TimelineEdit(delivery={"speech-0002": "compassionate"})),
+        )
+    parent_revision_id = revisions.active_revision_id(RUN_ID)
+    requested = base.model_copy(update={"requested_outcome": "Notice distraction gently."})
+    redraft = _generated(
+        requested,
+        middle_text="Name each distraction softly and return without adding any judgment.",
+    )
+
+    committed = revisions.create(RUN_ID, concurrent_edit)
+    committed_record = store.load(RUN_ID)
+    committed_script = store.load_script(RUN_ID)
+    committed_timeline = store.load_timeline(RUN_ID)
+    committed_revisions = revisions.list(RUN_ID)
+    assert MeditationPlan.model_validate_json(store.plan_path(RUN_ID).read_text()) == base
+
+    with pytest.raises(RevisionError, match="active revision changed"):
+        revisions.create_semantic_plan_revision(
+            RUN_ID,
+            base_plan=base,
+            base_revision_id=parent_revision_id,
+            requested_plan=requested,
+            generated=redraft,
+            note="Guide gentle noting.",
+        )
+
+    assert revisions.active_revision_id(RUN_ID) == committed.revision_id
+    assert revisions.list(RUN_ID) == committed_revisions
+    assert store.load(RUN_ID) == committed_record
+    assert store.load_script(RUN_ID) == committed_script
+    assert store.load_timeline(RUN_ID) == committed_timeline
+    assert MeditationPlan.model_validate_json(store.plan_path(RUN_ID).read_text()) == base
 
 
 def test_web_plan_edit_launches_production_regenerator_with_validated_plan(

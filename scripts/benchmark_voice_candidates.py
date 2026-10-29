@@ -276,7 +276,9 @@ def download(names: list[str]) -> None:
 def run(name: str, seed: int, *, output_dir: Path | None = None) -> None:
     family, settings = CANDIDATES[name]
     settings = dict(settings)
-    folder = output_dir if output_dir is not None else OUT / name
+    folder = (output_dir if output_dir is not None else OUT / name).resolve()
+    if not folder.is_relative_to(ROOT):
+        raise SystemExit("Output directory must be inside the benchmark project root.")
     try:
         folder.mkdir(parents=True, exist_ok=False)
     except FileExistsError as error:

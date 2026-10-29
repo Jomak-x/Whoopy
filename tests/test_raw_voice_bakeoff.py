@@ -4,6 +4,8 @@ import hashlib
 import wave
 from pathlib import Path
 
+import pytest
+
 from scripts.raw_voice_bakeoff import assemble, parse_script
 
 
@@ -48,3 +50,20 @@ def test_assembly_copies_speech_pcm_exactly_and_adds_only_zero_silence(tmp_path:
         "none; native PCM copied byte-for-byte; authored silence only"
     )
     assert manifest["output_sha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
+
+
+def test_assembly_refuses_existing_audio_or_receipt_without_changes(tmp_path: Path) -> None:
+    speech = tmp_path / "speech"
+    speech.mkdir()
+    _wav(speech / "speech-001.wav", b"\x01\x00", rate=4)
+    events = parse_script("One.")
+    for existing_name in ("raw.wav", "raw.manifest.json"):
+        folder = tmp_path / existing_name.replace(".", "-")
+        folder.mkdir()
+        (folder / existing_name).write_bytes(b"original evidence")
+        before = {path.name: path.read_bytes() for path in folder.iterdir()}
+
+        with pytest.raises(FileExistsError, match="fresh output path"):
+            assemble(events=events, speech_directory=speech, output=folder / "raw.wav")
+
+        assert {path.name: path.read_bytes() for path in folder.iterdir()} == before

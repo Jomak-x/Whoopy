@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from whoopy.model_packs.operations import (
     ModelPackOperationError,
     PackInstallLock,
+    _atomic_json,
     safe_managed_path,
 )
 
@@ -668,8 +669,10 @@ class ManagedRuntimePacks:
                 installed_tree_sha256=_tree_sha256(install_root),
                 installed_at=datetime.now(UTC),
             )
-            (install_root / ".whoopy-runtime.json").write_text(
-                receipt.model_dump_json(indent=2) + "\n", "utf-8"
+            _atomic_json(
+                install_root / ".whoopy-runtime.json",
+                receipt.model_dump(mode="json"),
+                safety_root=self.models_root,
             )
             (install_root / ".whoopy-installing.json").unlink(missing_ok=True)
             if not promoted:

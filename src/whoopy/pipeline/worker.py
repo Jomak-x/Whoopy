@@ -25,7 +25,9 @@ from whoopy.audio.synthesis import (
     cache_key_for,
     synthesis_input_bytes,
 )
-from whoopy.meditation.models import MeditationPlan
+from whoopy.meditation.models import DraftedSection, MeditationPlan
+from whoopy.meditation.pacing import allocate_bounded_quiet
+from whoopy.meditation.whole_session import recipe_quiet_limits
 from whoopy.pipeline.acceptance_stage import observe_acceptance_stage
 from whoopy.pipeline.cache import SegmentCache
 from whoopy.pipeline.checkpoints import (
@@ -184,6 +186,7 @@ def fit_generated_timeline_to_real_speech(
     speech_audio: dict[str, PcmAudio],
     target_seconds: int,
     maximum_silence_ms: int | None = None,
+    quiet_limits: dict[str, int] | None = None,
 ) -> Timeline:
     """Fit adjustable quiet to the requested duration after real TTS is known."""
 
@@ -203,45 +206,22 @@ def fit_generated_timeline_to_real_speech(
             "Real speech is too long for the requested duration while preserving "
             "one-second minimum quiet periods. Shorten the script or increase the duration."
         )
-    if maximum_silence_ms is not None:
-        if maximum_silence_ms < minimum_ms:
-            raise WorkerError("Maximum quiet must allow the one-second minimum.")
-        if silence_budget > maximum_silence_ms * len(silences):
-            raise WorkerError(
-                "Real speech would require unprepared long silence. "
-                "Revise the session or its voice timing instead of padding the duration."
-            )
-    extra_budget = silence_budget - minimum_ms * len(silences)
-    weights = [max(1, segment.duration_ms - minimum_ms) for segment in silences]
-    weight_total = sum(weights)
-    raw = [extra_budget * weight / weight_total for weight in weights]
-    extras = [int(value) for value in raw]
-    remainder = extra_budget - sum(extras)
-    order = sorted(
-        range(len(raw)),
-        key=lambda index: raw[index] - extras[index],
-        reverse=True,
-    )
-    for index in order[:remainder]:
-        extras[index] += 1
-    if maximum_silence_ms is not None:
-        capacity = maximum_silence_ms - minimum_ms
-        overflow = sum(max(0, value - capacity) for value in extras)
-        extras = [min(value, capacity) for value in extras]
-        while overflow:
-            active = [index for index, value in enumerate(extras) if value < capacity]
-            if not active:
-                raise WorkerError("Unable to fit quiet within the recipe bound.")
-            share = max(1, overflow // len(active))
-            for index in active:
-                addition = min(share, capacity - extras[index], overflow)
-                extras[index] += addition
-                overflow -= addition
-                if not overflow:
-                    break
-    durations = {
-        segment.id: minimum_ms + extra for segment, extra in zip(silences, extras, strict=True)
-    }
+    caps = [
+        min(
+            maximum_silence_ms if maximum_silence_ms is not None else 600_000,
+            quiet_limits[segment.id] if quiet_limits is not None else 600_000,
+        )
+        for segment in silences
+    ]
+    try:
+        allocated = allocate_bounded_quiet(
+            silence_budget,
+            [float(max(1, segment.duration_ms - minimum_ms)) for segment in silences],
+            caps,
+        )
+    except ValueError as error:
+        raise WorkerError(str(error)) from error
+    durations = dict(zip((segment.id for segment in silences), allocated, strict=True))
     return timeline.model_copy(
         update={
             "segments": [
@@ -593,17 +573,26 @@ class LocalWorker:
                 if resolved.generation is None:
                     raise WorkerError("Generated run has no durable duration settings.")
                 target_duration_seconds = resolved.generation.duration_seconds
-                maximum_quiet = None
+                quiet_limits = None
                 if resolved.generation.writing_method == "recipe_whole_session":
                     plan = MeditationPlan.model_validate_json(
                         self.store.plan_path(running.run_id).read_text(encoding="utf-8")
                     )
-                    maximum_quiet = 22_000 if plan.ending_behavior == "sleep_taper" else 16_000
+                    quiet_limits = recipe_quiet_limits(
+                        timeline,
+                        plan,
+                        [
+                            DraftedSection.model_validate_json(path.read_text(encoding="utf-8"))
+                            for path in self.store.draft_sections_path(running.run_id).glob(
+                                "*.json"
+                            )
+                        ],
+                    )
                 timeline = fit_generated_timeline_to_real_speech(
                     timeline,
                     speech_audio=prepared_audio,
                     target_seconds=target_duration_seconds,
-                    maximum_silence_ms=maximum_quiet,
+                    quiet_limits=quiet_limits,
                 )
                 with self._state_lock:
                     self.store.write_timeline(running.run_id, timeline)

@@ -23,7 +23,6 @@ from whoopy.meditation import (
     load_prompt_bundle,
 )
 from whoopy.meditation.models import MeditationKind, RawGenerationAttempt
-from whoopy.meditation.recipes import Posture, RoutedSession
 from whoopy.ports import (
     AdapterMetadata,
     ScriptGenerationRequest,
@@ -377,10 +376,8 @@ def test_prompt_content_change_invalidates_completed_checkpoint(tmp_path: Path) 
     assert len(adapter.requests) == 1
 
 
-def test_recipe_contract_change_invalidates_completed_checkpoint(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from whoopy.meditation.recipes import load_recipe_library, route_session
+def test_recipe_contract_change_invalidates_completed_checkpoint(tmp_path: Path) -> None:
+    from whoopy.meditation.recipes import load_recipe_library
     from whoopy.meditation.workspace import WorkspaceError
 
     adapter = WholeSessionAdapter()
@@ -398,24 +395,19 @@ def test_recipe_contract_change_invalidates_completed_checkpoint(
         update={"recipes": [*library.recipes[:-1], changed_recipe]}
     )
 
-    def changed_route(
-        prompt: str,
-        duration_seconds: int,
-        *,
-        posture: Posture | None = None,
-        meditation_kind: MeditationKind | None = None,
-    ) -> RoutedSession:
-        return route_session(
-            prompt,
-            duration_seconds,
-            posture=posture,
-            meditation_kind=meditation_kind,
-            library=changed_library,
-        )
-
-    monkeypatch.setattr("whoopy.meditation.whole_session.route_session", changed_route)
+    changed_writer = LocalMeditationGenerator(
+        adapter,
+        load_prompt_bundle(Path("config/prompts")),
+        recipes=changed_library,
+        workspace=workspace,
+    )
     with pytest.raises(WorkspaceError, match="different inputs or model settings"):
-        run(adapter, workspace=workspace)
+        changed_writer.generate(
+            prompt="Steady me before a meeting",
+            duration_seconds=360,
+            run_id=RUN_ID,
+            writing_method="recipe_whole_session",
+        )
     assert len(adapter.requests) == 1
 
 
@@ -715,3 +707,180 @@ def test_timing_compiler_change_invalidates_completed_checkpoint(
     with pytest.raises(WorkspaceError, match="different inputs or model settings"):
         run(adapter, workspace=workspace)
     assert len(adapter.requests) == 1
+
+
+def test_custom_recipe_library_controls_draft_and_checkpoint(tmp_path: Path) -> None:
+    from whoopy.meditation.recipes import load_recipe_library
+    from whoopy.meditation.workspace import WorkspaceError
+
+    library = load_recipe_library(Path("config/session_recipes.yaml"))
+    recipes = [
+        recipe.model_copy(update={"version": recipe.version + 1}) for recipe in library.recipes
+    ]
+    custom = library.model_copy(update={"recipes": recipes})
+    workspace = GenerationWorkspace(tmp_path)
+    adapter = WholeSessionAdapter()
+    writer = LocalMeditationGenerator(
+        adapter, load_prompt_bundle(Path("config/prompts")), recipes=custom, workspace=workspace
+    )
+    result = writer.generate(
+        prompt="Steady me before a meeting",
+        duration_seconds=360,
+        run_id=RUN_ID,
+        writing_method="recipe_whole_session",
+    )
+    contract = json.JSONDecoder().raw_decode(adapter.requests[0].prompt.split("\n", 1)[1])[0]
+    assert result.plan.blueprint_version == 2
+    assert contract["recipe"] == result.plan.blueprint_id
+    with pytest.raises(WorkspaceError, match="different"):
+        run(WholeSessionAdapter(), workspace=workspace)
+
+
+def test_paragraph_quiet_bounds_survive_pacing_and_real_speech_fitting() -> None:
+    from whoopy.audio.models import PcmAudio
+    from whoopy.evaluation.pacing_profiles import PacingProfileRegistry, apply_pacing_profile
+    from whoopy.meditation.models import DraftedSection
+    from whoopy.meditation.pacing import sentence_word_count
+    from whoopy.meditation.whole_session import recipe_quiet_limits
+    from whoopy.pipeline.worker import WorkerError, fit_generated_timeline_to_real_speech
+    from whoopy.timeline import SilenceSegment, SpeechSegment
+
+    result = run(WholeSessionAdapter(), "Help me sleep tonight", 600)
+    sections = list(result.sections)
+    section = sections[2]
+    paragraphs = section.text.split("\n\n")
+    paragraphs[0] = "This ordinary moment is enough."
+    edited_text = "\n\n".join(paragraphs)
+    sections[2] = DraftedSection(
+        section_id=section.section_id,
+        text=edited_text,
+        word_count=sentence_word_count(edited_text),
+    )
+    original_text = section.text.split("\n\n")[0]
+    timeline = result.timeline.model_copy(
+        update={
+            "segments": [
+                segment.model_copy(update={"text": paragraphs[0]})
+                if isinstance(segment, SpeechSegment) and segment.text == original_text
+                else segment
+                for segment in result.timeline.segments
+            ]
+        }
+    )
+    caps = recipe_quiet_limits(timeline, result.plan, sections)
+    assert 7_999 in caps.values()
+    assert 16_000 in caps.values()
+    assert 22_000 in caps.values()
+    silences = [segment for segment in timeline.segments if isinstance(segment, SilenceSegment)]
+    timeline = timeline.model_copy(
+        update={
+            "segments": [
+                segment.model_copy(update={"duration_ms": caps[segment.id]})
+                if isinstance(segment, SilenceSegment)
+                else segment
+                for segment in timeline.segments
+            ]
+        }
+    )
+    paced = apply_pacing_profile(
+        timeline,
+        PacingProfileRegistry.load_bundled().get("progressive-quiet-v2"),
+        quiet_limits=caps,
+    )
+    assert [
+        segment.duration_ms for segment in paced.segments if isinstance(segment, SilenceSegment)
+    ] == [caps[segment.id] for segment in silences]
+    target_seconds = (sum(caps.values()) + 999) // 1_000
+    speech_ms = target_seconds * 1_000 - sum(caps.values())
+    audio = PcmAudio(pcm_s16le=b"\x01\x00" * 24 * speech_ms)
+    shorter_quiet = paced.model_copy(
+        update={
+            "segments": [
+                segment.model_copy(update={"duration_ms": round(segment.duration_ms * 0.75)})
+                if isinstance(segment, SilenceSegment)
+                else segment
+                for segment in paced.segments
+            ]
+        }
+    )
+    fitted = fit_generated_timeline_to_real_speech(
+        shorter_quiet,
+        speech_audio={"speech": audio},
+        target_seconds=target_seconds,
+        quiet_limits=caps,
+    )
+    assert [
+        segment.duration_ms for segment in fitted.segments if isinstance(segment, SilenceSegment)
+    ] == [caps[segment.id] for segment in silences]
+    with pytest.raises(WorkerError, match="unprepared long silence"):
+        fit_generated_timeline_to_real_speech(
+            paced,
+            speech_audio={"speech": audio},
+            target_seconds=target_seconds + 1,
+            quiet_limits=caps,
+        )
+
+
+def test_draft_cli_uses_selected_recipe_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import shutil
+
+    import yaml
+
+    from whoopy.adapters.llm import LlamaCppScriptGenerator
+    from whoopy.cli import main
+    from whoopy.hardware import HardwareSnapshot
+
+    config = tmp_path / "config"
+    shutil.copytree(Path("config"), config)
+    recipe_path = config / "session_recipes.yaml"
+    document = yaml.safe_load(recipe_path.read_text(encoding="utf-8"))
+    for recipe in document["recipes"]:
+        recipe["version"] = 9
+    recipe_path.write_text(yaml.safe_dump(document), encoding="utf-8")
+    snapshot = HardwareSnapshot(
+        operating_system="linux",
+        architecture="x86_64",
+        cpu_count=8,
+        total_ram_gb=16,
+        available_ram_gb=9,
+        free_disk_gb=20,
+        accelerators=["cpu"],
+    )
+    adapter = WholeSessionAdapter()
+    monkeypatch.setattr("whoopy.cli.inspect_hardware", lambda _path: snapshot)
+    monkeypatch.setattr(
+        LlamaCppScriptGenerator,
+        "from_artifact_store",
+        classmethod(lambda _cls, **_kwargs: adapter),
+    )
+    output = tmp_path / "drafts"
+    assert (
+        main(
+            [
+                "draft",
+                "Steady me before a meeting",
+                "--config-dir",
+                str(config),
+                "--writing-method",
+                "recipe_whole_session",
+                "--minutes",
+                "6",
+                "--profile",
+                "standard",
+                "--models-dir",
+                str(tmp_path / "models"),
+                "--output-dir",
+                str(output),
+                "--json",
+            ]
+        )
+        == 0
+    )
+    response = json.loads(capsys.readouterr().out)
+    plan = json.loads((output / response["draft_id"] / "plan.json").read_text(encoding="utf-8"))
+    contract = json.JSONDecoder().raw_decode(adapter.requests[0].prompt.split("\n", 1)[1])[0]
+    assert plan["blueprint_id"] == "daytime-steadying@9"
+    assert plan["blueprint_version"] == 9
+    assert contract["recipe"] == plan["blueprint_id"]

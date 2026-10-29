@@ -80,11 +80,15 @@ and native speed 0.8 for both. The legacy narration is 180.204 s (106.058 s spee
 74.146 s pauses); the new narration is 183.511 s (81.072 s speech, 102.439 s pauses).
 Both preserve exact source-script hashes and requested pause sequences. This
 shows the new script reaching a roughly three-minute assembled result with more
-quiet and fewer speech segments. Independent narration ASR passed both:
+quiet and fewer speech segments. Independent narration ASR passed both under the
+earlier tolerance policy:
 [legacy](verification/writing-grounding-3m-plan-first.json) WER 1.869%, ordered
 coverage 99.065%; [new](verification/writing-grounding-3m-recipe-whole-session.json)
 WER 0.637%, ordered coverage 99.363%. Minor recognition differences remain in the
-reports; neither result is a word-perfect claim. Human listening is pending, so
+reports. The derived exact-word policy now marks both **Review**: four normalized
+word edits for the legacy narration and one for the new narration. See the
+[status-bearing writing manifest](writing-listening-policy-v3.json). No new ASR
+was run, and neither result is a word-perfect claim. Human listening is pending, so
 these checks do not establish preference. No new sleep audio was rendered from a
 rejected script.
 
@@ -96,8 +100,10 @@ silence. Individual pauses span 6.567–15.826 s, all within the 16 s cap. Audio
 passed and the resource guard recorded no stop reason. The initial sandbox
 monitor refusal remains separate. Its
 [independent narration ASR](verification/production-new-writer-grounding-3m.json)
-also passed, WER 2.5% and ordered coverage 99.375%, with minor recognition and
-tokenization disagreements preserved. This is one completed daytime end-to-end
+passed under the earlier tolerance, WER 2.5% and ordered coverage 99.375%.
+The [derived strict-policy receipt](verification/policy-v3/production-new-writer-grounding-3m.json)
+now marks it **Review** for four normalized word edits, with the original
+recognition and tokenization disagreements preserved. This is one completed daytime end-to-end
 validation, not broad reliability or a human quality rating.
 
 ## Voice comparison
@@ -133,8 +139,9 @@ memory and must not be added.
 
 Independent local Whisper receives no expected-text prompt. Eight of nine
 completed full auditions qualified; Dots did not complete. The separate fresh
-production Sherpa Kokoro control (speaker 16, native speed 0.6) also passed with
-123/123 ordered words and WER 0.00813, reflecting one added initial word. This
+production Sherpa Kokoro control (speaker 16, native speed 0.6) passed under the
+earlier tolerance with 123/123 ordered words and WER 0.00813, reflecting one added
+initial word. The strict policy now marks that control **Review**. This
 production receipt is distinct from the MLX Kokoro candidates and does not make
 their speed/voice settings identical.
 
@@ -162,8 +169,18 @@ Important evidence that the summary alone must not conceal:
   content recognition. Nonzero RMS, a plausible duration or a nonempty ASR
   transcript alone cannot pass this check.
 
+The prepared policy-v3 reassessment contains **8 Pass / 4 Review** across the
+listening selection: eight voice Pass results, one voice Review, and three
+writing Reviews. It reclassifies existing hash-bound recognition evidence; it
+contains no new recognition, audio render, or word-perfect claim. Native MPS Ryan
+remains a failure and Dots remains incomplete outside that selection. Vox retains
+its full-file failure alongside the qualified paragraph/assembly chain.
+The [voice manifest](verification/listening/manifest-policy-v3.json) and
+[writing manifest](writing-listening-policy-v3.json) retain raw/proof links and
+make the review-labelled auditions available for listening.
+
 See [verification/README.md](verification/README.md) for thresholds, exact reports,
-ASR limits and negative controls. Qualified listening copies use constant gain
+ASR limits and negative controls. Existing listening copies use constant gain
 only, targeting -23 LUFS subject to -1 dB true peak; hashes and gains are saved.
 Raw outputs are untouched. No denoising, time stretch or ambience conceals defects.
 Human warmth, register, naturalness, teaching preference, joins and long-listen
@@ -171,9 +188,10 @@ comfort remain unscored. No voice is promoted from these automated results.
 
 ## Implementation checks
 
-The final local Python gate completed Ruff, formatting, strict mypy and 804 tests
+The earlier local Python gate completed Ruff, formatting, strict mypy and 804 tests
 (804 passed, one third-party Starlette/httpx deprecation warning). These behavioral
-and structural checks include legacy-path restoration; they do not integrate all
+and structural checks predate the subsequent review fixes and include legacy-path
+restoration; they do not certify those later changes or integrate all
 benchmarked voices into production or establish meditation quality. Live
 script/audio receipts and human listening remain separate from this gate.
 
@@ -182,8 +200,13 @@ script/audio receipts and human listening remain separate from this gate.
 The owner left Whoopy's source license undecided. A public repository alone does
 not grant a source license. [voices/LICENSE-AUDIT.txt](voices/LICENSE-AUDIT.txt)
 and its exact source snapshots separate runtime code, weights, codecs,
-conversions and reference/output rights. The inspected Kokoro, Qwen, Vox and MOSS
-components have Apache declarations; Chatterbox v3 and MLX-Audio have MIT terms.
+conversions and reference/output rights. The inspected model/code components for Kokoro, Qwen, Vox and MOSS
+have Apache declarations; Chatterbox v3 and MLX-Audio have MIT terms. The actual
+Sherpa/Kokoro and MLX Kokoro runtime paths also contain eSpeak/GPL dependencies.
+Their full-bundle redistribution review is incomplete; model declarations do not
+clear those dependencies. See the [Kokoro runtime audit](../../../../docs/kokoro-license-audit.md)
+for pinned build sources, local inspection evidence, source-closure uncertainty,
+and the distinction between paid network use and conveying software.
 The S3TokenizerV2 conversion has no license field, despite identified upstream
 Apache evidence; that gap remains visible before bundle redistribution.
 
@@ -203,8 +226,9 @@ boundaries. API/cloud generation, publishing, courses and ambience were excluded
 The next quality decision requires human review of the actual scripts and
 matched auditions, followed by longer first/middle/last identity checks and a
 written promotion decision. The sleep challenger failed as described above.
-The completed daytime production run and all three narration ASR passes are
-recorded separately from human review; automated acceptance is not a human rating.
+The completed daytime production run and all three earlier narration ASR passes
+remain recorded; all three are now **Review** under the strict word policy.
+Automated screening is not a human rating.
 
 [cleanup-receipt.json](cleanup-receipt.json) records 334 old runs and 589 old audio
 files moved into ignored `.whoopy-recovery/20261028-193733/`, with models/source and

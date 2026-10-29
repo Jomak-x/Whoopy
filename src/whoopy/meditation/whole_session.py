@@ -35,7 +35,7 @@ from whoopy.meditation.recipes import (
 )
 from whoopy.meditation.safety import validate_meditation_text
 from whoopy.ports import ScriptGenerationRequest
-from whoopy.timeline import build_script_timeline
+from whoopy.timeline import SilenceSegment, SpeechSegment, Timeline, build_script_timeline
 
 if TYPE_CHECKING:
     from whoopy.meditation.generator import LocalMeditationGenerator
@@ -137,6 +137,40 @@ def _prepared_for_quiet(section_id: str, kind: MeditationKind, text: str) -> boo
             )
         )
     return False
+
+
+def recipe_quiet_limits(
+    timeline: Timeline, plan: MeditationPlan, sections: list[DraftedSection]
+) -> dict[str, int]:
+    """Recover paragraph quiet bounds from the durable authored section contracts."""
+
+    section_limits = {
+        section.id: (
+            22_000
+            if plan.ending_behavior == "sleep_taper" and index >= len(plan.sections) - 2
+            else 16_000
+        )
+        for index, section in enumerate(plan.sections)
+    }
+    paragraph_limits: dict[str, int] = {}
+    for section in sections:
+        for paragraph in section.text.split("\n\n"):
+            text = " ".join(paragraph.split())
+            cap = section_limits[section.section_id]
+            if not _prepared_for_quiet(section.section_id, plan.meditation_kind, text):
+                cap = min(7_999, cap)
+            paragraph_limits[text] = min(paragraph_limits.get(text, cap), cap)
+    limits: dict[str, int] = {}
+    preceding_text: str | None = None
+    for segment in timeline.segments:
+        if isinstance(segment, SpeechSegment):
+            preceding_text = " ".join(segment.text.split())
+        elif isinstance(segment, SilenceSegment):
+            limits[segment.id] = paragraph_limits.get(preceding_text or "", 7_999)
+            preceding_text = None
+        else:
+            preceding_text = None
+    return limits
 
 
 def _allocate_whole_quiets(
@@ -450,7 +484,11 @@ def generate_whole_session(
         )
     try:
         session = route_session(
-            prompt, duration_seconds, posture=posture, meditation_kind=meditation_kind
+            prompt,
+            duration_seconds,
+            posture=posture,
+            meditation_kind=meditation_kind,
+            library=generator.recipes,
         )
     except ValueError as error:
         raise GenerationError(str(error)) from error

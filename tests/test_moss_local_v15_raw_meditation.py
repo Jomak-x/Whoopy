@@ -19,8 +19,6 @@ from scripts.moss_local_v15_raw_meditation import (
     build_plan,
     inspect_float_wav,
     load_reference_report,
-    resume_segment,
-    segment_identity,
     segment_paths,
     sha256_file,
     validate_events,
@@ -223,42 +221,39 @@ def test_native_stereo_float_assembly_preserves_speech_and_zero_silence(
     assert manifest["postprocessing"] == []
 
 
-def test_resume_requires_full_identity_and_untampered_native_audio(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("saved_file", ["plan.json", "speech/speech-0001.wav", "manifest.json"])
+def test_render_refuses_existing_evidence_before_runtime_import(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, saved_file: str
 ) -> None:
-    frames = struct.pack("<4f", 0.1, -0.1, 0.2, -0.2)
-    path, report_path = segment_paths(tmp_path, 0)
-    _float_wav(path, frames, channels=2)
-    identity = segment_identity(
-        text="Rest now.",
-        seed=1742,
-        script_sha256="script",
-        reference_sha256="reference",
+    output = tmp_path / "existing"
+    saved = output / saved_file
+    saved.parent.mkdir(parents=True)
+    saved.write_bytes(b"original attempt")
+    monkeypatch.setitem(sys.modules, "torch", None)
+    args = moss.parser().parse_args(
+        [
+            "render",
+            "--script",
+            "unused.txt",
+            "--confirm-heavyweight",
+            "--output-directory",
+            str(output),
+        ]
     )
-    report = {
-        **identity,
-        "path": str(path),
-        "frames_sha256": hashlib.sha256(frames).hexdigest(),
-        "wav_sha256": sha256_file(path),
-    }
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-    loads: list[Path] = []
 
-    def load(audio: Path, *, expected_frames_sha256: str) -> _NativeFrames:
-        loads.append(audio)
-        assert expected_frames_sha256 == hashlib.sha256(frames).hexdigest()
-        return _NativeFrames(frames)
+    with pytest.raises(SystemExit, match="use a new output directory"):
+        moss.render({"script_sha256": "changed"}, [], args)
 
-    monkeypatch.setattr(moss, "load_native_waveform", load)
-    resumed = resume_segment(output_directory=tmp_path, speech_index=0, identity=identity)
-    assert resumed == (_NativeFrames(frames), report)
-    changed = {**identity, "seed": 999}
-    assert resume_segment(output_directory=tmp_path, speech_index=0, identity=changed) is None
-    with path.open("ab") as destination:
-        destination.write(b"tampered")
-    assert resume_segment(output_directory=tmp_path, speech_index=0, identity=identity) is None
-    assert loads == [path]
+    assert {
+        str(path.relative_to(output)): path.read_bytes()
+        for path in output.rglob("*")
+        if path.is_file()
+    } == {saved_file: b"original attempt"}
+
+
+def test_render_has_no_resume_overwrite_mode() -> None:
+    with pytest.raises(SystemExit):
+        moss.parser().parse_args(["render", "--script", "unused.txt", "--resume"])
 
 
 def test_render_command_cannot_load_model_without_confirmation(

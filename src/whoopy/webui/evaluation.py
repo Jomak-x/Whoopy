@@ -26,10 +26,13 @@ from whoopy.evaluation.pacing_profiles import (
     PacingProfileError,
     PacingProfileRegistry,
 )
-from whoopy.meditation.models import MeditationKind
-from whoopy.meditation.recipes import route_session
+from whoopy.meditation.models import DraftedSection, MeditationKind, MeditationPlan
+from whoopy.meditation.pacing import allocate_bounded_quiet
+from whoopy.meditation.recipes import load_recipe_library, route_session
+from whoopy.meditation.whole_session import recipe_quiet_limits
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
 from whoopy.ports import AdapterMetadata
+from whoopy.timeline import Timeline
 from whoopy.webui.server import LocalWebApplication
 
 
@@ -607,18 +610,27 @@ class LocalProductionExperimentExecutor:
             * (1.0 + (0.35 * index / (count - 1) if count > 1 else 0.0))
             for index, duration in enumerate(source_durations)
         ]
-        remaining = budget - minimum_ms * count
-        raw = [remaining * weight / sum(weights) for weight in weights]
-        extras = [int(value) for value in raw]
-        remainder = remaining - sum(extras)
-        order = sorted(
-            range(count),
-            key=lambda index: raw[index] - extras[index],
-            reverse=True,
-        )
-        for index in order[:remainder]:
-            extras[index] += 1
-        return [minimum_ms + extra for extra in extras]
+        caps = [600_000] * count
+        if (resolved.get("generation") or {}).get("writing_method") == "recipe_whole_session":
+            source_timeline = Timeline.model_validate_json(
+                (source_root / "timeline.json").read_text(encoding="utf-8")
+            )
+            limits = recipe_quiet_limits(
+                source_timeline,
+                MeditationPlan.model_validate_json(
+                    (source_root / "plan.json").read_text(encoding="utf-8")
+                ),
+                [
+                    DraftedSection.model_validate_json(path.read_text(encoding="utf-8"))
+                    for path in (source_root / "draft-sections").glob("*.json")
+                ],
+            )
+            caps = [
+                limits[segment.id]
+                for segment in source_timeline.segments
+                if segment.type == "SILENCE"
+            ]
+        return allocate_bounded_quiet(budget, weights, caps)
 
     @staticmethod
     def _moss_instruction(delivery: str, intensity: str) -> str:
@@ -944,6 +956,9 @@ class LocalProductionExperimentExecutor:
                 request.case.prompt,
                 request.case.duration_seconds,
                 meditation_kind=cast(MeditationKind, request.case.category),
+                library=load_recipe_library(
+                    self.application.config_directory / "session_recipes.yaml"
+                ),
             ).recipe
             expect("source.plan.blueprint_id", source_plan.get("blueprint_id"), recipe.versioned_id)
             expect(

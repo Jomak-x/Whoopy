@@ -109,6 +109,38 @@ def test_moderate_content_error_needs_review(audible_wave: Path) -> None:
     assert report["content"]["word_error_rate"] == 0.2
 
 
+@pytest.mark.parametrize("operation", ["insertions", "deletions", "substitutions"])
+def test_one_normalized_word_edit_requires_review(audible_wave: Path, operation: str) -> None:
+    words = [f"word{index}" for index in range(100)]
+    observed = words.copy()
+    if operation == "insertions":
+        observed.insert(40, "extra")
+    elif operation == "deletions":
+        del observed[40]
+    else:
+        observed[40] = "changed"
+
+    report = verify_audio(audible_wave, " ".join(words), asr_result={"text": " ".join(observed)})
+
+    assert report["content"][operation] == 1
+    assert report["content"]["word_error_rate"] == 0.01
+    assert report["status"] == "review"
+    assert report["review_reasons"]
+    assert not report["failure_reasons"]
+
+
+def test_missing_ending_still_fails_with_strict_review_policy(audible_wave: Path) -> None:
+    report = verify_audio(
+        audible_wave,
+        "one two three four five six seven eight nine ten",
+        asr_result={"text": "one two three four five six seven"},
+    )
+
+    assert report["status"] == "fail"
+    assert report["content"]["possible_truncation"]
+    assert any("ending is missing" in reason for reason in report["failure_reasons"])
+
+
 def test_localized_bad_block_cannot_hide_in_low_whole_script_error(audible_wave: Path) -> None:
     words = [f"word{index}" for index in range(100)]
     observed = words[:40] + [f"gibberish{index}" for index in range(8)] + words[48:]

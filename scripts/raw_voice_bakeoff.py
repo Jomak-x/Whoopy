@@ -83,6 +83,10 @@ def assemble(*, events: list[Event], speech_directory: Path, output: Path) -> di
     if len(speech_paths) != expected:
         raise ValueError(f"expected {expected} speech WAVs, found {len(speech_paths)}")
 
+    manifest_path = output.with_suffix(".manifest.json")
+    if output.exists() or manifest_path.exists():
+        raise FileExistsError("Evidence already exists; use a fresh output path.")
+
     format_signature: tuple[int, int, int, str, str] | None = None
     output.parent.mkdir(parents=True, exist_ok=True)
     speech_index = 0
@@ -90,6 +94,8 @@ def assemble(*, events: list[Event], speech_directory: Path, output: Path) -> di
     source_records: list[dict[str, object]] = []
     destination: wave.Wave_write | None = None
     with ExitStack() as stack:
+        manifest_file = stack.enter_context(manifest_path.open("x", encoding="utf-8"))
+        output_file = stack.enter_context(output.open("xb"))
         for event in events:
             if event.kind == "speech":
                 source_path = speech_paths[speech_index]
@@ -106,7 +112,7 @@ def assemble(*, events: list[Event], speech_directory: Path, output: Path) -> di
                         raise ValueError(f"{source_path} must be uncompressed 16/24/32-bit PCM WAV")
                     if format_signature is None:
                         format_signature = signature
-                        destination = stack.enter_context(wave.open(str(output), "wb"))
+                        destination = stack.enter_context(wave.open(output_file, "wb"))
                         destination.setnchannels(signature[0])
                         destination.setsampwidth(signature[1])
                         destination.setframerate(signature[2])
@@ -142,21 +148,22 @@ def assemble(*, events: list[Event], speech_directory: Path, output: Path) -> di
         if destination is None or format_signature is None:
             raise ValueError("meditation contains no speech")
 
-    manifest: dict[str, object] = {
-        "schema_version": 1,
-        "processing": "none; native PCM copied byte-for-byte; authored silence only",
-        "sample_rate": format_signature[2],
-        "channels": format_signature[0],
-        "sample_width_bytes": format_signature[1],
-        "frames": total_frames,
-        "duration_seconds": total_frames / format_signature[2],
-        "speech_sources": source_records,
-        "output": str(output.resolve()),
-        "output_sha256": _sha256(output),
-    }
-    output.with_suffix(".manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+        destination.close()
+        output_file.flush()
+
+        manifest: dict[str, object] = {
+            "schema_version": 1,
+            "processing": "none; native PCM copied byte-for-byte; authored silence only",
+            "sample_rate": format_signature[2],
+            "channels": format_signature[0],
+            "sample_width_bytes": format_signature[1],
+            "frames": total_frames,
+            "duration_seconds": total_frames / format_signature[2],
+            "speech_sources": source_records,
+            "output": str(output.resolve()),
+            "output_sha256": _sha256(output),
+        }
+        manifest_file.write(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return manifest
 
 

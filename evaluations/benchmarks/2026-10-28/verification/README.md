@@ -34,11 +34,12 @@ ending; and supplementary PCM finite/silence/clipping/noise diagnostics.
 
 Exit status is 0 for **pass**, 2 for **review**, and 1 for **fail**. Missing ASR,
 model import/inference errors, timeout, and uninspectable PCM fail closed. A pass
-requires WER <= 0.15 and ordered word coverage >= 0.85, no detected missing ending
-of at least three words, and no PCM failure/review issue. A contiguous span of
-eight word-level ASR errors fails; a span of three needs review even when global
-WER is low, preventing a localized corrupted block from hiding in a long script.
-WER > 0.35 or coverage < 0.65 fails; intermediate content agreement needs review.
+requires zero normalized word insertions, deletions, or substitutions and no PCM
+failure/review issue. Every detected word edit requires **review**, even when
+global WER is low. Existing hard failures remain: a missing ending of at least
+three words, a contiguous span of eight word-level ASR errors, WER > 0.35,
+coverage < 0.65, and existing PCM/recognizer failures. A mismatch alone is not
+automatic rejection; a hard-fail condition still takes precedence.
 These are screening
 thresholds, not claims of error-free human transcription. Inspect alignment and
 listen before attributing differences to the synthesizer: ASR can itself omit or
@@ -81,11 +82,12 @@ native Qwen Ryan content problem below.
 Final MLX CustomVoice Ryan also passed the full 123/123 with WER 0; its 8-bit MLX
 runtime and revised token budget are separately identified in generation evidence.
 
-The fresh production **Sherpa Kokoro at native speed 0.6** baseline passed in narration
-mode with all 123 expected words recognized and WER 0.00813: the recognizer added
+The fresh production **Sherpa Kokoro at native speed 0.6** baseline passed under
+the earlier tolerance in narration mode with all 123 expected words recognized and WER 0.00813: the recognizer added
 one initial `Then`. Its model is `Kokoro-multilang@v1_0-release-2026-10-26`,
 Sherpa ONNX 1.13.4, speaker 16. It is not an exact-match claim; the production
-runtime and speed differ from the MLX controls. Its matched copy is separately named.
+runtime and speed differ from the MLX controls. The derived strict policy marks
+this one-word insertion **Review**; its matched copy remains available.
 
 Qwen Ryan's full-file report is **review** (WER 26.0%, coverage 74.0%). Independent
 ASR of its second native paragraph failed with 0/32 matched words and WER 1.0,
@@ -113,3 +115,23 @@ No denoising, EQ, time stretch, or noise-candidate amplification is performed.
 Use `create_listening_copies.py --candidate REPORT_STEM` to add one newly qualified
 candidate while preserving prior approved copies. Helper-source hashes have
 explicit names; `expected_text_sha256` identifies the spoken input text.
+
+## Current policy reassessment
+
+[policy-v3](policy-v3/) contains 12 derived JSON receipts evaluated from the
+existing recognizer output, not new ASR or acoustic inspection. The owner prepared
+these sidecars without replacing old receipts or media. The current listening
+selection is **8 Pass / 4 Review**: eight voice Pass results, one voice Review,
+and three writing Reviews. Pass means zero normalized word edits in the retained
+evidence and the recorded PCM qualification; it does not establish word-perfect
+audio or listener preference. Vox uses its complete paragraph plus exact-assembly
+chain; its original full-file failure remains. Native MPS Ryan's failure and
+Dots' incomplete attempt remain separate.
+
+The source builder reads [listening/manifest-policy-v3.json](listening/manifest-policy-v3.json)
+and [writing-listening-policy-v3.json](../writing-listening-policy-v3.json),
+including Review samples with explicit labels and original raw/proof links.
+These manifests preserve the original manifest hashes, classifications, media
+hashes and timestamps. They were copied as metadata only; no audio or old
+verification receipt was rewritten. Current source changes postdate the measured
+benchmark runs and do not retroactively certify them.

@@ -16,6 +16,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from whoopy.meditation.pacing import allocate_bounded_quiet
 from whoopy.timeline import SilenceSegment, Timeline
 
 
@@ -120,7 +121,9 @@ class PacingProfileRegistry:
         return self.document.profiles
 
 
-def apply_pacing_profile(timeline: Timeline, profile: PacingProfile) -> Timeline:
+def apply_pacing_profile(
+    timeline: Timeline, profile: PacingProfile, *, quiet_limits: dict[str, int] | None = None
+) -> Timeline:
     """Apply one reviewed pacing policy without changing topology or total quiet.
 
     Prompt generation has already budgeted speech and silence against the requested
@@ -144,14 +147,19 @@ def apply_pacing_profile(timeline: Timeline, profile: PacingProfile) -> Timeline
         max(1, segment.duration_ms - minimum_ms) * (1.0 + 0.35 * index / (count - 1))
         for index, segment in enumerate(silence)
     ]
-    remaining = budget - minimum_ms * count
-    raw = [remaining * weight / sum(weights) for weight in weights]
-    extras = [int(value) for value in raw]
-    remainder = remaining - sum(extras)
-    order = sorted(range(count), key=lambda index: raw[index] - extras[index], reverse=True)
-    for index in order[:remainder]:
-        extras[index] += 1
-    durations = iter(minimum_ms + extra for extra in extras)
+    try:
+        durations = iter(
+            allocate_bounded_quiet(
+                budget,
+                weights,
+                [
+                    quiet_limits[segment.id] if quiet_limits is not None else 600_000
+                    for segment in silence
+                ],
+            )
+        )
+    except ValueError as error:
+        raise PacingProfileError(str(error)) from error
     return timeline.model_copy(
         update={
             "segments": [

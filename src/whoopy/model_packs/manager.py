@@ -568,8 +568,10 @@ class ManagedModelPacks:
             raise ModelPackOperationError(
                 f"Cannot smoke-test {pack_id}: its declared isolated runtime is incomplete."
             )
+        runtime_passed = False
         try:
             result = self.smoke_runner(pack, status.selected_directory)
+            runtime_passed = True
             try:
                 audio = PcmAudio(
                     pcm_s16le=result.pcm_s16le,
@@ -618,9 +620,8 @@ class ManagedModelPacks:
             if not isinstance(error, Exception):
                 raise
             if _deterministic_smoke_failure(error):
-                runtime_passed = (
-                    error.runtime_probe_passed if isinstance(error, SmokeProbeFailure) else False
-                )
+                if isinstance(error, SmokeProbeFailure):
+                    runtime_passed = error.runtime_probe_passed
                 runtime = RuntimeEvidence(
                     pack_id=pack_id,
                     model_revision=pack.revision,

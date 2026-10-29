@@ -13,7 +13,12 @@ from whoopy.audio.models import PcmAudio
 from whoopy.audio.synthesis import FatalSynthesisError, TransientSynthesisError
 from whoopy.model_packs.manager import ManagedModelPacks, SmokeResult
 from whoopy.model_packs.operations import PerformanceRecordStore
-from whoopy.model_packs.registry import ModelPackRegistry, load_model_pack_registry
+from whoopy.model_packs.registry import (
+    ModelPackRegistry,
+    RuntimeEvidence,
+    SmokeTestEvidence,
+    load_model_pack_registry,
+)
 from whoopy.model_packs.smoke import OfflineModelPackSmokeRunner, _offline_environment
 from whoopy.timeline import SpeechSegment
 
@@ -337,8 +342,16 @@ def test_smoke_rejects_silent_clipped_or_invalid_pcm(
     with pytest.raises(ValueError, match=message):
         service.smoke_test("kokoro")
 
-    assert service.registry.inspect("kokoro").state == "incompatible"
-    assert not (service.registry.records_directory("kokoro") / "smoke.json").exists()
+    status = service.registry.inspect("kokoro")
+    assert status.state == "incompatible"
+    assert next(check for check in status.checks if check.check == "runtime_probe").passed
+    assert not next(check for check in status.checks if check.check == "offline_smoke_test").passed
+    records = service.registry.records_directory("kokoro")
+    runtime = RuntimeEvidence.model_validate_json((records / "runtime.json").read_text("utf-8"))
+    smoke = SmokeTestEvidence.model_validate_json((records / "smoke.json").read_text("utf-8"))
+    assert runtime.success
+    assert not smoke.success
+    assert smoke.offline
 
 
 def test_parent_synthesis_can_record_dependency_paths_it_really_exercised(

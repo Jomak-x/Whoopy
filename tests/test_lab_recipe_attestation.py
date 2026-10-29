@@ -23,6 +23,7 @@ from whoopy.webui.evaluation import LocalProductionExperimentExecutor
 class CompletedGenerationApplication:
     def __init__(self, root: Path, *, tamper: str | None = None) -> None:
         self.runs_directory = root
+        self.config_directory = Path("config")
         self.tamper = tamper
         self.tasks: dict[str, dict[str, Any]] = {}
         self.payloads: list[dict[str, Any]] = []
@@ -165,7 +166,9 @@ def test_writing_comparison_keeps_request_fixed_and_preserves_recipe_provenance(
     assert fingerprints[0] is not None and fingerprints[1] is not None
     assert fingerprints[0].blueprint_sha256 == fingerprints[1].blueprint_sha256
     plans = [
-        json.loads(Path(next(item.path for item in trial.artifacts if item.role == "plan")).read_text())
+        json.loads(
+            Path(next(item.path for item in trial.artifacts if item.role == "plan")).read_text()
+        )
         for trial in report.trials
     ]
     assert [plan["blueprint_id"] for plan in plans] == ["grounding@1", "daytime-steadying@1"]

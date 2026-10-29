@@ -1,0 +1,1287 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "policy_reassessment_of_existing_verification",
+  "policy_id": "normalized-word-mismatch-review-v3",
+  "created_at": "2026-10-29T01:57:44.349662+00:00",
+  "no_new_asr_inference": true,
+  "no_new_recognition_claim": true,
+  "classification_only": true,
+  "source_code_modified": false,
+  "original_report": "evaluations/benchmarks/2026-10-28/verification/production-new-writer-grounding-3m.json",
+  "original_report_sha256": "a3a58dbd7658870bcf12e74006a95173f35b45aa72280628319df1c7e87827e6",
+  "original_verification_created_at": "2026-10-29T00:36:33.715689+00:00",
+  "original_status": "pass",
+  "status": "review",
+  "policy_status": "review",
+  "policy_reasons": [
+    "Existing ASR alignment contains normalized word edits; listening review is required."
+  ],
+  "listening_review_required": true,
+  "normalized_word_edit_count": 4,
+  "normalized_word_differences": [
+    {
+      "operation": "insert",
+      "expected": null,
+      "observed": "any",
+      "observed_index": 18
+    },
+    {
+      "operation": "substitute",
+      "expected": "anytime",
+      "observed": "time",
+      "expected_index": 18,
+      "observed_index": 19
+    },
+    {
+      "operation": "insert",
+      "expected": null,
+      "observed": "faces",
+      "observed_index": 32
+    },
+    {
+      "operation": "insert",
+      "expected": null,
+      "observed": "to",
+      "observed_index": 109
+    }
+  ],
+  "original_metrics": {
+    "expected_word_count": 160,
+    "observed_word_count": 163,
+    "word_error_rate": 0.025,
+    "ordered_word_coverage": 0.99375,
+    "matches": 159,
+    "deletions": 0,
+    "insertions": 3,
+    "substitutions": 1,
+    "longest_contiguous_error_span": 2,
+    "error_spans": [
+      [
+        {
+          "operation": "insert",
+          "expected": null,
+          "observed": "any",
+          "observed_index": 18
+        },
+        {
+          "operation": "substitute",
+          "expected": "anytime",
+          "observed": "time",
+          "expected_index": 18,
+          "observed_index": 19
+        }
+      ],
+      [
+        {
+          "operation": "insert",
+          "expected": null,
+          "observed": "faces",
+          "observed_index": 32
+        }
+      ],
+      [
+        {
+          "operation": "insert",
+          "expected": null,
+          "observed": "to",
+          "observed_index": 109
+        }
+      ]
+    ],
+    "missing_words": [],
+    "unexpected_words": [
+      "any",
+      "faces",
+      "to"
+    ],
+    "excess_repeated_words": {
+      "to": 1
+    },
+    "missing_tail_words": [],
+    "possible_truncation": false,
+    "alignment": [
+      {
+        "operation": "match",
+        "expected": "sit",
+        "observed": "sit",
+        "expected_index": 0,
+        "observed_index": 0
+      },
+      {
+        "operation": "match",
+        "expected": "with",
+        "observed": "with",
+        "expected_index": 1,
+        "observed_index": 1
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 2,
+        "observed_index": 2
+      },
+      {
+        "operation": "match",
+        "expected": "feet",
+        "observed": "feet",
+        "expected_index": 3,
+        "observed_index": 3
+      },
+      {
+        "operation": "match",
+        "expected": "on",
+        "observed": "on",
+        "expected_index": 4,
+        "observed_index": 4
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 5,
+        "observed_index": 5
+      },
+      {
+        "operation": "match",
+        "expected": "floor",
+        "observed": "floor",
+        "expected_index": 6,
+        "observed_index": 6
+      },
+      {
+        "operation": "match",
+        "expected": "or",
+        "observed": "or",
+        "expected_index": 7,
+        "observed_index": 7
+      },
+      {
+        "operation": "match",
+        "expected": "a",
+        "observed": "a",
+        "expected_index": 8,
+        "observed_index": 8
+      },
+      {
+        "operation": "match",
+        "expected": "cushion",
+        "observed": "cushion",
+        "expected_index": 9,
+        "observed_index": 9
+      },
+      {
+        "operation": "match",
+        "expected": "let",
+        "observed": "let",
+        "expected_index": 10,
+        "observed_index": 10
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 11,
+        "observed_index": 11
+      },
+      {
+        "operation": "match",
+        "expected": "hands",
+        "observed": "hands",
+        "expected_index": 12,
+        "observed_index": 12
+      },
+      {
+        "operation": "match",
+        "expected": "rest",
+        "observed": "rest",
+        "expected_index": 13,
+        "observed_index": 13
+      },
+      {
+        "operation": "match",
+        "expected": "naturally",
+        "observed": "naturally",
+        "expected_index": 14,
+        "observed_index": 14
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 15,
+        "observed_index": 15
+      },
+      {
+        "operation": "match",
+        "expected": "may",
+        "observed": "may",
+        "expected_index": 16,
+        "observed_index": 16
+      },
+      {
+        "operation": "match",
+        "expected": "adjust",
+        "observed": "adjust",
+        "expected_index": 17,
+        "observed_index": 17
+      },
+      {
+        "operation": "insert",
+        "expected": null,
+        "observed": "any",
+        "observed_index": 18
+      },
+      {
+        "operation": "substitute",
+        "expected": "anytime",
+        "observed": "time",
+        "expected_index": 18,
+        "observed_index": 19
+      },
+      {
+        "operation": "match",
+        "expected": "listen",
+        "observed": "listen",
+        "expected_index": 19,
+        "observed_index": 20
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 20,
+        "observed_index": 21
+      },
+      {
+        "operation": "match",
+        "expected": "nearby",
+        "observed": "nearby",
+        "expected_index": 21,
+        "observed_index": 22
+      },
+      {
+        "operation": "match",
+        "expected": "sounds",
+        "observed": "sounds",
+        "expected_index": 22,
+        "observed_index": 23
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 23,
+        "observed_index": 24
+      },
+      {
+        "operation": "match",
+        "expected": "hum",
+        "observed": "hum",
+        "expected_index": 24,
+        "observed_index": 25
+      },
+      {
+        "operation": "match",
+        "expected": "of",
+        "observed": "of",
+        "expected_index": 25,
+        "observed_index": 26
+      },
+      {
+        "operation": "match",
+        "expected": "air",
+        "observed": "air",
+        "expected_index": 26,
+        "observed_index": 27
+      },
+      {
+        "operation": "match",
+        "expected": "a",
+        "observed": "a",
+        "expected_index": 27,
+        "observed_index": 28
+      },
+      {
+        "operation": "match",
+        "expected": "clock",
+        "observed": "clock",
+        "expected_index": 28,
+        "observed_index": 29
+      },
+      {
+        "operation": "match",
+        "expected": "or",
+        "observed": "or",
+        "expected_index": 29,
+        "observed_index": 30
+      },
+      {
+        "operation": "match",
+        "expected": "voices",
+        "observed": "voices",
+        "expected_index": 30,
+        "observed_index": 31
+      },
+      {
+        "operation": "insert",
+        "expected": null,
+        "observed": "faces",
+        "observed_index": 32
+      },
+      {
+        "operation": "match",
+        "expected": "feel",
+        "observed": "feel",
+        "expected_index": 31,
+        "observed_index": 33
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 32,
+        "observed_index": 34
+      },
+      {
+        "operation": "match",
+        "expected": "steady",
+        "observed": "steady",
+        "expected_index": 33,
+        "observed_index": 35
+      },
+      {
+        "operation": "match",
+        "expected": "support",
+        "observed": "support",
+        "expected_index": 34,
+        "observed_index": 36
+      },
+      {
+        "operation": "match",
+        "expected": "of",
+        "observed": "of",
+        "expected_index": 35,
+        "observed_index": 37
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 36,
+        "observed_index": 38
+      },
+      {
+        "operation": "match",
+        "expected": "seat",
+        "observed": "seat",
+        "expected_index": 37,
+        "observed_index": 39
+      },
+      {
+        "operation": "match",
+        "expected": "beneath",
+        "observed": "beneath",
+        "expected_index": 38,
+        "observed_index": 40
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 39,
+        "observed_index": 41
+      },
+      {
+        "operation": "match",
+        "expected": "pick",
+        "observed": "pick",
+        "expected_index": 40,
+        "observed_index": 42
+      },
+      {
+        "operation": "match",
+        "expected": "one",
+        "observed": "one",
+        "expected_index": 41,
+        "observed_index": 43
+      },
+      {
+        "operation": "match",
+        "expected": "sound",
+        "observed": "sound",
+        "expected_index": 42,
+        "observed_index": 44
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 43,
+        "observed_index": 45
+      },
+      {
+        "operation": "match",
+        "expected": "focus",
+        "observed": "focus",
+        "expected_index": 44,
+        "observed_index": 46
+      },
+      {
+        "operation": "match",
+        "expected": "on",
+        "observed": "on",
+        "expected_index": 45,
+        "observed_index": 47
+      },
+      {
+        "operation": "match",
+        "expected": "like",
+        "observed": "like",
+        "expected_index": 46,
+        "observed_index": 48
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 47,
+        "observed_index": 49
+      },
+      {
+        "operation": "match",
+        "expected": "quiet",
+        "observed": "quiet",
+        "expected_index": 48,
+        "observed_index": 50
+      },
+      {
+        "operation": "match",
+        "expected": "or",
+        "observed": "or",
+        "expected_index": 49,
+        "observed_index": 51
+      },
+      {
+        "operation": "match",
+        "expected": "a",
+        "observed": "a",
+        "expected_index": 50,
+        "observed_index": 52
+      },
+      {
+        "operation": "match",
+        "expected": "distant",
+        "observed": "distant",
+        "expected_index": 51,
+        "observed_index": 53
+      },
+      {
+        "operation": "match",
+        "expected": "tone",
+        "observed": "tone",
+        "expected_index": 52,
+        "observed_index": 54
+      },
+      {
+        "operation": "match",
+        "expected": "when",
+        "observed": "when",
+        "expected_index": 53,
+        "observed_index": 55
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 54,
+        "observed_index": 56
+      },
+      {
+        "operation": "match",
+        "expected": "mind",
+        "observed": "mind",
+        "expected_index": 55,
+        "observed_index": 57
+      },
+      {
+        "operation": "match",
+        "expected": "drifts",
+        "observed": "drifts",
+        "expected_index": 56,
+        "observed_index": 58
+      },
+      {
+        "operation": "match",
+        "expected": "simply",
+        "observed": "simply",
+        "expected_index": 57,
+        "observed_index": 59
+      },
+      {
+        "operation": "match",
+        "expected": "return",
+        "observed": "return",
+        "expected_index": 58,
+        "observed_index": 60
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 59,
+        "observed_index": 61
+      },
+      {
+        "operation": "match",
+        "expected": "that",
+        "observed": "that",
+        "expected_index": 60,
+        "observed_index": 62
+      },
+      {
+        "operation": "match",
+        "expected": "sound",
+        "observed": "sound",
+        "expected_index": 61,
+        "observed_index": 63
+      },
+      {
+        "operation": "match",
+        "expected": "notice",
+        "observed": "notice",
+        "expected_index": 62,
+        "observed_index": 64
+      },
+      {
+        "operation": "match",
+        "expected": "how",
+        "observed": "how",
+        "expected_index": 63,
+        "observed_index": 65
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 64,
+        "observed_index": 66
+      },
+      {
+        "operation": "match",
+        "expected": "body",
+        "observed": "body",
+        "expected_index": 65,
+        "observed_index": 67
+      },
+      {
+        "operation": "match",
+        "expected": "settles",
+        "observed": "settles",
+        "expected_index": 66,
+        "observed_index": 68
+      },
+      {
+        "operation": "match",
+        "expected": "into",
+        "observed": "into",
+        "expected_index": 67,
+        "observed_index": 69
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 68,
+        "observed_index": 70
+      },
+      {
+        "operation": "match",
+        "expected": "seat's",
+        "observed": "seat's",
+        "expected_index": 69,
+        "observed_index": 71
+      },
+      {
+        "operation": "match",
+        "expected": "support",
+        "observed": "support",
+        "expected_index": 70,
+        "observed_index": 72
+      },
+      {
+        "operation": "match",
+        "expected": "let",
+        "observed": "let",
+        "expected_index": 71,
+        "observed_index": 73
+      },
+      {
+        "operation": "match",
+        "expected": "that",
+        "observed": "that",
+        "expected_index": 72,
+        "observed_index": 74
+      },
+      {
+        "operation": "match",
+        "expected": "steady",
+        "observed": "steady",
+        "expected_index": 73,
+        "observed_index": 75
+      },
+      {
+        "operation": "match",
+        "expected": "sound",
+        "observed": "sound",
+        "expected_index": 74,
+        "observed_index": 76
+      },
+      {
+        "operation": "match",
+        "expected": "guide",
+        "observed": "guide",
+        "expected_index": 75,
+        "observed_index": 77
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 76,
+        "observed_index": 78
+      },
+      {
+        "operation": "match",
+        "expected": "like",
+        "observed": "like",
+        "expected_index": 77,
+        "observed_index": 79
+      },
+      {
+        "operation": "match",
+        "expected": "a",
+        "observed": "a",
+        "expected_index": 78,
+        "observed_index": 80
+      },
+      {
+        "operation": "match",
+        "expected": "quiet",
+        "observed": "quiet",
+        "expected_index": 79,
+        "observed_index": 81
+      },
+      {
+        "operation": "match",
+        "expected": "thread",
+        "observed": "thread",
+        "expected_index": 80,
+        "observed_index": 82
+      },
+      {
+        "operation": "match",
+        "expected": "pulling",
+        "observed": "pulling",
+        "expected_index": 81,
+        "observed_index": 83
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 82,
+        "observed_index": 84
+      },
+      {
+        "operation": "match",
+        "expected": "back",
+        "observed": "back",
+        "expected_index": 83,
+        "observed_index": 85
+      },
+      {
+        "operation": "match",
+        "expected": "when",
+        "observed": "when",
+        "expected_index": 84,
+        "observed_index": 86
+      },
+      {
+        "operation": "match",
+        "expected": "needed",
+        "observed": "needed",
+        "expected_index": 85,
+        "observed_index": 87
+      },
+      {
+        "operation": "match",
+        "expected": "observe",
+        "observed": "observe",
+        "expected_index": 86,
+        "observed_index": 88
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 87,
+        "observed_index": 89
+      },
+      {
+        "operation": "match",
+        "expected": "hands",
+        "observed": "hands",
+        "expected_index": 88,
+        "observed_index": 90
+      },
+      {
+        "operation": "match",
+        "expected": "resting",
+        "observed": "resting",
+        "expected_index": 89,
+        "observed_index": 91
+      },
+      {
+        "operation": "match",
+        "expected": "light",
+        "observed": "light",
+        "expected_index": 90,
+        "observed_index": 92
+      },
+      {
+        "operation": "match",
+        "expected": "and",
+        "observed": "and",
+        "expected_index": 91,
+        "observed_index": 93
+      },
+      {
+        "operation": "match",
+        "expected": "open",
+        "observed": "open",
+        "expected_index": 92,
+        "observed_index": 94
+      },
+      {
+        "operation": "match",
+        "expected": "if",
+        "observed": "if",
+        "expected_index": 93,
+        "observed_index": 95
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 94,
+        "observed_index": 96
+      },
+      {
+        "operation": "match",
+        "expected": "thoughts",
+        "observed": "thoughts",
+        "expected_index": 95,
+        "observed_index": 97
+      },
+      {
+        "operation": "match",
+        "expected": "shift",
+        "observed": "shift",
+        "expected_index": 96,
+        "observed_index": 98
+      },
+      {
+        "operation": "match",
+        "expected": "gently",
+        "observed": "gently",
+        "expected_index": 97,
+        "observed_index": 99
+      },
+      {
+        "operation": "match",
+        "expected": "come",
+        "observed": "come",
+        "expected_index": 98,
+        "observed_index": 100
+      },
+      {
+        "operation": "match",
+        "expected": "back",
+        "observed": "back",
+        "expected_index": 99,
+        "observed_index": 101
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 100,
+        "observed_index": 102
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 101,
+        "observed_index": 103
+      },
+      {
+        "operation": "match",
+        "expected": "same",
+        "observed": "same",
+        "expected_index": 102,
+        "observed_index": 104
+      },
+      {
+        "operation": "match",
+        "expected": "sound",
+        "observed": "sound",
+        "expected_index": 103,
+        "observed_index": 105
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 104,
+        "observed_index": 106
+      },
+      {
+        "operation": "match",
+        "expected": "chose",
+        "observed": "chose",
+        "expected_index": 105,
+        "observed_index": 107
+      },
+      {
+        "operation": "match",
+        "expected": "earlier",
+        "observed": "earlier",
+        "expected_index": 106,
+        "observed_index": 108
+      },
+      {
+        "operation": "insert",
+        "expected": null,
+        "observed": "to",
+        "observed_index": 109
+      },
+      {
+        "operation": "match",
+        "expected": "stay",
+        "observed": "stay",
+        "expected_index": 107,
+        "observed_index": 110
+      },
+      {
+        "operation": "match",
+        "expected": "with",
+        "observed": "with",
+        "expected_index": 108,
+        "observed_index": 111
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 109,
+        "observed_index": 112
+      },
+      {
+        "operation": "match",
+        "expected": "sound",
+        "observed": "sound",
+        "expected_index": 110,
+        "observed_index": 113
+      },
+      {
+        "operation": "match",
+        "expected": "and",
+        "observed": "and",
+        "expected_index": 111,
+        "observed_index": 114
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 112,
+        "observed_index": 115
+      },
+      {
+        "operation": "match",
+        "expected": "support",
+        "observed": "support",
+        "expected_index": 113,
+        "observed_index": 116
+      },
+      {
+        "operation": "match",
+        "expected": "beneath",
+        "observed": "beneath",
+        "expected_index": 114,
+        "observed_index": 117
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 115,
+        "observed_index": 118
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 116,
+        "observed_index": 119
+      },
+      {
+        "operation": "match",
+        "expected": "can",
+        "observed": "can",
+        "expected_index": 117,
+        "observed_index": 120
+      },
+      {
+        "operation": "match",
+        "expected": "explore",
+        "observed": "explore",
+        "expected_index": 118,
+        "observed_index": 121
+      },
+      {
+        "operation": "match",
+        "expected": "this",
+        "observed": "this",
+        "expected_index": 119,
+        "observed_index": 122
+      },
+      {
+        "operation": "match",
+        "expected": "quietly",
+        "observed": "quietly",
+        "expected_index": 120,
+        "observed_index": 123
+      },
+      {
+        "operation": "match",
+        "expected": "on",
+        "observed": "on",
+        "expected_index": 121,
+        "observed_index": 124
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 122,
+        "observed_index": 125
+      },
+      {
+        "operation": "match",
+        "expected": "own",
+        "observed": "own",
+        "expected_index": 123,
+        "observed_index": 126
+      },
+      {
+        "operation": "match",
+        "expected": "now",
+        "observed": "now",
+        "expected_index": 124,
+        "observed_index": 127
+      },
+      {
+        "operation": "match",
+        "expected": "whenever",
+        "observed": "whenever",
+        "expected_index": 125,
+        "observed_index": 128
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 126,
+        "observed_index": 129
+      },
+      {
+        "operation": "match",
+        "expected": "like",
+        "observed": "like",
+        "expected_index": 127,
+        "observed_index": 130
+      },
+      {
+        "operation": "match",
+        "expected": "shift",
+        "observed": "shift",
+        "expected_index": 128,
+        "observed_index": 131
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 129,
+        "observed_index": 132
+      },
+      {
+        "operation": "match",
+        "expected": "focus",
+        "observed": "focus",
+        "expected_index": 130,
+        "observed_index": 133
+      },
+      {
+        "operation": "match",
+        "expected": "but",
+        "observed": "but",
+        "expected_index": 131,
+        "observed_index": 134
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 132,
+        "observed_index": 135
+      },
+      {
+        "operation": "match",
+        "expected": "can",
+        "observed": "can",
+        "expected_index": 133,
+        "observed_index": 136
+      },
+      {
+        "operation": "match",
+        "expected": "always",
+        "observed": "always",
+        "expected_index": 134,
+        "observed_index": 137
+      },
+      {
+        "operation": "match",
+        "expected": "return",
+        "observed": "return",
+        "expected_index": 135,
+        "observed_index": 138
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 136,
+        "observed_index": 139
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 137,
+        "observed_index": 140
+      },
+      {
+        "operation": "match",
+        "expected": "sound",
+        "observed": "sound",
+        "expected_index": 138,
+        "observed_index": 141
+      },
+      {
+        "operation": "match",
+        "expected": "or",
+        "observed": "or",
+        "expected_index": 139,
+        "observed_index": 142
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 140,
+        "observed_index": 143
+      },
+      {
+        "operation": "match",
+        "expected": "steady",
+        "observed": "steady",
+        "expected_index": 141,
+        "observed_index": 144
+      },
+      {
+        "operation": "match",
+        "expected": "seat",
+        "observed": "seat",
+        "expected_index": 142,
+        "observed_index": 145
+      },
+      {
+        "operation": "match",
+        "expected": "listen",
+        "observed": "listen",
+        "expected_index": 143,
+        "observed_index": 146
+      },
+      {
+        "operation": "match",
+        "expected": "again",
+        "observed": "again",
+        "expected_index": 144,
+        "observed_index": 147
+      },
+      {
+        "operation": "match",
+        "expected": "to",
+        "observed": "to",
+        "expected_index": 145,
+        "observed_index": 148
+      },
+      {
+        "operation": "match",
+        "expected": "the",
+        "observed": "the",
+        "expected_index": 146,
+        "observed_index": 149
+      },
+      {
+        "operation": "match",
+        "expected": "sounds",
+        "observed": "sounds",
+        "expected_index": 147,
+        "observed_index": 150
+      },
+      {
+        "operation": "match",
+        "expected": "around",
+        "observed": "around",
+        "expected_index": 148,
+        "observed_index": 151
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 149,
+        "observed_index": 152
+      },
+      {
+        "operation": "match",
+        "expected": "you",
+        "observed": "you",
+        "expected_index": 150,
+        "observed_index": 153
+      },
+      {
+        "operation": "match",
+        "expected": "may",
+        "observed": "may",
+        "expected_index": 151,
+        "observed_index": 154
+      },
+      {
+        "operation": "match",
+        "expected": "stretch",
+        "observed": "stretch",
+        "expected_index": 152,
+        "observed_index": 155
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 153,
+        "observed_index": 156
+      },
+      {
+        "operation": "match",
+        "expected": "fingers",
+        "observed": "fingers",
+        "expected_index": 154,
+        "observed_index": 157
+      },
+      {
+        "operation": "match",
+        "expected": "slightly",
+        "observed": "slightly",
+        "expected_index": 155,
+        "observed_index": 158
+      },
+      {
+        "operation": "match",
+        "expected": "before",
+        "observed": "before",
+        "expected_index": 156,
+        "observed_index": 159
+      },
+      {
+        "operation": "match",
+        "expected": "opening",
+        "observed": "opening",
+        "expected_index": 157,
+        "observed_index": 160
+      },
+      {
+        "operation": "match",
+        "expected": "your",
+        "observed": "your",
+        "expected_index": 158,
+        "observed_index": 161
+      },
+      {
+        "operation": "match",
+        "expected": "eyes",
+        "observed": "eyes",
+        "expected_index": 159,
+        "observed_index": 162
+      }
+    ]
+  },
+  "original_failure_reasons": [],
+  "original_review_reasons": [],
+  "audio_path": "/Users/jakob/codestuff/Whoopy/evaluations/benchmarks/2026-10-28/production-new-writer/runs/6b9ab4f4-9b08-4c1b-a7cc-98654dbb6aea/narration.wav",
+  "audio_sha256": "f86dee91bb1fe72cfe1d974e0dc2dcd8dd8694a5cf7507bf3431b90dcc79f9ad",
+  "audio_state_at_reassessment": {
+    "sha256": "f86dee91bb1fe72cfe1d974e0dc2dcd8dd8694a5cf7507bf3431b90dcc79f9ad",
+    "size_bytes": 8640050,
+    "mtime_ns": 1793234145861300449
+  },
+  "expected_transcript": "Sit with your feet on the floor or a cushion. Let your hands rest naturally—you may adjust anytime.\n\nListen to nearby sounds—the hum of air, a clock, or voices. Feel the steady support of your seat beneath you.\n\nPick one sound to focus on, like the quiet or a distant tone. When your mind drifts, simply return to that sound.\n\nNotice how your body settles into the seat’s support. Let that steady sound guide you, like a quiet thread pulling you back when needed.\n\nObserve your hands resting—light and open. If your thoughts shift, gently come back to the same sound you chose earlier.\n\nStay with the sound and the support beneath you. You can explore this quietly on your own now.\n\nWhenever you like, shift your focus—but you can always return to the sound or the steady seat.\n\nListen again to the sounds around you. You may stretch your fingers slightly before opening your eyes.\n",
+  "expected_text_sha256": "9c9f31bcfc34197c3bbd8896f148f26da0b44533a7a56a28b81498183bc99c5e",
+  "existing_asr_transcript": " Sit with your feet on the floor or a cushion. Let your hands rest naturally. You may adjust any time. Listen to nearby sounds, the hum of air, a clock or voices. faces, feel the steady support of your seat beneath you. Pick one sound to focus on, like the quiet or a distant tone. When your mind drifts, simply return to that sound. Notice how your body settles into the seat's support. Let that steady sound guide you, like a quiet thread pulling you back when needed. Observe your hands resting light and open. If your thoughts shift, gently come back to the same sound you chose earlier. to stay with the sound and the support beneath you. You can explore this quietly on your own now. Whenever you like, shift your focus, but you can always return to the sound or the steady seat. Listen again to the sounds around you. You may stretch your fingers slightly before opening your eyes.",
+  "existing_asr_engine": "mlx-whisper",
+  "existing_pcm_pass": true,
+  "existing_pcm_receipt": {
+    "frame_count": 4320003,
+    "sample_rate": 24000,
+    "duration_seconds": 180.000125,
+    "nonfinite_samples": 0,
+    "peak": 0.50115966796875,
+    "rms": 0.04999726729786216,
+    "clipped_fraction": 0.0,
+    "silent_window_fraction": 0.46805910454393956,
+    "leading_silence_seconds": 0.06,
+    "trailing_silence_seconds": 7.98,
+    "zero_crossing_fraction": 0.046924515312724395,
+    "difference_to_signal_energy": 0.0586564307787468,
+    "speech_established_by_pcm": false,
+    "channel_count": 1
+  },
+  "existing_pcm_pass_basis": "Inherited original pass receipt with recorded PCM diagnostics and no failure/review reasons.",
+  "existing_qualification_chain": {},
+  "policy": {
+    "any_insertion_deletion_or_substitution": "review",
+    "zero_edits_with_existing_pcm_pass": "pass",
+    "original_fail": "fail",
+    "mismatches_are_not_automatic_rejection": true
+  },
+  "limits": [
+    "Derived classification of existing receipts only; no new ASR or acoustic inspection.",
+    "Word differences may come from recognition or speech; listening must resolve them.",
+    "A zero-edit existing receipt is not a claim of newly established word-perfect audio.",
+    "Original failed receipts, including Vox full-file ASR, remain unchanged."
+  ]
+}

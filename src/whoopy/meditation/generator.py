@@ -38,7 +38,7 @@ from whoopy.meditation.pacing import (
     split_sentences,
 )
 from whoopy.meditation.prompts import PromptBundle
-from whoopy.meditation.recipes import SLEEP
+from whoopy.meditation.recipes import SLEEP, RecipeLibrary
 from whoopy.meditation.safety import ContentSafetyError, validate_meditation_text
 from whoopy.ports import ScriptGenerationRequest, ScriptGenerator
 from whoopy.timeline import SilenceSegment, Timeline, build_script_timeline
@@ -737,6 +737,7 @@ class LocalMeditationGenerator:
         prompts: PromptBundle,
         *,
         blueprints: BlueprintLibrary | None = None,
+        recipes: RecipeLibrary | None = None,
         max_validation_attempts: int = 3,
         max_parallel_sections: int = 1,
         articulation_words_per_minute: int = 123,
@@ -752,6 +753,7 @@ class LocalMeditationGenerator:
         self.adapter = adapter
         self.prompts = prompts
         self.blueprints = blueprints
+        self.recipes = recipes
         self.max_validation_attempts = max_validation_attempts
         self.max_parallel_sections = max_parallel_sections
         self.articulation_words_per_minute = articulation_words_per_minute

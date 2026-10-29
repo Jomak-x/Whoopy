@@ -262,18 +262,15 @@ def verify_audio(
             failures.append("Independent ASR recognized no words.")
         if comparison["word_error_rate"] > 0.35 or comparison["ordered_word_coverage"] < 0.65:
             failures.append("ASR transcript substantially disagrees with expected content.")
-        elif comparison["word_error_rate"] > 0.15 or comparison["ordered_word_coverage"] < 0.85:
+        if any(comparison[key] for key in ("insertions", "deletions", "substitutions")):
             reviews.append("ASR transcript needs review for missing, changed, or extra words.")
         if comparison["possible_truncation"]:
             failures.append("Expected ending is missing: possible truncated speech.")
         if comparison["longest_contiguous_error_span"] >= 8:
             failures.append("ASR found a contiguous block of at least eight word-level errors.")
-        elif comparison["longest_contiguous_error_span"] >= 3:
-            reviews.append("ASR found a contiguous block of at least three word-level errors.")
-        if comparison["insertions"] >= max(3, math.ceil(comparison["expected_word_count"] * 0.1)):
-            reviews.append("Unexpected ASR words: inspect repetition or hallucinated content.")
     return {
         "schema_version": 1,
+        "policy_id": "normalized-word-mismatch-review-v3",
         "created_at": datetime.now(UTC).isoformat(),
         "status": "fail" if failures else "review" if reviews else "pass",
         "failure_reasons": failures,
@@ -293,11 +290,11 @@ def verify_audio(
             "Narration mode permits intentional silence; expected words still require recognition.",
         ],
         "thresholds": {
-            "pass_max_wer": 0.15,
-            "pass_min_coverage": 0.85,
+            "pass_max_wer": 0.0,
+            "pass_min_coverage": 1.0,
             "fail_wer_above": 0.35,
             "fail_coverage_below": 0.65,
             "fail_contiguous_error_span_at_least": 8,
-            "review_contiguous_error_span_at_least": 3,
+            "review_word_edit_count_at_least": 1,
         },
     }
