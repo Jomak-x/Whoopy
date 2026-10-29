@@ -12,10 +12,16 @@ from whoopy.artifacts import TargetPlatform
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.audio.models import PcmAudio
 from whoopy.audio.processing import SpeechProcessingSettings
+from whoopy.audio.synthesis import TransientSynthesisError
 from whoopy.pipeline.generation import RunModelMetadata, ScriptRunConfig, TTSRunSettings
-from whoopy.pipeline.runs import RunStatus, RunStore
-from whoopy.pipeline.worker import LocalWorker, WorkerError, fit_generated_timeline_to_real_speech
-from whoopy.timeline import SilenceSegment, SpeechSegment, Timeline
+from whoopy.pipeline.runs import RunStage, RunStatus, RunStore
+from whoopy.pipeline.worker import (
+    LocalWorker,
+    RetryPolicy,
+    WorkerError,
+    fit_generated_timeline_to_real_speech,
+)
+from whoopy.timeline import SilenceSegment, SpeechSegment, Timeline, build_script_timeline
 
 RUN_ID = UUID("22222222-2222-4222-8222-222222222222")
 START = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
@@ -331,3 +337,95 @@ def test_worker_saves_failed_state_when_timeline_building_fails(tmp_path: Path) 
     assert failed.error == "RuntimeError: fixture builder failed"
     assert failed.timeline_artifact is None
     assert not store.timeline_path(RUN_ID).exists()
+
+
+@pytest.mark.parametrize("failures", [1, 3])
+def test_inference_telemetry_counts_every_retry(tmp_path: Path, failures: int) -> None:
+    class RetryingSynthesizer(FixtureSpeechSynthesizer):
+        calls = 0
+
+        def synthesize(self, segment: SpeechSegment) -> PcmAudio:
+            self.calls += 1
+            if self.calls <= failures:
+                raise TransientSynthesisError("temporary failure")
+            return super().synthesize(segment)
+
+    store = RunStore(tmp_path / "runs")
+    synthesizer = RetryingSynthesizer()
+    store.create_script_run(
+        script="Notice the support beneath you.",
+        source_name="retry.md",
+        resolved_config=ScriptRunConfig(
+            profile="basic",
+            target=TargetPlatform(operating_system="linux", architecture="x86_64"),
+            tts=TTSRunSettings(
+                voice_name="fixture",
+                speaker_id=0,
+                speed=1,
+                num_threads=1,
+                provider="cpu",
+                language="English",
+            ),
+            processing=SpeechProcessingSettings(),
+        ),
+        model_metadata=RunModelMetadata(tts=synthesizer.metadata),
+        run_id=RUN_ID,
+        created_at=START,
+    )
+    worker = LocalWorker(
+        store,
+        synthesizer=synthesizer,
+        retry_policy=RetryPolicy(max_attempts=3),
+        sleeper=lambda _delay: None,
+        timeline_builder=lambda record, created_at: build_script_timeline(
+            run_id=record.run_id, script=store.load_script(record.run_id), created_at=created_at
+        ),
+    )
+    if failures == 3:
+        with pytest.raises(WorkerError, match="exhausted"):
+            worker.process(RUN_ID)
+    else:
+        worker.process(RUN_ID)
+
+    telemetry = store.load_model_metadata(RUN_ID).telemetry
+    assert telemetry is not None
+    assert synthesizer.calls == (3 if failures == 3 else 2)
+    assert telemetry.tts.inference_calls.value == synthesizer.calls
+
+
+@pytest.mark.parametrize("interruption", [KeyboardInterrupt, RuntimeError])
+def test_directory_flush_failure_preserves_committed_progress(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    interruption: type[BaseException],
+) -> None:
+    store = RunStore(tmp_path / "runs")
+    store.create("Breathe slowly.", run_id=RUN_ID, created_at=START)
+    flush = RunStore._fsync_directory
+    interrupted = False
+
+    def fail_flush_once(directory: Path) -> None:
+        nonlocal interrupted
+        durable = store.load(RUN_ID)
+        if (
+            not interrupted
+            and directory == store.run_directory(RUN_ID)
+            and durable.execution is not None
+            and durable.execution.stage is RunStage.ASSEMBLING
+        ):
+            interrupted = True
+            raise interruption("interrupted directory flush")
+        flush(directory)
+
+    monkeypatch.setattr(RunStore, "_fsync_directory", staticmethod(fail_flush_once))
+    expected = KeyboardInterrupt if interruption is KeyboardInterrupt else WorkerError
+    with pytest.raises(expected, match="interrupted directory flush"):
+        LocalWorker(store).process(RUN_ID)
+
+    saved = store.load(RUN_ID)
+    assert interrupted
+    assert saved.status is (
+        RunStatus.INTERRUPTED if interruption is KeyboardInterrupt else RunStatus.FAILED
+    )
+    assert saved.execution is not None
+    assert saved.execution.stage is RunStage.ASSEMBLING

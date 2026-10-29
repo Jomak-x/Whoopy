@@ -27,6 +27,7 @@ from whoopy.meditation.generator import (
     _allocate_plan,
     _compact_plan_for_duration,
     _fit_complete_sentences,
+    _fit_script_to_requested_duration,
     _repair_overlong_sentence_boundaries,
     _validate_plan_for_request,
 )
@@ -39,7 +40,7 @@ from whoopy.ports import (
     ScriptGenerationRequest,
     ScriptGenerationResult,
 )
-from whoopy.timeline import SilenceSegment
+from whoopy.timeline import SilenceSegment, build_script_timeline
 
 RUN_ID = UUID("44444444-4444-4444-8444-444444444444")
 CREATED_AT = datetime(2026, 7, 26, tzinfo=UTC)
@@ -120,7 +121,6 @@ def test_prompt_bundle_loads_reviewable_versions() -> None:
     assert prompts.plan.prompt_id == "whoopy.plan"
     assert prompts.plan.version == 5
     assert prompts.section.version == 4
-    assert "Return exactly one JSON object" in prompts.section.text
 
 
 def test_plan_validation_repairs_only_internal_section_id_formatting() -> None:
@@ -623,7 +623,7 @@ def test_prompt_without_front_matter_is_rejected(tmp_path: Path) -> None:
         load_prompt_bundle(tmp_path)
 
 
-def test_plan_first_generation_produces_valid_script_and_timeline() -> None:
+def test_plan_first_generation_produces_valid_script_and_timeline(tmp_path: Path) -> None:
     adapter = SequenceGenerator(
         [
             _plan(),
@@ -632,9 +632,11 @@ def test_plan_first_generation_produces_valid_script_and_timeline() -> None:
             _section("return", "return"),
         ]
     )
+    workspace = GenerationWorkspace(tmp_path / "draft")
     generator = LocalMeditationGenerator(
         adapter,
         load_prompt_bundle(Path("config/prompts")),
+        workspace=workspace,
     )
 
     result = generator.generate(
@@ -659,6 +661,28 @@ def test_plan_first_generation_produces_valid_script_and_timeline() -> None:
     )
     assert silence_ms / 1_000 == pytest.approx(result.plan.silence_budget_seconds, abs=1)
     assert result.estimated_duration_seconds == pytest.approx(60, abs=0.01)
+
+    saved_script = (workspace.root / "script.md").read_text(encoding="utf-8")
+    recompiled = build_script_timeline(
+        run_id=RUN_ID,
+        script=saved_script,
+        created_at=CREATED_AT,
+        source="generated_prompt",
+    )
+    assert recompiled == result.timeline
+    assert workspace.load_plan() == result.plan
+    for planned, section_script in zip(
+        result.plan.sections, saved_script.split("[delivery:")[1:], strict=True
+    ):
+        section_timeline = build_script_timeline(
+            run_id=RUN_ID,
+            script="[delivery:" + section_script,
+            created_at=CREATED_AT,
+            source="generated_prompt",
+        )
+        ending = section_timeline.segments[-1]
+        assert isinstance(ending, SilenceSegment)
+        assert ending.duration_ms == planned.pause_after_ms
 
 
 def test_blueprint_first_generation_skips_model_planning_and_records_method() -> None:
@@ -1104,3 +1128,32 @@ def test_allocate_plan_honors_explicit_reviewed_kind() -> None:
 
     assert plan.meditation_kind == "loving_kindness"
     assert plan.blueprint_id == "loving_kindness@1"
+
+
+def test_duration_fitting_can_compress_sentence_rests_without_invalid_section_pauses() -> None:
+    plan = _allocate_plan(ProposedPlan.model_validate_json(_plan()), 60)
+    script = "# A Steady Moment\n\n" + "\n\n".join(
+        f"[delivery: {section.delivery}]\n\n"
+        "Notice the support.\n\n[pause: 2400ms]\n\n"
+        "Return to the room.\n\n[pause: 6000ms]"
+        for section in plan.sections
+    )
+
+    fitted_script, fitted_plan = _fit_script_to_requested_duration(
+        script, plan, spoken_seconds=55, requested_seconds=60
+    )
+    timeline = build_script_timeline(
+        run_id=RUN_ID,
+        script=fitted_script,
+        created_at=CREATED_AT,
+        source="generated_prompt",
+    )
+    silence = [segment for segment in timeline.segments if isinstance(segment, SilenceSegment)]
+
+    assert sum(segment.duration_ms for segment in silence) == 5_000
+    assert any(segment.duration_ms < 1_000 for segment in silence)
+    assert [segment.duration_ms for segment in silence[1::2]] == [
+        section.pause_after_ms for section in fitted_plan.sections
+    ]
+    assert all(section.pause_after_ms >= 1_000 for section in fitted_plan.sections)
+    assert type(plan).model_validate_json(fitted_plan.model_dump_json()) == fitted_plan

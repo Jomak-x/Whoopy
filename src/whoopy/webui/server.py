@@ -21,7 +21,7 @@ import time
 import wave
 import webbrowser
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager, nullcontext, suppress
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -2325,7 +2325,7 @@ class LocalWebApplication:
         note: str,
     ) -> dict[str, Any]:
         task = GenerationTask(task_id=run_id, run_id=run_id, mode="plan_regeneration")
-        with self._task_lock:
+        with self._admit_generation(), self._task_lock:
             if any(active.active for active in self._tasks.values()):
                 raise ValueError("One local generation worker is already active.")
             self._tasks[run_id] = task
@@ -2441,9 +2441,17 @@ class LocalWebApplication:
         path = self.runs_directory / run_id / "exports" / "export-manifest.json"
         if not path.is_file():
             return {"available": False, "artifacts": []}
+        manifest = load_export_manifest(path)
+        audio = self.audio_path(run_id)
+        if audio is None:
+            return {"available": False, "artifacts": []}
+        with audio.open("rb") as source:
+            source_sha256 = hashlib.file_digest(source, "sha256").hexdigest()
+        if source_sha256 != manifest.source_sha256:
+            return {"available": False, "artifacts": []}
         return {
             "available": True,
-            **load_export_manifest(path).model_dump(mode="json"),
+            **manifest.model_dump(mode="json"),
         }
 
     def export_path(self, run_id: str, kind: str) -> Path | None:
@@ -2513,7 +2521,8 @@ class LocalWebApplication:
         if not prevalidated and self.run(run_id) is None:
             return None
         task = GenerationTask(task_id=run_id, run_id=run_id)
-        with self._task_lock:
+        admission = nullcontext() if command_name == "cancel" else self._admit_generation()
+        with admission, self._task_lock:
             existing = self._tasks.get(run_id)
             if existing is not None and existing.active:
                 raise ValueError("This run already has an active local worker.")

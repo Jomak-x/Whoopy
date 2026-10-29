@@ -312,6 +312,22 @@ class GenerationRequest(BaseModel):
         return self
 
 
+class LegacyGenerationRequest(GenerationRequest):
+    @model_validator(mode="before")
+    @classmethod
+    def discard_inactive_moss_controls(cls, value: Any) -> Any:
+        if isinstance(value, dict) and value.get("tts_model", "kokoro") in {
+            "kokoro",
+            "fish-1.4",
+        }:
+            return {
+                key: item
+                for key, item in value.items()
+                if key not in {"moss_language", "moss_instruction", "moss_use_reference"}
+            }
+        return value
+
+
 class ModelPackRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1440,9 +1456,17 @@ def create_api(application: LocalWebApplication) -> FastAPI:
         )
         return FileResponse(path)
 
-    @router.post("/generate", status_code=202)
+    @app.post(f"/api/v{API_VERSION}/generate", status_code=202)
     def generate(body: GenerationRequest) -> dict[str, Any]:
         return application.start_generation(body.model_dump(exclude_none=True))
+
+    @app.post("/api/generate", status_code=202, include_in_schema=False)
+    def legacy_generate(body: LegacyGenerationRequest) -> dict[str, Any]:
+        return application.start_generation(body.model_dump(exclude_none=True))
+
+    @app.post("/api/tasks/{task_id}/cancel", status_code=202, include_in_schema=False)
+    def legacy_cancel(task_id: UUID, _body: EmptyBody) -> dict[str, Any]:
+        return _not_found(application.cancel_task(str(task_id)), "Task not found.")
 
     @router.post("/runs/{run_id}/cancel", status_code=202)
     def cancel(run_id: UUID, _body: EmptyBody) -> dict[str, Any]:

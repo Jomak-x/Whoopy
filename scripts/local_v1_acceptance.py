@@ -6,13 +6,16 @@ import argparse
 import hashlib
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 REPOSITORY_IMPORT_ROOT = str(Path(__file__).resolve().parent.parent)
 if REPOSITORY_IMPORT_ROOT not in sys.path:
     sys.path.insert(0, REPOSITORY_IMPORT_ROOT)
 
+import whoopy  # noqa: E402
 from scripts.offline_bundle_acceptance import (  # noqa: E402
     MACOS_SANDBOX_ACTIVE,
     _run_in_macos_network_sandbox,
@@ -26,6 +29,7 @@ from whoopy.release import (  # noqa: E402
     run_acceptance,
     write_acceptance_report,
 )
+from whoopy.release.acceptance import _offline_environment  # noqa: E402
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -73,6 +77,69 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _verified_product_wheel_sha256(product_wheel: Path) -> str:
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import json; from pathlib import Path; import whoopy; "
+            "from whoopy.locations import default_config_directory, runtime_worker_script; "
+            "print(json.dumps({'package': str(Path(whoopy.__file__).parent.resolve()), "
+            "'config': str(default_config_directory().resolve()), "
+            "'workers': {name: str(runtime_worker_script(name).resolve()) for name in "
+            "('fish_speech_1_4_worker.py', 'moss_tts_worker.py', 'qwen3_tts_worker.py')}}))",
+        ],
+        env=_offline_environment(),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    identity = json.loads(probe.stdout)
+    package = Path(identity["package"])
+    config = Path(identity["config"])
+    if package != Path(whoopy.__file__).resolve().parent:
+        raise ValueError("acceptance driver and child resolve different Whoopy packages")
+    with product_wheel.open("rb") as wheel_file:
+        digest = hashlib.file_digest(wheel_file, "sha256").hexdigest()
+        with ZipFile(wheel_file) as wheel:
+            package_members = {
+                name
+                for name in wheel.namelist()
+                if name.startswith("whoopy/") and not name.endswith("/")
+            }
+            if "whoopy/__init__.py" not in package_members:
+                raise ValueError("wheel has no Whoopy package")
+            actual_members = {
+                "whoopy/" + path.relative_to(package).as_posix()
+                for path in package.rglob("*")
+                if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+            }
+            if actual_members != package_members:
+                raise ValueError("executed package file set differs from the wheel")
+            resources: dict[str, Path] = {
+                name: package / name.removeprefix("whoopy/") for name in package_members
+            }
+            for name in wheel.namelist():
+                if name.endswith("/"):
+                    continue
+                _, separator, relative = name.partition(".data/data/share/whoopy/")
+                if not separator:
+                    continue
+                if relative.startswith("config/"):
+                    resources[name] = config / relative.removeprefix("config/")
+                elif relative.startswith("scripts/"):
+                    worker = relative.removeprefix("scripts/")
+                    resources[name] = Path(identity["workers"][worker])
+            if not any(
+                name.endswith(".data/data/share/whoopy/config/default.yaml") for name in resources
+            ):
+                raise ValueError("wheel has no bundled default configuration")
+            for name, path in resources.items():
+                if not path.is_file() or path.read_bytes() != wheel.read(name):
+                    raise ValueError(f"executed product differs from wheel member {name}")
+    return digest
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
@@ -110,11 +177,10 @@ def main(argv: list[str] | None = None) -> int:
             or product_wheel.suffix != ".whl"
         ):
             raise SystemExit(f"--product-wheel is not a Whoopy wheel: {product_wheel}")
-        digest = hashlib.sha256()
-        with product_wheel.open("rb") as source:
-            while chunk := source.read(1024 * 1024):
-                digest.update(chunk)
-        product_wheel_sha256 = digest.hexdigest()
+        try:
+            product_wheel_sha256 = _verified_product_wheel_sha256(product_wheel)
+        except (OSError, ValueError, BadZipFile, subprocess.SubprocessError) as error:
+            raise SystemExit(f"--product-wheel does not match the executed product: {error}") from error
     cases = suite.cases
     if args.case_ids:
         requested = tuple(dict.fromkeys(args.case_ids))

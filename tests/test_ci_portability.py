@@ -5,6 +5,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
 
+import pytest
+import yaml
+
 from scripts.aggregate_ci_portability import EXPECTED_TARGETS, aggregate
 from scripts.localhost_studio_lifecycle import (
     _wait_for_completion,
@@ -177,15 +180,78 @@ def test_studio_lifecycle_waits_for_immutable_script_before_cancelling() -> None
     assert result["source_kind"] == "script_file"
 
 
+def _validate_action_reference(reference: str) -> None:
+    if reference.startswith("./"):
+        return
+    action, separator, revision = reference.rpartition("@")
+    if not action or not separator or len(revision) != 40 or any(
+        character not in "0123456789abcdef" for character in revision
+    ):
+        raise ValueError(f"Action is not pinned to an immutable commit: {reference}")
+
+
+def _validate_action_references(workflow: object) -> None:
+    document = cast(dict[str, object], workflow)
+    jobs = cast(dict[str, object], document["jobs"])
+    for job in jobs.values():
+        normalized_job = cast(dict[str, object], job)
+        job_reference = normalized_job.get("uses")
+        if isinstance(job_reference, str):
+            _validate_action_reference(job_reference)
+        steps = normalized_job.get("steps", [])
+        for step in cast(list[dict[str, object]], steps):
+            reference = step.get("uses")
+            if isinstance(reference, str):
+                _validate_action_reference(reference)
+
+
 def test_ci_third_party_actions_are_pinned_to_immutable_commits() -> None:
-    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-    for line in workflow.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("uses:"):
-            continue
-        reference = stripped.removeprefix("uses:").strip()
-        if reference.startswith("./"):
-            continue
-        revision = reference.rsplit("@", 1)[-1]
-        assert len(revision) == 40
-        assert all(character in "0123456789abcdef" for character in revision)
+    workflow = yaml.safe_load(Path(".github/workflows/ci.yml").read_text(encoding="utf-8"))
+
+    _validate_action_references(workflow)
+
+
+@pytest.mark.parametrize(
+    ("reference", "job_level"),
+    [
+        ("actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683", False),
+        ("./.github/actions/setup", False),
+        ("owner/repo/.github/workflows/quality.yml@" + "a" * 40, True),
+        ("./.github/workflows/quality.yml", True),
+    ],
+)
+def test_ci_action_validation_accepts_pinned_and_local_references(
+    reference: str, job_level: bool
+) -> None:
+    job = {"uses": reference} if job_level else {"steps": [{"uses": reference}]}
+
+    _validate_action_references({"jobs": {"quality": job}})
+
+
+@pytest.mark.parametrize(
+    ("reference", "job_level"),
+    [
+        ("actions/checkout@main", False),
+        ("a" * 40, False),
+        ("owner/repo/.github/workflows/quality.yml@v1", True),
+    ],
+)
+def test_ci_action_validation_rejects_floating_references(
+    reference: str, job_level: bool
+) -> None:
+    workflow = (
+        {"jobs": {"quality": {"uses": reference}}}
+        if job_level
+        else yaml.safe_load(
+            f"""
+jobs:
+  quality:
+    steps:
+      - uses: {reference}
+"""
+        )
+    )
+
+    with pytest.raises(ValueError) as error:
+        _validate_action_references(workflow)
+    assert reference in str(error.value)

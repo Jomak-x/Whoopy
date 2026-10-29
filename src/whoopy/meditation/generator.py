@@ -165,48 +165,53 @@ class MeditationGenerationResult(BaseModel):
     writing_method: WritingMethod = "plan_first"
 
 
-def _fit_timeline_to_requested_duration(
-    timeline: Timeline,
+def _fit_script_to_requested_duration(
+    script: str,
+    plan: MeditationPlan,
     *,
     spoken_seconds: float,
     requested_seconds: int,
-) -> Timeline:
-    """Adjust only ordinary quiet so the canonical estimate lands within 5%."""
-
+) -> tuple[str, MeditationPlan]:
+    lines = script.splitlines()
+    pauses: dict[int, int] = {}
+    section_ends: list[int] = []
+    for index, line in enumerate(lines):
+        if line.startswith("[delivery:") and pauses:
+            section_ends.append(next(reversed(pauses)))
+        match = re.fullmatch(r"\[pause: (\d+)ms\]", line)
+        if match is not None:
+            pauses[index] = int(match.group(1))
+    if not pauses:
+        return script, plan
+    section_ends.append(next(reversed(pauses)))
+    section_end_set = set(section_ends)
     target_silence_ms = max(1, round((requested_seconds - spoken_seconds) * 1_000))
-    silence = [segment for segment in timeline.segments if isinstance(segment, SilenceSegment)]
-    if not silence:
-        return timeline
-    current_ms = sum(segment.duration_ms for segment in silence)
-    delta = target_silence_ms - current_ms
-    durations = {segment.id: segment.duration_ms for segment in silence}
+    delta = target_silence_ms - sum(pauses.values())
     if delta >= 0:
         remaining = delta
-        for segment in reversed(silence):
-            addition = min(600_000 - durations[segment.id], remaining)
-            durations[segment.id] += addition
+        for index in reversed(pauses):
+            maximum = 120_000 if index in section_end_set else 600_000
+            addition = min(maximum - pauses[index], remaining)
+            pauses[index] += addition
             remaining -= addition
             if remaining == 0:
                 break
     else:
         remaining = -delta
-        for segment in sorted(silence, key=lambda item: item.duration_ms, reverse=True):
-            reducible = max(0, durations[segment.id] - 250)
-            reduction = min(reducible, remaining)
-            durations[segment.id] -= reduction
+        for index in sorted(pauses, key=lambda item: pauses[item], reverse=True):
+            minimum = 1_000 if index in section_end_set else 250
+            reduction = min(max(0, pauses[index] - minimum), remaining)
+            pauses[index] -= reduction
             remaining -= reduction
             if remaining == 0:
                 break
-    return timeline.model_copy(
-        update={
-            "segments": [
-                segment.model_copy(update={"duration_ms": durations[segment.id]})
-                if isinstance(segment, SilenceSegment)
-                else segment
-                for segment in timeline.segments
-            ]
-        }
-    )
+    for index, duration in pauses.items():
+        lines[index] = f"[pause: {duration}ms]"
+    sections = [
+        section.model_copy(update={"pause_after_ms": pauses[index]})
+        for section, index in zip(plan.sections, section_ends, strict=True)
+    ]
+    return "\n".join(lines) + "\n", plan.model_copy(update={"sections": sections})
 
 
 def _reallocate_section_pauses_for_actual_prose(
@@ -237,7 +242,7 @@ def _reallocate_section_pauses_for_actual_prose(
         round((plan.requested_duration_seconds - spoken_seconds) * 1_000),
     )
     section_budget_ms = max(
-        current_section_ms,
+        len(plan.sections) * 1_000,
         target_total_ms - sentence_rest_ms,
     )
     remaining = section_budget_ms - len(plan.sections) * 1_000
@@ -1197,17 +1202,17 @@ class LocalMeditationGenerator:
             preliminary_timeline,
             spoken_seconds=spoken_seconds,
         )
-        script = compile_script(timed_plan)
+        script, timed_plan = _fit_script_to_requested_duration(
+            compile_script(timed_plan),
+            timed_plan,
+            spoken_seconds=spoken_seconds,
+            requested_seconds=duration_seconds,
+        )
         timeline = build_script_timeline(
             run_id=run_id,
             script=script,
             created_at=timestamp,
             source="generated_prompt",
-        )
-        timeline = _fit_timeline_to_requested_duration(
-            timeline,
-            spoken_seconds=spoken_seconds,
-            requested_seconds=duration_seconds,
         )
         silence_seconds = (
             sum(segment.duration_ms for segment in timeline.segments if segment.type == "SILENCE")

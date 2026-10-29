@@ -13,7 +13,10 @@ from uuid import UUID, uuid4
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.audio.models import PcmAudio
+from whoopy.audio.processing import processed_speech_metadata
+from whoopy.audio.synthesis import cache_key_for_identity
 from whoopy.pipeline.checkpoints import SegmentCheckpoint, SegmentCheckpointStore
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
 from whoopy.pipeline.runs import RunStatus, RunStore, RunStoreError
@@ -153,6 +156,24 @@ class SegmentTakeStore:
                 if record.status in {RunStatus.QUEUED, RunStatus.RUNNING}:
                     raise SegmentTakeError("Wait for generation to stop before choosing a take.")
                 manifest, checkpoint, audio = self._load_take(parsed, segment_id, take_id)
+                segment = self._validate_speech_segment(parsed, segment_id)
+                if record.source_kind == "fixture_prompt":
+                    identity = FixtureSpeechSynthesizer.cache_identity
+                else:
+                    metadata = self.store.load_model_metadata(parsed)
+                    config = self.store.load_resolved_config(parsed)
+                    identity = processed_speech_metadata(
+                        metadata.tts,
+                        inner_cache_identity=metadata.tts.cache_identity,
+                        settings=config.processing,
+                    ).cache_identity
+                expected_key = cache_key_for_identity(
+                    segment,
+                    synthesizer_identity=identity,
+                    sample_rate=manifest.sample_rate,
+                )
+                if checkpoint.cache_key != expected_key or manifest.cache_key != expected_key:
+                    raise SegmentTakeError("Take is incompatible with the current speech segment.")
                 previous = self.selected(parsed, segment_id)
                 self.checkpoints.save(checkpoint, audio=audio)
                 root = self._segment_root(parsed, segment_id)
@@ -276,7 +297,7 @@ class SegmentTakeStore:
         finally:
             shutil.rmtree(staging, ignore_errors=True)
 
-    def _validate_speech_segment(self, run_id: UUID, segment_id: str) -> None:
+    def _validate_speech_segment(self, run_id: UUID, segment_id: str) -> SpeechSegment:
         matches = [
             segment
             for segment in self.store.load_timeline(run_id).segments
@@ -286,6 +307,7 @@ class SegmentTakeStore:
             raise SegmentTakeError(f"Segment {segment_id} is not present in run {run_id}.")
         if not isinstance(matches[0], SpeechSegment):
             raise SegmentTakeError(f"Segment {segment_id} is not a speech segment.")
+        return matches[0]
 
     def _segment_root(self, run_id: UUID | str, segment_id: str) -> Path:
         # Reuse the checkpoint store's segment-ID validation before constructing

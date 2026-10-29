@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 import pytest
@@ -10,10 +11,11 @@ from fastapi.testclient import TestClient
 from whoopy.artifacts import TargetPlatform
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.audio.models import PcmAudio
-from whoopy.audio.processing import SpeechProcessingSettings
+from whoopy.audio.processing import ProcessedSpeechSynthesizer, SpeechProcessingSettings
+from whoopy.audio.synthesis import cache_key_for
 from whoopy.pipeline.checkpoints import SegmentCheckpointStore
 from whoopy.pipeline.generation import RunModelMetadata, ScriptRunConfig, TTSRunSettings
-from whoopy.pipeline.revisions import RevisionStore
+from whoopy.pipeline.revisions import RevisionRequest, RevisionStore, TimelineEdit
 from whoopy.pipeline.runs import (
     AUDIO_FILENAME,
     AUDIO_MANIFEST_FILENAME,
@@ -63,15 +65,17 @@ def _completed_run(root: Path) -> tuple[RunStore, PcmAudio]:
     store.audio_path(RUN_ID).write_bytes(b"wave")
     store.audio_manifest_path(RUN_ID).write_text("{}")
     store.quality_path(RUN_ID).write_text("{}")
-    speech_ids = [segment.id for segment in timeline.segments if segment.type == "SPEECH"]
+    speech_segments = [segment for segment in timeline.segments if segment.type == "SPEECH"]
     original = PcmAudio(pcm_s16le=b"\x10\x00" * 480, sample_rate=24_000)
     checkpoints = SegmentCheckpointStore(store)
-    for index, segment_id in enumerate(speech_ids):
+    for index, segment in enumerate(speech_segments):
         audio = original if index == 0 else PcmAudio(b"\x20\x00" * 480, 24_000)
         checkpoint = checkpoints.completed_checkpoint(
             run_id=RUN_ID,
-            segment_id=segment_id,
-            cache_key=f"{index + 1:x}" * 64,
+            segment_id=segment.id,
+            cache_key=cache_key_for(
+                segment, ProcessedSpeechSynthesizer(FixtureSpeechSynthesizer())
+            ),
             audio=audio,
             attempt_count=1,
             cache_hit=False,
@@ -90,10 +94,10 @@ def _completed_run(root: Path) -> tuple[RunStore, PcmAudio]:
             process_attempts=1,
             resume_count=0,
             cache_hits=0,
-            cache_misses=len(speech_ids),
+            cache_misses=len(speech_segments),
             checkpoint_reuses=0,
-            speech_segments_total=len(speech_ids),
-            speech_segments_completed=len(speech_ids),
+            speech_segments_total=len(speech_segments),
+            speech_segments_completed=len(speech_segments),
         ),
         execution=RunExecution(stage=RunStage.COMPLETED),
     )
@@ -112,7 +116,7 @@ def test_production_checkpoints_become_immutable_takes_and_choices_only_reassemb
     alternative_checkpoint = checkpoints.completed_checkpoint(
         run_id=RUN_ID,
         segment_id="speech-0001",
-        cache_key="a" * 64,
+        cache_key=original.cache_key,
         audio=alternative_audio,
         attempt_count=2,
         cache_hit=False,
@@ -183,7 +187,7 @@ def test_versioned_take_api_lists_previews_and_selects_without_resynthesis(
     alternative_checkpoint = checkpoints.completed_checkpoint(
         run_id=RUN_ID,
         segment_id="speech-0001",
-        cache_key="b" * 64,
+        cache_key=original.cache_key,
         audio=alternative_audio,
         attempt_count=2,
         cache_hit=False,
@@ -234,3 +238,45 @@ def test_versioned_take_api_lists_previews_and_selects_without_resynthesis(
     assert chosen.status_code == 202
     assert chosen.json()["selection"]["selected_take_id"] == alternative.take_id
     assert chosen.json()["revision"]["change_kind"] == "assembly_only"
+
+
+@pytest.mark.parametrize("action", ["choose", "undo", "restore"])
+@pytest.mark.parametrize("change", ["text", "delivery"])
+def test_incompatible_takes_do_not_replace_checkpoint_or_selection(
+    tmp_path: Path,
+    action: Literal["choose", "undo", "restore"],
+    change: str,
+) -> None:
+    store, _audio = _completed_run(tmp_path / "runs")
+    takes = SegmentTakeStore(store)
+    original = takes.capture_active(RUN_ID, "speech-0001", source="original")
+    takes.choose(RUN_ID, "speech-0001", original.take_id)
+    request = (
+        RevisionRequest(script=SCRIPT.replace("Welcome.", "Settle into your chair."))
+        if change == "text"
+        else RevisionRequest(timeline=TimelineEdit(delivery={"speech-0001": "warm"}))
+    )
+    RevisionStore(store).create(RUN_ID, request)
+    checkpoint_root = SegmentCheckpointStore(store).segment_directory(RUN_ID, "speech-0001")
+    take_root = store.run_directory(RUN_ID) / "takes" / "speech-0001"
+    before = {
+        path: path.read_bytes()
+        for root in (checkpoint_root, take_root)
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+    with pytest.raises(SegmentTakeError, match="incompatible"):
+        if action == "undo":
+            takes.undo(RUN_ID, "speech-0001")
+        else:
+            takes.choose(RUN_ID, "speech-0001", original.take_id, action=action)
+
+    after = {
+        path: path.read_bytes()
+        for root in (checkpoint_root, take_root)
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+    assert after == before
+    assert takes.selected(RUN_ID, "speech-0001") == original.take_id

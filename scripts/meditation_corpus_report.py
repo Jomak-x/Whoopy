@@ -248,7 +248,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         or report.evaluation_version != evaluation.version
     ):
         parser.error("bake-off report does not match the requested evaluation set revision")
+    profiles = set(report.candidates)
+    if len(profiles) != 1 or {result.profile for result in report.results} != profiles:
+        parser.error("corpus acceptance requires a bake-off report for exactly one profile")
     by_case = {result.case_id: result for result in report.results}
+    if len(by_case) != len(report.results) or set(by_case) != {
+        case.id for case in evaluation.cases
+    }:
+        parser.error("bake-off report must contain each evaluation case exactly once")
     cases = [
         inspect_case(
             case=case,

@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 from uuid import UUID
 
 from whoopy.evaluation import (
@@ -26,6 +26,8 @@ from whoopy.evaluation.pacing_profiles import (
     PacingProfileError,
     PacingProfileRegistry,
 )
+from whoopy.meditation.models import MeditationKind
+from whoopy.meditation.recipes import route_session
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
 from whoopy.ports import AdapterMetadata
 from whoopy.webui.server import LocalWebApplication
@@ -826,8 +828,7 @@ class LocalProductionExperimentExecutor:
             blueprint_sha256=self._value_hash(
                 {
                     "requested": request.case.blueprint_id or request.case.category,
-                    "actual_id": plan.get("blueprint_id"),
-                    "actual_version": plan.get("blueprint_version"),
+                    "category": request.case.category,
                 }
             ),
             generation_schema_sha256=self._value_hash(schema_payload),
@@ -907,7 +908,7 @@ class LocalProductionExperimentExecutor:
             expect(
                 "tts.instruction",
                 tts.get("instruction"),
-                self._moss_instruction(voice.delivery, voice.intensity),
+                voice.instruction or self._moss_instruction(voice.delivery, voice.intensity),
             )
         elif expected_backend is not None and expected_backend.startswith("qwen3-"):
             expect("tts.language", tts.get("language"), voice.language)
@@ -929,7 +930,19 @@ class LocalProductionExperimentExecutor:
             request.case.duration_seconds if derived else None,
         )
         expect("source.prompt", source_prompt, request.case.prompt)
-        if request.case.blueprint_id is not None:
+        if condition.writing_method == "recipe_whole_session":
+            recipe = route_session(
+                request.case.prompt,
+                request.case.duration_seconds,
+                meditation_kind=cast(MeditationKind, request.case.category),
+            ).recipe
+            expect(
+                "source.plan.blueprint_id", source_plan.get("blueprint_id"), recipe.versioned_id
+            )
+            expect(
+                "source.plan.blueprint_version", source_plan.get("blueprint_version"), recipe.version
+            )
+        elif request.case.blueprint_id is not None:
             expect(
                 "source.plan.blueprint_id",
                 source_plan.get("blueprint_id"),

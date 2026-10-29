@@ -712,7 +712,7 @@ def test_progressive_quiet_redistributes_within_target_duration_budget(
     assert durations[-1] / 40_000 > durations[0] / 20_000
 
 
-def test_completed_trial_fingerprints_actual_reviewed_blueprint(tmp_path: Path) -> None:
+def test_completed_trial_fingerprints_requested_blueprint(tmp_path: Path) -> None:
     evaluation = load_evaluation_set(Path("config/evaluation/local-v1.yaml"))
     run_id = uuid4()
     request = ProductionTrialRequest(
@@ -773,8 +773,7 @@ def test_completed_trial_fingerprints_actual_reviewed_blueprint(tmp_path: Path) 
     assert result.controlled_inputs.blueprint_sha256 == executor._value_hash(
         {
             "requested": request.case.blueprint_id,
-            "actual_id": "grounding@1",
-            "actual_version": 1,
+            "category": request.case.category,
         }
     )
 

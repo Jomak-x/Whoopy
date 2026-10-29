@@ -518,9 +518,21 @@ class LegacyRuntimeCleanup:
                     item.source_relative_path, label="cleanup restore destination"
                 )
                 if destination.exists() or destination.is_symlink():
-                    raise LegacyCleanupError(
-                        f"Cannot restore over existing path: {item.source_relative_path}"
-                    )
+                    if source.exists() or source.is_symlink():
+                        raise LegacyCleanupError(
+                            f"Cannot restore over existing path: {item.source_relative_path}"
+                        )
+                    restored = _hash_entry(destination)
+                    if restored != item.before:
+                        raise LegacyCleanupError(
+                            "Existing restore destination failed receipt verification: "
+                            f"{item.source_relative_path}"
+                        )
+                    updated_items = list(receipt.items)
+                    updated_items[index] = item.model_copy(update={"restored": restored})
+                    receipt = receipt.model_copy(update={"items": tuple(updated_items)})
+                    self._write_receipt(receipt)
+                    continue
                 current = _hash_entry(source)
                 if current != item.before:
                     raise LegacyCleanupError(

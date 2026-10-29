@@ -130,31 +130,49 @@ def route_session(
     else:
         recipe_id = "daytime-steadying"
         kind = meditation_kind or "grounding"
-        if REFLECTION.search(prompt) or meditation_kind == "reflection":
-            kind = "reflection"
-            practice = (
+        if meditation_kind is None:
+            if REFLECTION.search(prompt):
+                kind = "reflection"
+            elif re.search(
+                r"\b(?:setback|self.critic|compassion|failed|failure|harsh)\w*\b", prompt, re.I
+            ):
+                kind = "self_compassion"
+            elif re.search(r"\b(?:anxious|anxiety|thought|worr|ruminat)\w*\b", prompt, re.I):
+                kind = "noting"
+            elif re.search(r"\b(?:focus|meeting|concentrat|attention)\w*\b", prompt, re.I):
+                kind = "focused_attention"
+            elif re.search(r"\bbody.scan\b", prompt, re.I):
+                kind = "body_scan"
+        practices = {
+            "reflection": (
                 "Recall one bounded ordinary event; ask one genuine question, then release it."
-            )
-        elif re.search(
-            r"\b(?:setback|self.critic|compassion|failed|failure|harsh)\w*\b", prompt, re.I
-        ):
-            kind = "self_compassion"
-            practice = "Acknowledge one difficulty; offer one modest optional phrase of kindness."
-        elif re.search(r"\b(?:anxious|anxiety|thought|worr|ruminat)\w*\b", prompt, re.I):
-            kind = "noting"
-            practice = (
+            ),
+            "self_compassion": (
+                "Acknowledge one difficulty; offer one modest optional phrase of kindness."
+            ),
+            "noting": (
                 "Notice one thought, optionally name it thinking, and return to the same anchor."
-            )
-        elif re.search(r"\b(?:focus|meeting|concentrat|attention)\w*\b", prompt, re.I):
-            kind = "focused_attention"
-            practice = "Rehearse returning to one concrete anchor; let the next real task wait."
-        elif meditation_kind == "body_scan" or re.search(r"\bbody.scan\b", prompt, re.I):
-            kind = "body_scan"
-            practice = (
+            ),
+            "focused_attention": (
+                "Rehearse returning to one concrete anchor; let the next real task wait."
+            ),
+            "body_scan": (
                 "Notice body areas in one ordered neutral sequence without demanding relaxation."
-            )
-        else:
-            practice = "Explore concrete support and sound, returning to the same familiar anchor."
+            ),
+            "grounding": (
+                "Explore concrete support and sound, returning to the same familiar anchor."
+            ),
+            "breath_awareness": (
+                "Observe natural breathing without controlling it, or use the chosen external "
+                "anchor when breathing is excluded."
+            ),
+            "loving_kindness": "Offer one or two optional well-wishes without demanding a feeling.",
+            "visualization": "Imagine one simple scene while staying connected to the chosen anchor.",
+            "open_awareness": (
+                "Notice sound, sensation, and thought without selecting or changing any of them."
+            ),
+        }
+        practice = practices[kind]
     recipe = next(
         item for item in (library or load_recipe_library()).recipes if item.id == recipe_id
     )

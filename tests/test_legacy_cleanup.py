@@ -162,6 +162,26 @@ def test_cleanup_is_recoverable_and_receipt_records_both_hashes(tmp_path: Path) 
     )
 
 
+def test_restore_resumes_after_rename_before_receipt_update(tmp_path: Path) -> None:
+    service, _root, _weight, _stale = _service(tmp_path)
+    receipt = service.apply(confirmation=service.inspect().confirmation)
+    item = receipt.items[0]
+    source = service.models_root / item.quarantine_relative_path
+    destination = service.models_root / item.source_relative_path
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    source.replace(destination)
+
+    completed = service.restore(
+        receipt.receipt_id,
+        confirmation=service.restore_confirmation(receipt.receipt_id),
+    )
+
+    assert completed.state == "restored"
+    assert all(entry.restored == entry.before for entry in completed.items)
+    assert destination.exists()
+    assert not source.exists()
+
+
 def test_stale_plan_confirmation_is_rejected(tmp_path: Path) -> None:
     service, root, _weight, _stale = _service(tmp_path)
     old_plan = service.inspect()

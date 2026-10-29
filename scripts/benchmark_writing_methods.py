@@ -95,6 +95,8 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--profile", choices=("standard", "lite", "high"), default="standard")
     args = parser.parse_args()
+    if args.output.exists() and any(args.output.iterdir()):
+        raise SystemExit("Evidence already exists; use a new output directory.")
     args.output.mkdir(parents=True, exist_ok=True)
     report: dict[str, Any] = {
         "created_at": datetime.now(UTC).isoformat(),
@@ -109,13 +111,6 @@ def main() -> int:
         seconds, prompt = CASES[case]
         for method in args.method or ("plan_first", "recipe_whole_session"):
             folder = args.output / case / method
-            if (folder / "result.json").exists():
-                saved = json.loads((folder / "result.json").read_text())
-                if saved["status"] not in {"generated_pending_content_review", "failed"}:
-                    raise SystemExit("Nonterminal evidence exists; use a new output directory.")
-                failed = failed or saved["status"] == "failed"
-                report["results"].append(saved)
-                continue
             folder.mkdir(parents=True, exist_ok=True)
             result: dict[str, Any] = {
                 "case": case,

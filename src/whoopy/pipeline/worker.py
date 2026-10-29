@@ -295,7 +295,6 @@ class LocalWorker:
         self.events = RunEventLog(store)
         self.worker_log = WorkerLog(store)
         self._state_lock = threading.RLock()
-        self._last_saved_running: RunRecord | None = None
 
     def process(self, run_id: UUID | str) -> RunRecord:
         """Start one queued run."""
@@ -429,10 +428,13 @@ class LocalWorker:
         inference_calls = 0
         inference_audio_seconds = 0.0
 
+        def record_inference_call() -> None:
+            nonlocal inference_calls
+            inference_calls += 1
+
         try:
             with self._state_lock:
                 self.store.save(running)
-                self._last_saved_running = running
                 self._record_event_best_effort(
                     running.run_id,
                     occurred_at=started_at,
@@ -543,10 +545,10 @@ class LocalWorker:
                                 running,
                                 segment,
                                 cache_key,
+                                on_inference=record_inference_call,
                             )
                         finally:
                             inference_elapsed_seconds += time.perf_counter() - inference_started
-                            inference_calls += 1
                         inference_audio_seconds += audio.frame_count / audio.sample_rate
 
                 prepared_audio[segment.id] = audio
@@ -665,24 +667,26 @@ class LocalWorker:
             return completed
         except Exception as error:
             heartbeat.stop()
-            running = self._last_saved_running or running
-            failed_recovery = _updated_recovery(
-                recovery,
-                failed_segment_id=current_segment_id,
-            )
-            failed_execution = self._required_execution(running).finish(
-                current_segment_id=current_segment_id,
-                message=_execution_message(error),
-            )
-            failed = running.transition(
-                RunStatus.FAILED,
-                updated_at=self.clock(),
-                recovery=failed_recovery,
-                execution=failed_execution,
-                error=f"{type(error).__name__}: {error}",
-            )
             try:
                 with self._state_lock:
+                    running = self._load_owned_progress(running)
+                    if running.status is not RunStatus.RUNNING:
+                        raise
+                    failed_recovery = _updated_recovery(
+                        recovery,
+                        failed_segment_id=current_segment_id,
+                    )
+                    failed_execution = self._required_execution(running).finish(
+                        current_segment_id=current_segment_id,
+                        message=_execution_message(error),
+                    )
+                    failed = running.transition(
+                        RunStatus.FAILED,
+                        updated_at=self.clock(),
+                        recovery=failed_recovery,
+                        execution=failed_execution,
+                        error=f"{type(error).__name__}: {error}",
+                    )
                     self.store.save(failed)
                     self._record_event_best_effort(
                         running.run_id,
@@ -701,26 +705,24 @@ class LocalWorker:
             raise WorkerError(f"Run {running.run_id} failed: {error}") from error
         except BaseException as interruption:
             heartbeat.stop()
-            # A signal may arrive after a progress record is atomically saved
-            # but before its helper returns to the assignment at the call site.
-            # Always finish the newest durable record so interruption handling
-            # cannot roll the stage backward with stale in-memory state.
-            running = self._last_saved_running or running
-            interrupted_execution = self._required_execution(running).finish(
-                current_segment_id=current_segment_id,
-                interruption_kind=self._interruption_kind(interruption),
-                message=(
-                    "Processing stopped unexpectedly. Completed segment checkpoints "
-                    "were kept and this run can be resumed."
-                ),
-            )
-            interrupted = running.transition(
-                RunStatus.INTERRUPTED,
-                updated_at=self.clock(),
-                recovery=recovery,
-                execution=interrupted_execution,
-            )
             with self._state_lock:
+                running = self._load_owned_progress(running)
+                if running.status is not RunStatus.RUNNING:
+                    raise
+                interrupted_execution = self._required_execution(running).finish(
+                    current_segment_id=current_segment_id,
+                    interruption_kind=self._interruption_kind(interruption),
+                    message=(
+                        "Processing stopped unexpectedly. Completed segment checkpoints "
+                        "were kept and this run can be resumed."
+                    ),
+                )
+                interrupted = running.transition(
+                    RunStatus.INTERRUPTED,
+                    updated_at=self.clock(),
+                    recovery=recovery,
+                    execution=interrupted_execution,
+                )
                 self.store.save(interrupted)
                 self._record_event_best_effort(
                     running.run_id,
@@ -959,7 +961,6 @@ class LocalWorker:
         )
         with self._state_lock:
             self.store.save(updated)
-            self._last_saved_running = updated
             if execution.stage is not stage or execution.current_segment_id != current_segment_id:
                 self._record_event_best_effort(
                     running.run_id,
@@ -981,6 +982,17 @@ class LocalWorker:
                 durable_run_stage=stage.value,
             )
         return updated
+
+    def _load_owned_progress(self, running: RunRecord) -> RunRecord:
+        durable = self.store.load(running.run_id)
+        if durable.status is RunStatus.QUEUED:
+            return running
+        if (
+            durable.execution is None
+            or durable.execution.attempt_id != self._required_execution(running).attempt_id
+        ):
+            raise WorkerError(f"Run {running.run_id} is no longer owned by this attempt")
+        return durable
 
     def _heartbeat(self, run_id: UUID, attempt_id: UUID | None) -> None:
         if attempt_id is None:
@@ -1071,6 +1083,8 @@ class LocalWorker:
         running: RunRecord,
         segment: SpeechSegment,
         cache_key: str,
+        *,
+        on_inference: Callable[[], None],
     ) -> PcmAudio:
         previous = self.checkpoints.load_optional(running.run_id, segment.id)
         if previous is not None and previous.cache_key == cache_key:
@@ -1097,6 +1111,7 @@ class LocalWorker:
             self.checkpoints.save(running_checkpoint)
 
             try:
+                on_inference()
                 audio = self.synthesizer.synthesize(segment)
                 integrity_error = pcm_integrity_error(audio)
                 if integrity_error is not None:

@@ -44,14 +44,27 @@ def synthesis_input_bytes(
 ) -> bytes:
     """Return the canonical bytes whose digest identifies synthesis output."""
 
+    return _synthesis_input_bytes(
+        segment,
+        synthesizer_identity=synthesizer.cache_identity,
+        sample_rate=synthesizer.sample_rate,
+    )
+
+
+def _synthesis_input_bytes(
+    segment: SpeechSegment,
+    *,
+    synthesizer_identity: str,
+    sample_rate: int,
+) -> bytes:
     # Future voice, speed, delivery-mode, seed, and model fields belong here
     # when they enter SpeechSegment. Omitting an output-affecting input would
     # incorrectly reuse audio, so this function is intentionally centralized.
     values = {
         "format": "pcm_s16le_mono",
-        "sample_rate": synthesizer.sample_rate,
+        "sample_rate": sample_rate,
         "segment_type": segment.type,
-        "synthesizer_identity": synthesizer.cache_identity,
+        "synthesizer_identity": synthesizer_identity,
         "text": _normalized_text(segment.text),
         "delivery": segment.delivery,
         "intensity": segment.intensity,
@@ -71,4 +84,21 @@ def synthesis_input_bytes(
 def cache_key_for(segment: SpeechSegment, synthesizer: SpeechSynthesizer) -> str:
     """Hash every current synthesis-affecting input for one speech segment."""
 
-    return hashlib.sha256(synthesis_input_bytes(segment, synthesizer)).hexdigest()
+    return cache_key_for_identity(
+        segment,
+        synthesizer_identity=synthesizer.cache_identity,
+        sample_rate=synthesizer.sample_rate,
+    )
+
+
+def cache_key_for_identity(
+    segment: SpeechSegment,
+    *,
+    synthesizer_identity: str,
+    sample_rate: int,
+) -> str:
+    return hashlib.sha256(
+        _synthesis_input_bytes(
+            segment, synthesizer_identity=synthesizer_identity, sample_rate=sample_rate
+        )
+    ).hexdigest()
