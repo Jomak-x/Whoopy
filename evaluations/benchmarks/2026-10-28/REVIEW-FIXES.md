@@ -694,3 +694,20 @@ Only the existing Starlette/httpx deprecation warning appeared.
 Touched Python files were formatted. The whitespace check passed; excluded
 frontend trees remain identical to base `01680383`. No full test/lint/type gate,
 model inference, external paid call or publication action ran in this phase.
+
+
+## Review fix after 1f72d23
+
+REVIEW-SUBJECTLESS-SLEEP-DIFFICULTY was confirmed: the modifier allowlist
+excluded ordinary descriptions such as “not sleeping at all lately.” The
+shared boundary now recognizes the subjectless progressive construction
+without enumerating modifiers. Explicit session/goal exclusions, imperative
+exclusions and positive awake intent retain precedence. Bare “not sleeping”
+uses an affirmative sleep request to distinguish difficulty from the existing
+bare exclusion case.
+
+Added 18 behavioral cases without removing prior cases or assertions. The
+single affected recipe and whole-session run passed **474 tests in 3.87
+seconds** on the worktree patch over `1f72d2323d4b9fdf5e7cc47ab394c9beb4cefc97`.
+Formatting and whitespace checks passed. No frontend, live-model, full-gate or
+publication work was performed; later gates remain with the outer executor.

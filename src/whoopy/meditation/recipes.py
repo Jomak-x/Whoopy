@@ -96,9 +96,7 @@ INTENT_NEGATION = (
 )
 NEGATED_SLEEP = re.compile(rf"{INTENT_NEGATION}{SLEEP.pattern}", re.I)
 SLEEP_DIFFICULTY = re.compile(
-    r"^\s*not\s+(?:sleeping\s+(?:well|enough|properly|soundly|lately|recently|"
-    r"through\s+the\s+night|at\s+night|last\s+night|these\s+days|"
-    r"as\s+(?:deeply|well|soundly)\s+as|since)\b|"
+    r"^\s*not\s+(?:sleeping\b|"
     r"getting(?:\s+[\w'\u2019-]+){0,4}\s+sleep\b)|"
     r"\b(?:could|can|did|was|were)\s+not\b|"
     r"\b(?:(?:am|is|are)\s+not|(?:is|are)n['\u2019]t|"
@@ -160,10 +158,16 @@ NEGATED_POSTURE = re.compile(
 
 
 def _requests_sleep(clauses: list[str]) -> bool:
+    affirmative_sleep = any(
+        SLEEP.search(clause) and not NEGATED_SLEEP.search(clause) for clause in clauses
+    )
     sleep = False
     for clause in clauses:
         intent_clause = (
-            clause if SLEEP_INTENT_SCOPE.search(clause) else SLEEP_DIFFICULTY.sub("", clause)
+            clause
+            if SLEEP_INTENT_SCOPE.search(clause)
+            or (not affirmative_sleep and re.fullmatch(r"\s*not\s+sleeping\s*", clause, re.I))
+            else SLEEP_DIFFICULTY.sub("", clause)
         )
         if NEGATED_SLEEP.search(intent_clause):
             return False
