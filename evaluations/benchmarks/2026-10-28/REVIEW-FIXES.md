@@ -519,3 +519,35 @@ Full repository test/lint/type gates, live source smoke, platform CI, external
 benchmark receipt reconciliation and Document/PR publication remain assigned to
 the outer workflow. This review adds no live inference, human-quality verdict or
 model-readiness qualification.
+
+
+## Review fixes after 3fbe66a
+
+The five findings were confirmed against their current callers and artifacts.
+Four source corrections are integrated; raw-trace publication cleanup remains
+blocked by conflicting archive-location and workspace-boundary requirements.
+
+| Finding | Correction and coverage |
+| --- | --- |
+| REVIEW-FURNITURE-POSTURE-EXCLUSION | Removed furniture-only posture inference. Explicit floor sitting and floor lying remain positive even when a chair or bed is excluded; direct posture exclusions remain effective. |
+| REVIEW-INTERNAL-SOUND-STILL-ACCEPTED | Replaced the internal-sound blacklist with affirmative environmental sound references. Whole-session regressions cover quantified breath/heartbeat rejection, explicit environmental cues, negation and permissive movement. |
+| REVIEW-COMPLETED-TAKE-BLOCKS-CLI-SEGMENT | Segment regeneration and remaining locked web mutation guards reuse the core exact revision/attempt reconciliation. CLI resume followed by segment regeneration requires no web polling; incomplete and mismatched work preserves active artifact bytes. |
+| REVIEW-MORNING-HUB-STALE-AUDIO-PASS | Campaign and legacy playback compare actual resolved bytes with retained ASR/output/input hashes. Historical screening labels are separate from current integrity failures; existing failed audio remains listenable without repair. |
+| REVIEW-PUBLISHED-RAW-TRACES | Inventoried 29 console artifacts and two embedded tracebacks; all 31 originals (75,223 bytes) are preserved byte-for-byte in a fresh ignored worktree-local archive with SHA256/size records and git check-ignore evidence. The required original-checkout archive is outside this phase's allowed boundary. No external checkout was accessed and no publication copy was removed or sanitized. The outer executor must resolve the destination, preserve the originals there, then remove raw publication copies and update their links. |
+
+The public [trace inventory](../2026-10-29/RAW-TRACE-RETENTION.json) records the
+remaining publication blocker without reproducing raw contents. Ignore rules
+prevent new benchmark console outputs and raw voice-attempt reports from being
+staged accidentally; they do not remove files already tracked.
+
+The focused integrated batch passed 562 tests and exposed one incorrect new-test
+expectation in 14.35 seconds: fresh segment regeneration correctly stops identifying
+the previous take as selected. The corrected test verifies selection immediately
+after resume, new selection state after regeneration, and byte-identical retained
+take audio. The affected file then passed all 10 tests in 1.77 seconds. No source
+changes followed the initial batch. The only warning was the existing
+Starlette/httpx deprecation. Git's ignore consumer also confirmed protection for
+all 31 inventoried raw paths; already tracked copies remain a publication blocker.
+Full gates, live smoke, completed external receipt reconciliation, Document/PR
+and platform CI remain with the outer executor. No human-quality or production
+readiness claim is added; experimental MLX remains CLI-only.

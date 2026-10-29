@@ -331,3 +331,31 @@ platform qualification. Completed external benchmark receipts, exact producer
 revisions, pending human listening and experimental CLI-only MLX caveats still
 require final reconciliation by the outer Document/PR workflow. The separate
 live source smoke and final CI remain outside this review phase.
+
+
+## Review follow-up after 3fbe66a
+
+Four source findings are corrected: support-surface exclusions no longer ban a
+body posture, daytime endings require affirmative environmental sound cues,
+completed take assembly reconciles before CLI segment regeneration and remaining
+locked web mutations, and morning-hub playback hashes distinguish current
+integrity from historical screening labels. The
+[review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-3fbe66a)
+records each correction and the remaining raw-trace publication blocker.
+
+The focused integrated batch passed 562 tests with one incorrect new regression
+expectation; after correcting that expectation and preserving its retained-audio
+assertions, the affected file passed all 10 tests. Timings were 14.35 and 1.77
+seconds respectively, with only the existing Starlette/httpx warning. No source
+changes followed the initial batch. These are focused deterministic checks, not
+new live-model, platform or full-suite qualification.
+
+Raw trace cleanup is **not complete**. All 31 inventoried originals are preserved
+in an ignored worktree-local archive, but the requested original-checkout archive
+conflicts with this phase's explicit workspace boundary. Publication copies remain
+tracked pending destination resolution and preservation there; new ignore rules
+do not untrack them. The [inventory](RAW-TRACE-RETENTION.json) provides sizes and
+SHA256 values without raw contents. The outer executor must finish this cleanup
+before publication, and remains responsible for completed live receipt and exact
+source/CI reconciliation, Document/PR work and separate live source smoke. Human
+listening remains pending; experimental MLX remains CLI-only.

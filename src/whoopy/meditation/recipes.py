@@ -119,12 +119,13 @@ REQUEST_CLAUSE_BOUNDARY = re.compile(
 REFLECTION = re.compile(r"\b(?:reflect\w*|review the day|busy day|good[ -]?night)\b", re.I)
 POSTURE_CUES: dict[Posture, re.Pattern[str]] = {
     "lying_down": re.compile(
-        r"\b(?:(?:lying|lie|lay)\s+(?:down|in\s+(?:(?:my|a|the)\s+)?bed)|reclining)\b",
+        r"\b(?:(?:lying|lie|lay)(?:\s+(?:down|(?:in|on)\s+(?:(?:my|a|the)\s+)?"
+        r"(?:bed|mattress|floor|mat)))?|reclining)\b",
         re.I,
     ),
     "sitting": re.compile(
         r"\b(?:(?:sitting|seated|sit)(?:\s+(?:in|on)\s+(?:(?:my|a|the)\s+)?"
-        r"(?:chair|seat|floor))?|in\s+(?:my|a|the)\s+chair)\b",
+        r"(?:chair|seat|floor))?)\b",
         re.I,
     ),
 }

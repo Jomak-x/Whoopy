@@ -22,9 +22,16 @@ def _replace_return(output: FixtureDraft, ending: str) -> None:
         "Hear the sounds of your breathing. You may move your fingers gently.",
         "Notice the sound of your heartbeat. You may move your fingers gently.",
         "Notice breathing sounds. You may move your fingers gently.",
+        "Listen to the sound of each breath. You may move your fingers gently.",
+        "Listen to the sounds of every breath. You may move your fingers gently.",
+        "Notice the sound of one heartbeat. You may move your fingers gently.",
+        "Hear the sound of breathing in the room. You may move your fingers gently.",
+        "Notice your breathing sounds around you. You may move your fingers gently.",
+        "Listen to sounds. You may move your fingers gently.",
+        "Notice an ordinary sound. You may move your fingers gently.",
     ],
 )
-def test_daytime_return_rejects_internal_listening_as_external_reorientation(ending: str) -> None:
+def test_daytime_return_requires_external_listening_as_reorientation(ending: str) -> None:
     adapter = WholeSessionAdapter(
         lambda output: _replace_return(output, ending), always_mutate=True
     )
@@ -45,6 +52,13 @@ def test_daytime_return_rejects_internal_listening_as_external_reorientation(end
         "Listen to surrounding sounds. You may move your fingers gently.",
         "Listen to the room. You may move your fingers gently.",
         "Hear the room around you. You may move your fingers gently.",
+        "Listen to the ordinary sounds around you. You may move your fingers gently.",
+        "Notice the sounds from your surroundings. You may move your fingers gently.",
+        "Attend to ambient sounds. You may move your fingers gently.",
+        "Become aware of sounds in the room. You may move your fingers gently.",
+        "Listen to the sounds outside the room. You may move your fingers gently.",
+        "Return to nearby sounds. You may move your fingers gently.",
+        "Notice, if you wish, surrounding sounds. You may move your fingers gently.",
     ],
 )
 def test_daytime_return_accepts_explicit_external_sound_reorientation(ending: str) -> None:
@@ -59,8 +73,18 @@ def test_daytime_return_accepts_explicit_external_sound_reorientation(ending: st
     assert result.sections[-1].text.startswith(ending)
 
 
-def test_daytime_return_rejects_negated_external_sound_with_permissive_movement() -> None:
-    ending = "Do not listen to the room. You may move your fingers gently."
+@pytest.mark.parametrize(
+    "ending",
+    [
+        "Do not listen to the room. You may move your fingers gently.",
+        "Do not notice the sounds around you. You may move your fingers gently.",
+        "Avoid listening to ambient sounds. You may move your fingers gently.",
+        "No need to hear the sounds in the room. You may move your fingers gently.",
+    ],
+)
+def test_daytime_return_rejects_negated_external_sound_with_permissive_movement(
+    ending: str,
+) -> None:
     adapter = WholeSessionAdapter(
         lambda output: _replace_return(output, ending), always_mutate=True
     )

@@ -127,17 +127,18 @@ NEGATED_WAKING = re.compile(
     re.I,
 )
 RETURN_SOUND_REFERENCE = (
-    r"\bsounds?\b(?!\s+(?:of|from)\s+(?:(?:your|the|my|our)\s+)?"
-    r"(?:own\s+)?(?:heartbeats?|breath(?:ing)?)\b)"
+    r"(?:(?:surrounding|nearby|external|environmental|ambient)\s+sounds?|"
+    r"sounds?\s+(?:around you|(?:in|from|outside|of)\s+"
+    r"(?:(?:the|your)\s+)?(?:room|surroundings|environment)))\b"
 )
 RETURN_SOUND = re.compile(
+    r"\b(?:hear(?:ing)?|listen(?:ing)?|notice|noticing|check in with|"
+    r"attend to|return to|become aware of)"
+    r"(?:,\s*if you (?:wish|like|want),)?\s+(?:to\s+)?"
+    r"(?:(?:the|a|an|some|any|ordinary|familiar|quiet)\s+)*"
+    rf"{RETURN_SOUND_REFERENCE}|"
     r"\b(?:hear(?:ing)?|listen(?:ing)?)\s+(?:to\s+)?(?:the\s+)?"
-    rf"(?:(?:surrounding|nearby|ordinary)\s+)?(?:{RETURN_SOUND_REFERENCE}|room\b|surroundings\b)|"
-    r"\b(?:hear(?:ing)?|listen(?:ing)?)\s+around you\b|"
-    r"\b(?:notice|noticing|check in with|attend to|return to|become aware of)\b"
-    r"(?:(?!\b(?:but|however|yet|instead)\b|"
-    r"\b(?:heartbeats?|breath(?:ing)?)\s+sounds?\b)[^.!?;\n]){0,60}"
-    rf"{RETURN_SOUND_REFERENCE}",
+    r"(?:room|surroundings|around you)\b",
     re.I,
 )
 RETURN_MOVEMENT = re.compile(
@@ -150,7 +151,8 @@ RETURN_MOVEMENT = re.compile(
     re.I,
 )
 RETURN_ACTION = (
-    rf"(?:{RETURN_MOVEMENT.pattern}|{RETURN_SOUND.pattern}|{NEGATABLE_ACTION}|stretch)"
+    rf"(?:{RETURN_MOVEMENT.pattern}|{RETURN_SOUND.pattern}|{NEGATABLE_ACTION}|"
+    r"hear(?:ing)?|listen(?:ing)?|stretch)"
     rf"(?:\s+(?:or|and)\s+{MOVEMENT_OBJECT})*"
     r"(?:\s+(?:(?:to|the|your|some|any|surrounding|nearby|ordinary)\s+)*"
     r"(?:sounds?|room|surroundings|around you))?"

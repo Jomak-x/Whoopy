@@ -1262,8 +1262,9 @@ class LocalWebApplication:
                     raise ValueError("Cancel active generation before deleting this meditation.")
             try:
                 with RunLock(self.runs_directory / str(record.run_id)):
-                    record = RunStore(self.runs_directory).load(record.run_id)
-                    pending = SegmentTakeStore(RunStore(self.runs_directory)).pending(record.run_id)
+                    store = RunStore(self.runs_directory)
+                    record = store.load(record.run_id)
+                    pending = RevisionStore(store).reconcile_pending_take_locked(record.run_id)
                     if record.status in (RunStatus.QUEUED, RunStatus.RUNNING) or (
                         pending is not None and pending.phase != "failed"
                     ):
@@ -2172,7 +2173,7 @@ class LocalWebApplication:
             store = RunStore(self.runs_directory)
             with RunLock(store.run_directory(run_id)) as lock:
                 takes = SegmentTakeStore(store, run_lock=lock)
-                if takes.pending(run_id) is not None:
+                if RevisionStore(store).reconcile_pending_take_locked(run_id) is not None:
                     raise ValueError(
                         "Choose a retained take before generating another alternative."
                     )
@@ -2430,7 +2431,7 @@ class LocalWebApplication:
             with RunLock(store.run_directory(run_id)) as lock:
                 takes = SegmentTakeStore(store, run_lock=lock)
                 record = store.load(run_id)
-                pending = takes.pending(run_id)
+                pending = RevisionStore(store).reconcile_pending_take_locked(run_id)
                 if pending is not None and pending.segment_id != segment_id:
                     raise ValueError(
                         "Choose a retained take for the unfinished alternative segment."

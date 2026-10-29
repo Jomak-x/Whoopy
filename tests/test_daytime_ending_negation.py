@@ -78,7 +78,7 @@ def test_negated_daytime_invitations_do_not_satisfy_required_cues(ending: str) -
         "Do not listen to sounds, then hear the room and move your hands gently.",
         "Notice your hands, do not move your fingers, but listen to surrounding sounds. "
         "You may lift an arm gently.",
-        "Do not notice your hands, but listen to sounds. You may move your fingers gently.",
+        "Do not notice your hands, but listen to nearby sounds. You may move your fingers gently.",
         "Notice, if you wish, surrounding sounds. You may lift an arm gently.",
     ],
 )

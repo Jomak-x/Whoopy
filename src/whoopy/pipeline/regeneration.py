@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from whoopy.pipeline.checkpoints import CheckpointStatus, SegmentCheckpointStore
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
+from whoopy.pipeline.revisions import RevisionStore
 from whoopy.pipeline.runs import (
     RunExecution,
     RunRecord,
@@ -27,7 +28,6 @@ from whoopy.pipeline.runs import (
     RunStore,
     RunStoreError,
 )
-from whoopy.pipeline.takes import SegmentTakeStore
 from whoopy.timeline import SpeechSegment
 
 REGENERATION_HISTORY_DIRECTORY = "history/manual-regeneration"
@@ -121,7 +121,7 @@ def prepare_segment_regeneration(
     try:
         with RunLock(store.run_directory(parsed_run_id)):
             record = store.load(parsed_run_id)
-            pending = SegmentTakeStore(store).pending(parsed_run_id)
+            pending = RevisionStore(store).reconcile_pending_take_locked(parsed_run_id)
             if pending is not None and (
                 pending.phase != "generating"
                 or pending.operation_id != regeneration_attempt_id

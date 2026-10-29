@@ -55,6 +55,42 @@ def read_report(path: Path) -> tuple[dict[str, Any], str]:
     return value, hashlib.sha256(raw).hexdigest()
 
 
+def audio_binding(
+    root: Path, value: str | Path | None, expected_sha256: Any, label: str
+) -> tuple[Path | None, str | None]:
+    try:
+        path = artifact(root, value)
+    except FileNotFoundError:
+        return None, f"{label} is missing."
+    except (ValueError, OSError, TypeError):
+        return None, f"{label} is unavailable."
+    if (
+        not isinstance(expected_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None
+    ):
+        return path, f"{label} has no valid retained SHA256; current playback is unbound."
+    try:
+        actual_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None, f"{label} could not be read."
+    if actual_sha256 != expected_sha256:
+        return path, f"{label} changed after its retained receipt was written."
+    return path, None
+
+
+def final_verification(root: Path, record: dict[str, Any], attempt: Path | None) -> dict[str, Any]:
+    retained = record.get("final_verification")
+    if isinstance(retained, dict) and retained:
+        return retained
+    if attempt is None:
+        return {}
+    try:
+        report, _ = read_report(artifact(root, attempt / "verify-final.json"))
+    except (ValueError, OSError, TypeError, json.JSONDecodeError):
+        return {}
+    return report
+
+
 def source_version(
     root: Path, report_path: Path, data: dict[str, Any], entry: dict[str, Any], base_url: str
 ) -> str:
@@ -101,18 +137,30 @@ def campaign(
 ) -> str:
     records = data.get("records", [])
     counts = Counter(saved_label(record.get("status")) for record in records)
-    complete = 0
+    verified = 0
     rows = []
     review = path.parent / "review.html"
     for index, record in enumerate(records):
         try:
-            run = Path(record["attempt"]) / "production-runs" / record["run_id"]
-            artifact(root, run / "narration.wav")
-            has_audio = True
-            complete += 1
-        except (OSError, ValueError, KeyError, TypeError):
-            has_audio = False
-        label = saved_label(record.get("status"))
+            attempt = Path(record["attempt"])
+            run = attempt / "production-runs" / record["run_id"]
+        except (KeyError, TypeError):
+            attempt = None
+            run = None
+        retained = final_verification(root, record, attempt)
+        audio, problem = audio_binding(
+            root,
+            run / "narration.wav" if run is not None else None,
+            retained.get("audio_sha256"),
+            "Final WAV",
+        )
+        if problem is None:
+            verified += 1
+        current_label = "Pass" if problem is None else "Fail"
+        current_detail = (
+            "Final WAV matches the retained ASR audio SHA256." if problem is None else problem
+        )
+        historical_label = saved_label(record.get("status"))
         mode = record.get("mode")
         mode_label = (
             "Fixed-script voice comparison"
@@ -120,23 +168,23 @@ def campaign(
             else "Prompt → audio"
         )
         play = artifact_link(root, base_url, review, "Listen / ASR details", f"sample-{index:03d}")
-        if has_audio:
-            play += " · " + artifact_link(root, base_url, run / "narration.wav", "Final WAV")
+        if audio is not None:
+            play += " · " + artifact_link(root, base_url, audio, "Final WAV")
         duration = record.get("actual_seconds")
         duration_label = (
             f"{float(duration):.3f}s" if duration is not None else "No completed duration"
         )
         rows.append(
-            f'<tr><td>{esc(record.get("case"))}<br>{esc(record.get("candidate"))}<br><small>{esc(mode_label)}</small></td><td class="{label.lower().replace(" ", "-")}">{esc(label)}<br>{"Final audio present" if has_audio else "Final audio absent"}</td><td>{esc(duration_label)}</td><td>{esc(record.get("human_review", "pending"))}; no score supplied</td><td>{play}<br><code>{esc(record.get("run_id"))}</code><br>{esc(record.get("error", ""))}</td></tr>'
+            f'<tr><td>{esc(record.get("case"))}<br>{esc(record.get("candidate"))}<br><small>{esc(mode_label)}</small></td><td class="{historical_label.lower().replace(" ", "-")}">{esc(historical_label)}</td><td class="{current_label.lower()}">{esc(current_label)}<br>{esc(current_detail)}</td><td>{esc(duration_label)}</td><td>{esc(record.get("human_review", "pending"))}; no score supplied</td><td>{play}<br><code>{esc(record.get("run_id"))}</code><br>{esc(record.get("error", ""))}</td></tr>'
         )
     count_text = ", ".join(
         f"{counts[label]} {label}" for label in ("Pass", "Review", "Fail", "Not screened")
     )
-    body = f"<p>Queue state: <strong>{esc(data.get('status', 'Unknown'))}</strong>. {len(records)} attempt records; {complete} final audio files present.</p><p>Saved screening labels for this campaign only: <strong>{esc(count_text)}</strong>. Failed or incomplete generation attempts remain included.</p>"
-    body += "<p>These are retained manifest labels, not a new ASR run or a human acceptance. The linked detailed listening report performs additional artifact checks. Source versions are specific to this campaign.</p>"
+    body = f"<p>Queue state: <strong>{esc(data.get('status', 'Unknown'))}</strong>. {len(records)} attempt records; {verified} current final audio bindings pass.</p><p>Historical saved screening labels for this campaign only: <strong>{esc(count_text)}</strong>. Failed or incomplete generation attempts remain included.</p>"
+    body += "<p>Historical labels are retained manifest results, not a new ASR run or a human acceptance. Current playback integrity compares the resolved Final WAV bytes with the selected final ASR receipt. Available failed audio remains linked for listening. Source versions are specific to this campaign.</p>"
     body += source_version(root, path, data, entry, base_url)
     body += (
-        "<table><thead><tr><th>Case / voice / mode</th><th>Saved speech screening</th><th>Actual duration</th><th>Human review</th><th>Exact evidence</th></tr></thead><tbody>"
+        "<table><thead><tr><th>Case / voice / mode</th><th>Historical saved screening</th><th>Current playback integrity</th><th>Actual duration</th><th>Human review</th><th>Exact evidence</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
     )
@@ -156,7 +204,7 @@ def legacy(
     counts = Counter(saved_label(record.get("status")) for record in records)
     body = "<p>Earlier fixed-text audition / listening-copy set. This is separate from the new full-session campaigns.</p>"
     body += (
-        f"<p>{len(records)} listed auditions: "
+        f"<p>Historical saved screening labels for {len(records)} listed auditions: "
         + ", ".join(
             f"{counts[label]} {label}" for label in ("Pass", "Review", "Fail", "Not screened")
         )
@@ -168,16 +216,49 @@ def legacy(
         + "</p>"
     )
     body += source_version(root, path, data, entry, base_url)
-    body += "<table><thead><tr><th>Audition</th><th>Saved screening</th><th>Evidence</th></tr></thead><tbody>"
+    body += "<p>Current playback integrity compares each resolved listening copy with its retained output SHA256. When original raw audio is linked, its bytes must also match the retained input SHA256. Available failed audio remains linked for listening.</p>"
+    body += "<table><thead><tr><th>Audition</th><th>Historical saved screening</th><th>Current playback integrity</th><th>Evidence</th></tr></thead><tbody>"
     for record in records:
-        label = saved_label(record.get("status"))
-        body += (
-            f'<tr><td>{esc(record.get("candidate"))}</td><td class="{label.lower().replace(" ", "-")}">{esc(label)}</td><td>'
-            + artifact_link(root, base_url, record.get("verification"), "Current policy receipt")
-            + " · "
-            + artifact_link(root, base_url, record.get("output"), "Listening copy")
-            + "</td></tr>"
+        historical_label = saved_label(record.get("status"))
+        output, output_problem = audio_binding(
+            root,
+            record.get("output"),
+            record.get("output_sha256"),
+            "Listening copy",
         )
+        original: Path | None = None
+        original_problem: str | None = None
+        if record.get("input") is not None:
+            original, original_problem = audio_binding(
+                root,
+                record.get("input"),
+                record.get("input_sha256"),
+                "Original raw audio",
+            )
+        problems = [problem for problem in (output_problem, original_problem) if problem]
+        current_label = "Pass" if not problems else "Fail"
+        current_detail = (
+            "Listening copy and every linked original match their retained SHA256 values."
+            if not problems
+            else " ".join(problems)
+        )
+        evidence = artifact_link(
+            root, base_url, record.get("verification"), "Current policy receipt"
+        )
+        if output is not None:
+            evidence += " · " + artifact_link(root, base_url, output, "Listening copy")
+        else:
+            evidence += " · " + artifact_link(
+                root, base_url, record.get("output"), "Listening copy"
+            )
+        if record.get("input") is not None:
+            evidence += " · " + artifact_link(
+                root,
+                base_url,
+                original if original is not None else record.get("input"),
+                "Original raw audio",
+            )
+        body += f'<tr><td>{esc(record.get("candidate"))}</td><td class="{historical_label.lower().replace(" ", "-")}">{esc(historical_label)}</td><td class="{current_label.lower()}">{esc(current_label)}<br>{esc(current_detail)}</td><td>{evidence}</td></tr>'
     return (
         body
         + "</tbody></table><p>Excluded/failed raw attempts remain in the original review page and receipts. Listening-copy screening does not qualify every historical synthesis attempt.</p>"
