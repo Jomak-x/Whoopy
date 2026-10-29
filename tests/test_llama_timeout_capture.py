@@ -81,8 +81,8 @@ def test_failure_capture_waits_for_readers_and_records_incomplete_streams(
         assert actual is process
         actual.returncode = -15
 
-    monkeypatch.setattr(llama_cpp.subprocess, "Popen", start)
-    monkeypatch.setattr(llama_cpp.threading, "Thread", ControlledThread)
+    monkeypatch.setattr(subprocess, "Popen", start)
+    monkeypatch.setattr(threading, "Thread", ControlledThread)
     monkeypatch.setattr(llama_cpp, "_stop_process_tree", stop)
     capture = CapturingProcessRunner(tmp_path / "attempts", _run_process)
     try:

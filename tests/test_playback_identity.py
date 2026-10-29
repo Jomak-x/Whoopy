@@ -91,9 +91,9 @@ def test_current_playback_rejects_damaged_bound_artifacts(tmp_path: Path, damage
     elif damage == "truncated_pcm":
         audio.write_bytes(audio.read_bytes()[:-2])
     elif damage == "zero_rate":
-        payload = bytearray(audio.read_bytes())
-        struct.pack_into("<I", payload, 24, 0)
-        audio.write_bytes(payload)
+        mutable_payload = bytearray(audio.read_bytes())
+        struct.pack_into("<I", mutable_payload, 24, 0)
+        audio.write_bytes(mutable_payload)
     elif damage == "wrong_rate":
         with wave.open(str(audio), "rb") as source:
             params = source.getparams()

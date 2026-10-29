@@ -125,7 +125,7 @@ def test_rejected_output_stays_private_in_cli_record_and_run_summary(
 
 def test_invalid_checkpoint_retains_private_validation_evidence(tmp_path: Path) -> None:
     workspace = GenerationWorkspace(tmp_path / "draft")
-    saved = {"sections": PRIVATE_OUTPUT}
+    saved: dict[str, object] = {"sections": PRIVATE_OUTPUT}
     workspace.save_whole_session(saved)
     adapter = WholeSessionAdapter()
 

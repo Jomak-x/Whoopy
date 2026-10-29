@@ -336,7 +336,7 @@ def test_current_playback_rejects_changed_canonical_identity(tmp_path: Path, cha
                 update={"processing": replace(config.processing, edge_fade_ms=25)}
             )
         else:
-            update = (
+            tts_update = (
                 {"speed": 1.2}
                 if change == "speed"
                 else (
@@ -345,7 +345,7 @@ def test_current_playback_rejects_changed_canonical_identity(tmp_path: Path, cha
                     else {"reference_audio_sha256": "0" * 64}
                 )
             )
-            config = config.model_copy(update={"tts": config.tts.model_copy(update=update)})
+            config = config.model_copy(update={"tts": config.tts.model_copy(update=tts_update)})
         store._write_json(store.resolved_config_path(run_id), config.model_dump_json())
     else:
         path = store.quality_path(run_id)

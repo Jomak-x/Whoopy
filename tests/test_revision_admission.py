@@ -14,8 +14,8 @@ from tests.test_takes import RUN_ID, _alternative_take, _completed_run
 from whoopy.pipeline.checkpoints import SegmentCheckpointStore
 from whoopy.pipeline.locks import RunLock
 from whoopy.pipeline.regeneration import prepare_segment_regeneration
-from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus
 from whoopy.pipeline.revisions import RevisionRequest, RevisionStore, TimelineEdit
+from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus
 from whoopy.pipeline.takes import SegmentTakeStore
 from whoopy.webui.server import GenerationTask, LocalWebApplication
 

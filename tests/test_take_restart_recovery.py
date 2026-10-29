@@ -123,9 +123,11 @@ def test_restart_reconciles_alternative_without_selecting_temporary_audio(
             application.resume_run(str(RUN_ID))
         with pytest.raises(ValueError, match="active"):
             application.delete_run(str(RUN_ID))
-        with pytest.raises(ValueError, match="active meditation"):
-            with application._admit_model_operation():
-                raise AssertionError("Model operation was incorrectly admitted")
+        with (
+            pytest.raises(ValueError, match="active meditation"),
+            application._admit_model_operation(),
+        ):
+            raise AssertionError("Model operation was incorrectly admitted")
         if crash_point == "generating":
             store.save(completed)
     state = _wait_status(application, "completed")

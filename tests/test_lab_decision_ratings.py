@@ -21,7 +21,7 @@ def _complete_lab(lab_root: Path) -> Path:
         report = _report()
         baseline, candidate = report.definition.candidates
         condition = baseline.condition
-        changes = {
+        changes: dict[str, dict[str, object]] = {
             "llm": {"llm_model_id": "fixture-standard"},
             "writing_method": {"writing_method": candidate.condition.writing_method},
             "voice": {"voice": condition.voice.model_copy(update={"voice_id": "am_michael"})},

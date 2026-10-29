@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import shutil
 import signal
 import socket
@@ -25,13 +26,15 @@ from whoopy.artifacts import ArtifactStore
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.cli import (
     QWEN_BACKEND_VARIANTS,
-    _apply_global_speech_overrides,
     main,
 )
 from whoopy.hardware import HardwareSnapshot
 from whoopy.pipeline.generation import PendingGenerationConfig, TTSRunSettings
 from whoopy.pipeline.locks import RunLock
 from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore
+from whoopy.pipeline.speech_controls import (
+    apply_global_speech_overrides as _apply_global_speech_overrides,
+)
 from whoopy.pipeline.speech_controls import (
     apply_speech_capability_fallbacks as _apply_speech_capability_fallbacks,
 )
@@ -1186,14 +1189,14 @@ def test_acceptance_helpers_execute_selected_config_models_and_runs(
     draft = _InterruptOnceDraft() if recover else _DraftFixture()
     model_reads: list[Path] = []
 
-    def load_draft(_cls: type[LlamaCppScriptGenerator], **kwargs: object) -> _DraftFixture:
+    def load_draft(_cls: type[LlamaCppScriptGenerator], /, **kwargs: object) -> _DraftFixture:
         store = kwargs["store"]
         assert isinstance(store, ArtifactStore)
         model_reads.append(store.root)
         return draft
 
     def load_speech(
-        _cls: type[SherpaOnnxKokoroAdapter], **kwargs: object
+        _cls: type[SherpaOnnxKokoroAdapter], /, **kwargs: object
     ) -> FixtureSpeechSynthesizer:
         store = kwargs["store"]
         assert isinstance(store, ArtifactStore)
@@ -1226,7 +1229,7 @@ def test_acceptance_helpers_execute_selected_config_models_and_runs(
             assert invoke_cli(tuple(command)).returncode == 130
             raise Interrupted
 
-        monkeypatch.setattr(forced_interruption_case.os, "execv", interrupt)
+        monkeypatch.setattr(os, "execv", interrupt)
         monkeypatch.setattr(forced_interruption_case, "subprocess", SimpleNamespace(run=invoke_cli))
         stage_arguments = [
             "--stage",

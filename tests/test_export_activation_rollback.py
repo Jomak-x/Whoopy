@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
 from pathlib import Path
 
@@ -134,7 +135,7 @@ def test_activation_sync_failure_preserves_previous_exports(
     prior = b"previous export bytes"
     (output / "previous.wav").write_bytes(prior)
     sync_directory = exports._fsync_directory
-    replace = exports.os.replace
+    replace = os.replace
     activation_failed = False
 
     def sync(directory: Path) -> None:
@@ -158,7 +159,7 @@ def test_activation_sync_failure_preserves_previous_exports(
     monkeypatch.setattr(exports, "_ffmpeg_version", lambda _path: "fixture encoder")
     monkeypatch.setattr(exports, "_encode_and_verify", _fixture_encode)
     monkeypatch.setattr(exports, "_fsync_directory", sync)
-    monkeypatch.setattr(exports.os, "replace", move)
+    monkeypatch.setattr(os, "replace", move)
 
     with pytest.raises(AudioExportError, match="activation directory sync failed") as failure:
         exports.export_finished_audio(
