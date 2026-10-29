@@ -3198,6 +3198,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if existing.source_kind != "generated_prompt":
                     raise RevisionError("Only prompt-generated meditations have drafting context.")
                 revisions = RevisionStore(store)
+                revisions.require_finalized_takes_locked(existing.run_id)
                 base_revision_id = revisions.active_revision_id(existing.run_id)
                 base_plan = MeditationPlan.model_validate_json(
                     store.plan_path(existing.run_id).read_text(encoding="utf-8")

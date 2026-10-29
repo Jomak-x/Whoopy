@@ -496,3 +496,26 @@ receipt reconciliation, publication or CI was performed in this review phase.
 Final Document/PR reconciliation of completed live receipts and exact CI revisions
 remains with the outer executor; this deterministic batch adds no human-quality
 or model-readiness claim.
+
+
+## Review fixes after ab50d93
+
+The three selected findings were confirmed in their current callers and fixed
+without changing the excluded frontend or prior recovery controls.
+
+| Finding | Correction | Behavioral regression |
+| --- | --- | --- |
+| REVIEW-EXTERNAL-SOUND-CUE | Removed unconditional hear/listen acceptance. Daytime return cues require an external reference; heartbeat and breathing alone, including sound-of phrasing, cannot satisfy reorientation. Existing negation filtering and permissive movement remain in place. | Whole-session generation rejects internal listening, accepts surrounding sounds, room and around-you references, and rejects negated external cues. |
+| REVIEW-NEGATED-POSTURE | Posture mentions are classified against explicit exclusion spans within the existing request clause boundaries before selection and defaults. Both supported postures being excluded fails explicitly; a supplied posture control remains authoritative. | Positive/excluded contrasts in both directions, not-while wording, coordinated exclusions, independent sleep/breath clauses, defaults and explicit controls. |
+| REVIEW-COMPLETED-TAKE-BLOCKS-CLI-EDIT | Moved completed-assembly reconciliation into the locked core revision boundary and reused it from web polling/finalization. Completion requires the saved assembly revision and a new non-null execution attempt. CLI semantic-plan admission checks pending state before model planning or drafting. | Real CLI resume followed by plan regeneration without any web polling archives the matching receipt. Incomplete or mismatched pending work blocks both CLI and direct revision mutation with byte-identical artifacts; retained-take recovery regressions still pass. |
+
+One focused batch passed **646 tests in 53.62 seconds**, with one existing
+Starlette/httpx deprecation warning. It covered routing, whole-session generation,
+revision/take recovery, semantic-plan ownership, and affected backend API behavior.
+Touched Python files were formatted before the batch. No additional source
+findings remain from this focused inspection.
+
+Full repository test/lint/type gates, live source smoke, platform CI, external
+benchmark receipt reconciliation and Document/PR publication remain assigned to
+the outer workflow. This review adds no live inference, human-quality verdict or
+model-readiness qualification.

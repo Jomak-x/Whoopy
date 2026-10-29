@@ -2215,15 +2215,8 @@ class LocalWebApplication:
         if pending.phase == "assembling":
             try:
                 with RunLock(takes.store.run_directory(run_id)):
-                    current_pending = takes.pending(run_id)
-                    if current_pending is None:
-                        return None
-                    pending = current_pending
-                    record = takes.store.load(run_id)
-                    if pending.phase == "assembling" and self._selected_take_assembled(
-                        record, pending
-                    ):
-                        takes.finish_pending(pending)
+                    pending = RevisionStore(takes.store).reconcile_pending_take_locked(run_id)
+                    if pending is None:
                         return None
             except RunLockUnavailable:
                 pass
@@ -2250,16 +2243,6 @@ class LocalWebApplication:
                 name=f"whoopy-take-{run_id[:8]}-{pending.segment_id}",
             ).start()
         return pending
-
-    def _selected_take_assembled(self, record: RunRecord, pending: PendingAlternativeTake) -> bool:
-        return (
-            record.status is RunStatus.COMPLETED
-            and record.execution is not None
-            and record.execution.attempt_id is not None
-            and record.execution.attempt_id != pending.assembly_prior_attempt_id
-            and RevisionStore(RunStore(self.runs_directory)).active_revision_id(record.run_id)
-            == pending.assembly_revision_id
-        )
 
     def _finalize_alternative_take(
         self,
@@ -2373,8 +2356,10 @@ class LocalWebApplication:
                                     takes.save_pending(pending)
                                     record = store.load(run_id)
                                 if pending.phase == "assembling":
-                                    if self._selected_take_assembled(record, pending):
-                                        takes.finish_pending(pending)
+                                    if (
+                                        RevisionStore(store).reconcile_pending_take_locked(run_id)
+                                        is None
+                                    ):
                                         return
                                     if (
                                         record.status is not RunStatus.INTERRUPTED

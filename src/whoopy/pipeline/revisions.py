@@ -21,7 +21,7 @@ from whoopy.meditation import (
 from whoopy.meditation.generator import TECHNIQUE_DELIVERY
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
 from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore, RunStoreError
-from whoopy.pipeline.takes import SegmentTakeError, SegmentTakeStore
+from whoopy.pipeline.takes import PendingAlternativeTake, SegmentTakeError, SegmentTakeStore
 from whoopy.timeline import (
     BreathSegment,
     DeliveryIntensity,
@@ -279,7 +279,7 @@ class RevisionStore:
         parsed = self.store.parse_run_id(run_id)
         try:
             with RunLock(self.store.run_directory(parsed)):
-                self._require_finalized_takes(parsed)
+                self.require_finalized_takes_locked(parsed)
                 record = self.store.load(parsed)
                 if record.status in (RunStatus.QUEUED, RunStatus.RUNNING):
                     raise RevisionError("Wait for generation to stop before editing.")
@@ -610,7 +610,7 @@ class RevisionStore:
         """Commit a redrafted plan while the caller holds the run lock."""
 
         parsed = self.store.parse_run_id(run_id)
-        self._require_finalized_takes(parsed)
+        self.require_finalized_takes_locked(parsed)
         record = self.store.load(parsed)
         if record.status in (RunStatus.QUEUED, RunStatus.RUNNING):
             raise RevisionError("Wait for generation to stop before editing the plan.")
@@ -693,7 +693,7 @@ class RevisionStore:
             raise RevisionError("Invalid revision ID.")
         try:
             with RunLock(self.store.run_directory(parsed)):
-                self._require_finalized_takes(parsed)
+                self.require_finalized_takes_locked(parsed)
                 record = self.store.load(parsed)
                 if record.status in (RunStatus.QUEUED, RunStatus.RUNNING):
                     raise RevisionError("Wait for generation to stop before restoring.")
@@ -763,9 +763,34 @@ class RevisionStore:
         except RunLockUnavailable as error:
             raise RevisionError(f"Run {parsed} is owned by an active worker.") from error
 
-    def _require_finalized_takes(self, run_id: UUID) -> None:
+    def reconcile_pending_take_locked(self, run_id: UUID | str) -> PendingAlternativeTake | None:
+        """Archive completed take assembly while the caller holds the run lock."""
+
+        parsed = self.store.parse_run_id(run_id)
+        takes = SegmentTakeStore(self.store)
+        pending = takes.pending(parsed)
+        if (
+            pending is not None
+            and pending.phase == "assembling"
+            and pending.assembly_revision_id is not None
+        ):
+            record = self.store.load(parsed)
+            if (
+                record.status is RunStatus.COMPLETED
+                and record.execution is not None
+                and record.execution.attempt_id is not None
+                and record.execution.attempt_id != pending.assembly_prior_attempt_id
+                and self.active_revision_id(parsed) == pending.assembly_revision_id
+            ):
+                takes.finish_pending(pending)
+                return None
+        return pending
+
+    def require_finalized_takes_locked(self, run_id: UUID | str) -> None:
+        """Admit ordinary revisions while the caller holds the run lock."""
+
         try:
-            pending = SegmentTakeStore(self.store).pending(run_id)
+            pending = self.reconcile_pending_take_locked(run_id)
         except SegmentTakeError as error:
             raise RevisionError(str(error)) from error
         if pending is not None:

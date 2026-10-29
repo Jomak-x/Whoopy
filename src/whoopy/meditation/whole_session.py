@@ -126,10 +126,18 @@ NEGATED_WAKING = re.compile(
     rf"(?:\s+(?:or|and)\s+(?:to\s+)?(?:{NEGATABLE_ACTION}))*\b",
     re.I,
 )
+RETURN_SOUND_REFERENCE = (
+    r"\bsounds?\b(?!\s+(?:of|from)\s+(?:(?:your|the|my|our)\s+)?"
+    r"(?:own\s+)?(?:heartbeats?|breath(?:ing)?)\b)"
+)
 RETURN_SOUND = re.compile(
-    r"\b(?:hear(?:ing)?|listen(?:ing)?)\b|"
+    r"\b(?:hear(?:ing)?|listen(?:ing)?)\s+(?:to\s+)?(?:the\s+)?"
+    rf"(?:(?:surrounding|nearby|ordinary)\s+)?(?:{RETURN_SOUND_REFERENCE}|room\b|surroundings\b)|"
+    r"\b(?:hear(?:ing)?|listen(?:ing)?)\s+around you\b|"
     r"\b(?:notice|noticing|check in with|attend to|return to|become aware of)\b"
-    r"(?:(?!\b(?:but|however|yet|instead)\b)[^.!?;\n]){0,60}\bsounds?\b",
+    r"(?:(?!\b(?:but|however|yet|instead)\b|"
+    r"\b(?:heartbeats?|breath(?:ing)?)\s+sounds?\b)[^.!?;\n]){0,60}"
+    rf"{RETURN_SOUND_REFERENCE}",
     re.I,
 )
 RETURN_MOVEMENT = re.compile(

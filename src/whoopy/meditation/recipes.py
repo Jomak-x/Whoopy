@@ -117,6 +117,46 @@ REQUEST_CLAUSE_BOUNDARY = re.compile(
     re.I,
 )
 REFLECTION = re.compile(r"\b(?:reflect\w*|review the day|busy day|good[ -]?night)\b", re.I)
+POSTURE_CUES: dict[Posture, re.Pattern[str]] = {
+    "lying_down": re.compile(
+        r"\b(?:(?:lying|lie|lay)\s+(?:down|in\s+(?:(?:my|a|the)\s+)?bed)|reclining)\b",
+        re.I,
+    ),
+    "sitting": re.compile(
+        r"\b(?:(?:sitting|seated|sit)(?:\s+(?:in|on)\s+(?:(?:my|a|the)\s+)?"
+        r"(?:chair|seat|floor))?|in\s+(?:my|a|the)\s+chair)\b",
+        re.I,
+    ),
+}
+POSTURE_ACTION = "(?:" + "|".join(cue.pattern for cue in POSTURE_CUES.values()) + ")"
+NEGATED_POSTURE = re.compile(
+    r"\b(?:no|not|without|avoid|skip|never|don['\u2019]t|do not|cannot|can['\u2019]t)\s+"
+    r"(?:while\s+)?(?:(?:(?:want|need|have)\s+)?to\s+)?(?:be\s+)?"
+    rf"{POSTURE_ACTION}(?:\s+(?:or|and)\s+(?:to\s+)?{POSTURE_ACTION})*",
+    re.I,
+)
+
+
+def _requested_posture(clauses: list[str], *, sleep: bool) -> Posture:
+    excluded: set[Posture] = set()
+    requested: set[Posture] = set()
+    for clause in clauses:
+        negated = [match.span() for match in NEGATED_POSTURE.finditer(clause)]
+        for posture, cue in POSTURE_CUES.items():
+            for match in cue.finditer(clause):
+                if any(start <= match.start() < end for start, end in negated):
+                    excluded.add(posture)
+                else:
+                    requested.add(posture)
+    for posture in POSTURE_CUES:
+        if posture in requested and posture not in excluded:
+            return posture
+    default: Posture = "lying_down" if sleep else "sitting"
+    alternative: Posture = "sitting" if sleep else "lying_down"
+    for posture in (default, alternative):
+        if posture not in excluded:
+            return posture
+    raise ValueError("Both supported postures are excluded; choose sitting or lying down.")
 
 
 def route_session(
@@ -144,12 +184,7 @@ def route_session(
         )
     )
     if posture is None:
-        if re.search(r"\b(?:lying|lie|lay)\s+(?:down|in bed)|\breclining\b", prompt, re.I):
-            posture = "lying_down"
-        elif re.search(r"\b(?:sitting|seated|sit|in (?:my|a|the) chair)\b", prompt, re.I):
-            posture = "sitting"
-        else:
-            posture = "lying_down" if sleep else "sitting"
+        posture = _requested_posture(clauses, sleep=sleep)
     if excluded or re.search(r"\b(?:sound|listen|noise|overstimulat|panic)\w*\b", prompt, re.I):
         anchor: Anchor = "sound"
     elif re.search(r"\b(?:body|contact|ground|support)\w*\b", prompt, re.I):

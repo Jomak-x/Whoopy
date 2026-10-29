@@ -313,3 +313,21 @@ full-suite or platform qualification. No live inference or external receipt
 reconciliation occurred here; historical producer revisions, pending human
 listening and experimental CLI-only MLX caveats remain unchanged. Full gates and
 final Document/PR reconciliation belong to the outer executor.
+
+
+## Review follow-up after ab50d93
+
+Three follow-up findings are fixed: daytime endings require external sound
+reorientation, posture routing honors explicit exclusions, and completed take
+assembly is reconciled at the shared revision boundary without web polling.
+Unresolved pending work is rejected before CLI drafting while retained-take
+recovery remains available. The
+[review-fix record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-ab50d93)
+records each finding and its behavioral coverage.
+
+One focused batch passed **646 tests in 53.62 seconds**, with the existing
+Starlette/httpx deprecation warning. This is not a full-suite, live-model or
+platform qualification. Completed external benchmark receipts, exact producer
+revisions, pending human listening and experimental CLI-only MLX caveats still
+require final reconciliation by the outer Document/PR workflow. The separate
+live source smoke and final CI remain outside this review phase.

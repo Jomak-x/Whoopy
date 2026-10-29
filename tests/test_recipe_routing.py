@@ -5,7 +5,7 @@ from typing import get_args
 import pytest
 
 from whoopy.meditation.models import MeditationKind
-from whoopy.meditation.recipes import allocate_slots, route_session
+from whoopy.meditation.recipes import Posture, allocate_slots, route_session
 
 
 @pytest.mark.parametrize("kind", get_args(MeditationKind))
@@ -105,6 +105,57 @@ def test_explicit_daytime_kind_overrides_sleeping_wording() -> None:
     assert session.kind == "body_scan"
     assert session.posture == "sitting"
     assert session.recipe.ending == "daytime_reorientation"
+
+
+@pytest.mark.parametrize(
+    ("prompt", "posture"),
+    [
+        ("Help me focus while sitting in a chair, not lying in bed", "sitting"),
+        ("Help me focus while sitting in a chair not lying in bed", "sitting"),
+        ("Help me focus while sitting, not while lying down", "sitting"),
+        ("Help me sleep lying in bed, not sitting in a chair", "lying_down"),
+        ("Help me sleep lying in bed not sitting in a chair", "lying_down"),
+        ("Do not lie down; help me sleep while seated", "sitting"),
+        ("Don't sit in a chair; guide me lying down", "lying_down"),
+        ("Don’t lie down and I want to sit in a chair", "sitting"),
+        ("Avoid sitting in a chair, but help me rest lying down", "lying_down"),
+        ("I do not want to lie down; help me focus", "sitting"),
+        ("I prefer not to lie down; help me focus", "sitting"),
+        ("No reclining; help me sleep", "sitting"),
+        ("Help me focus without sitting", "lying_down"),
+        ("I cannot sit; help me rest", "lying_down"),
+        ("No breath focus and help me sleep while sitting", "sitting"),
+        ("Do not fall asleep while sitting in a chair", "sitting"),
+        ("Help me sleep", "lying_down"),
+        ("Help me focus", "sitting"),
+        ("Help me focus lying down", "lying_down"),
+        ("Help me sleep while sitting", "sitting"),
+    ],
+)
+def test_posture_routing_honors_explicit_exclusions(prompt: str, posture: Posture) -> None:
+    session = route_session(prompt, 180)
+
+    assert session.posture == posture
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "No sitting or lying down",
+        "Do not lie down or sit in a chair",
+        "Avoid sitting in a chair and lying in bed",
+        "Not sitting; not lying down",
+    ],
+)
+def test_excluding_both_supported_postures_is_rejected(prompt: str) -> None:
+    with pytest.raises(ValueError, match="Both supported postures are excluded"):
+        route_session(prompt, 180)
+
+
+def test_explicit_posture_control_remains_authoritative() -> None:
+    session = route_session("Help me sleep lying down", 180, posture="sitting")
+
+    assert session.posture == "sitting"
 
 
 @pytest.mark.parametrize("negation", ["do not", "don't", "don\u2019t"])
