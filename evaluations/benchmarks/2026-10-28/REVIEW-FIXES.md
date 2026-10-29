@@ -233,7 +233,7 @@ three-minute grounding, and seed 42 using this worktree's model path and an
 allowed test-evidence run directory. It exited **2** before inference with:
 `Artifact kokoro_multilang_v1_0 is not safe to load: The verified download is not installed.`
 The command, complete stdout/stderr, producer hashes, elapsed time, and before/
-after memory and swap samples are retained at
+after memory and swap samples are retained only in local, unpublished evidence at
 `/Users/jakob/.no-mistakes/evidence/01M62HVTDGAVV26ASJGAYEXNQ8/postfix-test-phase/generation-preflight.json`,
 with the failed run state beside it. This is a preflight refusal, not an audio
 quality result or a completed benchmark. No expected speech or ASR result was
@@ -524,8 +524,9 @@ model-readiness qualification.
 ## Review fixes after 3fbe66a
 
 The five findings were confirmed against their current callers and artifacts.
-Four source corrections are integrated; raw-trace publication cleanup remains
-blocked by conflicting archive-location and workspace-boundary requirements.
+Four source corrections were integrated; raw-trace publication cleanup was
+blocked at the close of that phase. The verified outer transfer handoff and
+cleanup after `74725e9` below resolve that historical blocker.
 
 | Finding | Correction and coverage |
 | --- | --- |
@@ -533,10 +534,10 @@ blocked by conflicting archive-location and workspace-boundary requirements.
 | REVIEW-INTERNAL-SOUND-STILL-ACCEPTED | Replaced the internal-sound blacklist with affirmative environmental sound references. Whole-session regressions cover quantified breath/heartbeat rejection, explicit environmental cues, negation and permissive movement. |
 | REVIEW-COMPLETED-TAKE-BLOCKS-CLI-SEGMENT | Segment regeneration and remaining locked web mutation guards reuse the core exact revision/attempt reconciliation. CLI resume followed by segment regeneration requires no web polling; incomplete and mismatched work preserves active artifact bytes. |
 | REVIEW-MORNING-HUB-STALE-AUDIO-PASS | Campaign and legacy playback compare actual resolved bytes with retained ASR/output/input hashes. Historical screening labels are separate from current integrity failures; existing failed audio remains listenable without repair. |
-| REVIEW-PUBLISHED-RAW-TRACES | Inventoried 29 console artifacts and two embedded tracebacks; all 31 originals (75,223 bytes) are preserved byte-for-byte in a fresh ignored worktree-local archive with SHA256/size records and git check-ignore evidence. The required original-checkout archive is outside this phase's allowed boundary. No external checkout was accessed and no publication copy was removed or sanitized. The outer executor must resolve the destination, preserve the originals there, then remove raw publication copies and update their links. |
+| REVIEW-PUBLISHED-RAW-TRACES | Inventoried 29 console artifacts and two embedded tracebacks; all 31 originals (75,223 bytes) are preserved byte-for-byte in a fresh ignored worktree-local archive with SHA256/size records and git check-ignore evidence. At that phase, the required original-checkout archive conflicted with the boundary, so publication copies remained. The verified outer transfer and follow-up after `74725e9` below completed the cleanup without external-checkout access. |
 
 The public [trace inventory](../2026-10-29/RAW-TRACE-RETENTION.json) records the
-remaining publication blocker without reproducing raw contents. Ignore rules
+trace preservation and subsequent cleanup without reproducing raw contents. Ignore rules
 prevent new benchmark console outputs and raw voice-attempt reports from being
 staged accidentally; they do not remove files already tracked.
 
@@ -547,7 +548,49 @@ after resume, new selection state after regeneration, and byte-identical retaine
 take audio. The affected file then passed all 10 tests in 1.77 seconds. No source
 changes followed the initial batch. The only warning was the existing
 Starlette/httpx deprecation. Git's ignore consumer also confirmed protection for
-all 31 inventoried raw paths; already tracked copies remain a publication blocker.
+all 31 inventoried raw paths; already tracked copies remained a publication blocker
+until the verified transfer and cleanup in the next follow-up.
 Full gates, live smoke, completed external receipt reconciliation, Document/PR
 and platform CI remain with the outer executor. No human-quality or production
 readiness claim is added; experimental MLX remains CLI-only.
+
+
+## Review fixes after 74725e9
+
+The seven selected findings were confirmed at their current validation, storage,
+or publication boundaries. Earlier fixes and excluded frontend files are preserved.
+
+| Finding | Correction and behavioral coverage |
+| --- | --- |
+| REVIEW-PUBLISHED-RAW-TRACES | The local archive inventory matches outer-handoff SHA256 `57a57f518a3b2a504a397ed7598748638234e8a38cfde2a189337281c3035abf`. All 31 originals and publication copies matched size/hash before cleanup. The outer executor attested independent preservation in its ignored original-checkout archive; this phase accessed no other checkout. Removed 29 raw console copies and sanitized two traceback reports, preserving non-traceback provenance, original hashes and compact failures. Archives and Git history remain unchanged. |
+| REVIEW-REVISED-UNSUPPORTED-CONTROLS | Shared initial capability normalization and fixed voice settings validate new revision controls before snapshots or activation. Unsupported explicit requests fail with actionable errors; unchanged accepted controls and pause/speed provenance remain intact. Validation does not construct a heavyweight model. |
+| REVIEW-POSTURE-FURNITURE-VALIDATION | Sitting validation detects affirmative incompatible body positions instead of furniture nouns. Real generation accepts pillow/mattress/bed-edge sitting and negated incompatible guidance while rejecting affirmative or contrastive lying instructions. |
+| REVIEW-ORIENTATION-INTERNAL-SOUND | Orientation reuses the ending's affirmative environmental sound and negation checks. Real generation rejects internal breath/heartbeat-only or negated orientation and retains accepted external-cue prose unchanged. |
+| REVIEW-EXPORT-ACTIVATION-ROLLBACK | Failed activation evacuates the newly installed directory and restores previous exports. Caller cleanup no longer deletes backups. Real-file fault injection covers activation directory-sync failure and failures while evacuating or restoring, retaining the only previous copy and reporting its path. |
+| REVIEW-LAB-EVIDENCE-DURABILITY | Immutable publication syncs its parent through the existing portable helper after hard-link publication and temporary-entry removal. Report/rating/decision writes are not acknowledged when sync fails, retain published bytes, and still refuse replacement. |
+| REVIEW-INSTALLED-EVIDENCE-OMISSION | Installed-bundle assessment requires `workspace_model_readiness_unchanged` explicitly true. Missing and false fail; true passes with the other required evidence. |
+
+The [public trace receipt](../2026-10-29/RAW-TRACE-RETENTION.json) now records
+completed publication cleanup and original/sanitized hashes. Raw data remains
+local. This resolves the previous archive-destination blocker without any new
+workspace exception.
+
+The integrated focused batch passed **600 tests**, with **18 revision failures**,
+in 51.70 seconds. Seventeen failures exposed a raw-versus-effective fixed-control
+comparison in the ambiguity guard; the guard now permits values equal to either
+raw or effective defaults while strict explicit validation still sees the original
+request. One adapter-specific test was corrected to request a Kokoro fixture after
+the general supported-control fixture moved to MOSS. No assertions were removed.
+An additional structural-edit rejection case covers designed-mode insertion on a
+reference run. The affected revision/admission/plan suites then passed **142 tests
+in 40.72 seconds**. The only warning was the existing Starlette/httpx deprecation.
+
+The separate artifact audit verified all 31 archived originals, 29 removed console
+files, both sanitized report hashes and relative receipt links, equality of all
+original non-traceback report fields, and Git ignore protection. Excluded frontend
+paths remain identical to base `01680383`. Touched Python files were formatted.
+Full repository gates, final native smoke, CI and publication remain with the
+outer executor.
+The supplied completed live-evidence summary has been reflected in RESULTS.md
+with actual earlier source versions, pending human quality and experimental
+CLI-only MLX status; it is not current-source certification.

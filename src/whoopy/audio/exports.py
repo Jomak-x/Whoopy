@@ -197,8 +197,6 @@ def export_finished_audio(
     finally:
         if staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
-        if backup.exists() and destination.exists():
-            shutil.rmtree(backup, ignore_errors=True)
 
 
 def load_export_manifest(path: Path) -> ExportManifest:
@@ -489,6 +487,7 @@ def _write_manifest(path: Path, manifest: ExportManifest) -> None:
 
 def _activate_directory(staging: Path, destination: Path, backup: Path) -> None:
     moved_existing = False
+    activated = False
     try:
         if destination.exists():
             if not destination.is_dir():
@@ -496,10 +495,22 @@ def _activate_directory(staging: Path, destination: Path, backup: Path) -> None:
             os.replace(destination, backup)
             moved_existing = True
         os.replace(staging, destination)
+        activated = True
         _fsync_directory(destination.parent)
     except (OSError, AudioExportError) as error:
-        if moved_existing and backup.exists() and not destination.exists():
-            os.replace(backup, destination)
+        try:
+            if activated:
+                os.replace(destination, staging)
+            if moved_existing:
+                os.replace(backup, destination)
+            if activated or moved_existing:
+                _fsync_directory(destination.parent)
+        except OSError as rollback_error:
+            retained = f" Previous exports remain at {backup}." if backup.exists() else ""
+            raise AudioExportError(
+                f"Could not activate finished exports: {error}; "
+                f"rollback failed: {rollback_error}.{retained}"
+            ) from rollback_error
         if isinstance(error, AudioExportError):
             raise
         raise AudioExportError(f"Could not activate finished exports: {error}") from error

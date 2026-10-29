@@ -1,195 +1,206 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "source_commit": "3fbe66a4699521f308cc3904725f5c1de8ba2a6b",
-  "status": "publication_cleanup_blocked_on_archive_destination",
-  "preservation": "Byte-identical originals preserved in an ignored worktree-local archive; transfer to the required original-checkout archive has not been authorized under this phase boundary.",
-  "publication_copies_removed": false,
+  "status": "publication_cleanup_complete",
+  "publication_copies_removed": true,
+  "preservation": {
+    "entry_count": 31,
+    "total_bytes": 75223,
+    "inventory_sha256": "57a57f518a3b2a504a397ed7598748638234e8a38cfde2a189337281c3035abf",
+    "worktree_local_archive_verified_before_cleanup": true,
+    "outer_verified_archive": "evaluations/benchmarks/2026-10-29/publication-raw-traces-archive-20261029T141247Z-e1ba1f31",
+    "outer_archive_attestation": "The outer executor independently verified all 31 original files by SHA-256 and size in the ignored original-checkout archive. The archive is intentionally not published."
+  },
   "entries": [
     {
       "path": "evaluations/benchmarks/2026-10-28/baseline/kokoro-smoke.stderr.log",
-      "size_bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/baseline/production-control.stderr.log",
-      "size_bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/production-new-writer/stderr.log",
-      "size_bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/production-new-writer/stdout.json",
-      "size_bytes": 1596,
-      "sha256": "1591f2d27c0b58948f39fefd0b0bc85e5ccbb24a005f3826db54dac6be6027f7",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 1596,
+      "original_sha256": "1591f2d27c0b58948f39fefd0b0bc85e5ccbb24a005f3826db54dac6be6027f7",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/chatterbox-v3-synthetic-male.log",
-      "size_bytes": 2565,
-      "sha256": "b9be96e6f777c67f00ddbbe8b989c6e4f3cdae7ff1918bb04ddbf8a3b978d670",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 2565,
+      "original_sha256": "b9be96e6f777c67f00ddbbe8b989c6e4f3cdae7ff1918bb04ddbf8a3b978d670",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/dots-install.log",
-      "size_bytes": 719,
-      "sha256": "d476a58d6cebd4069a0c5a87699a3f510613162596e8252aee83a8fa74a01799",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 719,
+      "original_sha256": "d476a58d6cebd4069a0c5a87699a3f510613162596e8252aee83a8fa74a01799",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/dots-soar-synthetic-male-retry.log",
-      "size_bytes": 1445,
-      "sha256": "335260a92acdd78798cfc8df51865999128d3d04e2e00d5ff7e07a9a5e0d1061",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 1445,
+      "original_sha256": "335260a92acdd78798cfc8df51865999128d3d04e2e00d5ff7e07a9a5e0d1061",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/dots-soar-synthetic-male.log",
-      "size_bytes": 3252,
-      "sha256": "c2cc7abfbec33b71dd82777da7a913512cc12857f0e2c8c8a2f45e92af88cf6b",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 3252,
+      "original_sha256": "c2cc7abfbec33b71dd82777da7a913512cc12857f0e2c8c8a2f45e92af88cf6b",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/dots-soar-synthetic-male/attempts/report-1793232588153946000.json",
-      "size_bytes": 6423,
-      "sha256": "7f2623f440890929c8fede2bde5d8f1eac2740339281a49e94a60bfbc535a024",
-      "publication_action": "replace_embedded_traceback_with_digest"
+      "original_size_bytes": 6423,
+      "original_sha256": "7f2623f440890929c8fede2bde5d8f1eac2740339281a49e94a60bfbc535a024",
+      "publication_result": "traceback_replaced_with_digest",
+      "published_size_bytes": 5002,
+      "published_sha256": "b7169171bd9693125d5f0594e79d1e9fd46a9654d2f37bb7633a389d984f906c"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/download.log",
-      "size_bytes": 3055,
-      "sha256": "10ccf3b535486da1f7b5c5b5ae7f1dccae16e86309eac429b4580901157835f3",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 3055,
+      "original_sha256": "10ccf3b535486da1f7b5c5b5ae7f1dccae16e86309eac429b4580901157835f3",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/kokoro-af-heart-080.log",
-      "size_bytes": 1908,
-      "sha256": "749fa2e1e4ff71c239657e45a9617848a073df96e453b64bcfd852ca11367c80",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 1908,
+      "original_sha256": "749fa2e1e4ff71c239657e45a9617848a073df96e453b64bcfd852ca11367c80",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/kokoro-am-michael.log",
-      "size_bytes": 1744,
-      "sha256": "c03927d52b6a7ae74ebb5f77d2121fdcdc48505f0596edadc262ac63a2ebf0ac",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 1744,
+      "original_sha256": "c03927d52b6a7ae74ebb5f77d2121fdcdc48505f0596edadc262ac63a2ebf0ac",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/kokoro-am-michael/attempts/report-1793230678416835000.json",
-      "size_bytes": 6169,
-      "sha256": "2a2c7b24e8ad7cacc4955be494345a84958bb40b5c9ffe78e03fcc341ef02c13",
-      "publication_action": "replace_embedded_traceback_with_digest"
+      "original_size_bytes": 6169,
+      "original_sha256": "2a2c7b24e8ad7cacc4955be494345a84958bb40b5c9ffe78e03fcc341ef02c13",
+      "publication_result": "traceback_replaced_with_digest",
+      "published_size_bytes": 4486,
+      "published_sha256": "6f40b5ce9d12dc38cac7e272342e4e98b7afca63aa68d45e68c473844a906f18"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/kokoro-bm-george-080.log",
-      "size_bytes": 1909,
-      "sha256": "8d5e6c3da03d3f903edf6fdf5cb560154c57866c49ce7009a1758e36de4dd5a0",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 1909,
+      "original_sha256": "8d5e6c3da03d3f903edf6fdf5cb560154c57866c49ce7009a1758e36de4dd5a0",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-custom-download.log",
-      "size_bytes": 608,
-      "sha256": "643ca6eb10c449fb86942366d624660a2d3ec6f2f35b8fd1289e6d0594cc6eac",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 608,
+      "original_sha256": "643ca6eb10c449fb86942366d624660a2d3ec6f2f35b8fd1289e6d0594cc6eac",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-custom-ryan.log",
-      "size_bytes": 27161,
-      "sha256": "1a95c7664f12d3e0711498a8de4789829c8f82817fb2b1922e2689b71e28fe6d",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 27161,
+      "original_sha256": "1a95c7664f12d3e0711498a8de4789829c8f82817fb2b1922e2689b71e28fe6d",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-design-download.log",
-      "size_bytes": 687,
-      "sha256": "f4d92a20b03b5770a768f67562d0e63e3cd89b899a9f3bf16e2610d0e09926bb",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 687,
+      "original_sha256": "f4d92a20b03b5770a768f67562d0e63e3cd89b899a9f3bf16e2610d0e09926bb",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/mlx-qwen-designed-male.log",
-      "size_bytes": 2331,
-      "sha256": "bc7992926a17ec974e14a34be0eafb874d0a73efa4c7cfa85cda71320bed45dc",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 2331,
+      "original_sha256": "bc7992926a17ec974e14a34be0eafb874d0a73efa4c7cfa85cda71320bed45dc",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/moss-local-synthetic-male-retry.log",
-      "size_bytes": 2866,
-      "sha256": "697b1bb2bdc29650a712c1d63bf02e246425b7a4eb4d25fb2f8bf482031b0390",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 2866,
+      "original_sha256": "697b1bb2bdc29650a712c1d63bf02e246425b7a4eb4d25fb2f8bf482031b0390",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/moss-local-synthetic-male.log",
-      "size_bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/qwen-custom-ryan.log",
-      "size_bytes": 2066,
-      "sha256": "04a621d376952083394cc4d35c35121c5483e8c486039e66848df0b953201b0c",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 2066,
+      "original_sha256": "04a621d376952083394cc4d35c35121c5483e8c486039e66848df0b953201b0c",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-designed-male.log",
-      "size_bytes": 1988,
-      "sha256": "4069127e5dcc8870f2d6abf3da6bc1901108f31ce5222f24d6f7e0a6484a783b",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 1988,
+      "original_sha256": "4069127e5dcc8870f2d6abf3da6bc1901108f31ce5222f24d6f7e0a6484a783b",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/voices/voxcpm2-reference.log",
-      "size_bytes": 2078,
-      "sha256": "36c9862441dff6f48b5dde8a05b7fe64df767b12e941c829a7eef1f5e8560a90",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 2078,
+      "original_sha256": "36c9862441dff6f48b5dde8a05b7fe64df767b12e941c829a7eef1f5e8560a90",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/writer-model/smoke-sandbox-attempt-stderr.txt",
-      "size_bytes": 26,
-      "sha256": "3e4fbe0a91cfe37a7cbfa121d9343f78de3d3210fd466c1a3e5c9c63efb61ae2",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 26,
+      "original_sha256": "3e4fbe0a91cfe37a7cbfa121d9343f78de3d3210fd466c1a3e5c9c63efb61ae2",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/writer-model/smoke-sandbox-attempt-stdout.txt",
-      "size_bytes": 19,
-      "sha256": "10e02f5d00eb586833dce794d340dd39f46d448860de4c513299b983982d70e3",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 19,
+      "original_sha256": "10e02f5d00eb586833dce794d340dd39f46d448860de4c513299b983982d70e3",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/writer-model/smoke-stderr.txt",
-      "size_bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/writer-model/smoke-stdout.txt",
-      "size_bytes": 1805,
-      "sha256": "8e9b64641413bd6597cc42d75d6f08ec1067553b995b97968907bae59dc2ce64",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 1805,
+      "original_sha256": "8e9b64641413bd6597cc42d75d6f08ec1067553b995b97968907bae59dc2ce64",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/plan_first/stderr.log",
-      "size_bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/plan_first/stdout.json",
-      "size_bytes": 1403,
-      "sha256": "a7c5dcbbba118553fbe58cfe625035bdff0aa57b2a2e0e96a832c2528500a615",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 1403,
+      "original_sha256": "a7c5dcbbba118553fbe58cfe625035bdff0aa57b2a2e0e96a832c2528500a615",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/recipe_whole_session/stderr.log",
-      "size_bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "publication_result": "removed"
     },
     {
       "path": "evaluations/benchmarks/2026-10-28/writing-audio/grounding-3m/recipe_whole_session/stdout.json",
-      "size_bytes": 1400,
-      "sha256": "4399689d53edbb681a7f1f17f687e006b418d996f11b1f9f99def6b69c155a7f",
-      "publication_action": "remove_raw_output"
+      "original_size_bytes": 1400,
+      "original_sha256": "4399689d53edbb681a7f1f17f687e006b418d996f11b1f9f99def6b69c155a7f",
+      "publication_result": "removed"
     }
   ]
 }

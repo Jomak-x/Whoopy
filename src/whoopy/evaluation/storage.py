@@ -199,6 +199,7 @@ class EvaluationRepository:
             # overwrite evidence won by a concurrent request.
             os.link(temporary, path)
             temporary.unlink()
+            RunStore._fsync_directory(path.parent)
         except FileExistsError as error:
             temporary.unlink(missing_ok=True)
             raise EvaluationStorageError(

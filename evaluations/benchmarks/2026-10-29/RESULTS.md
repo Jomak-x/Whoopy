@@ -9,8 +9,8 @@ The concurrent UI experiment is excluded from this branch.
 
 All large evidence stays local under `evaluations/benchmarks/`. The localhost
 server on port 8772 serves that parent; the original port 8771 page remains available.
-The morning hub will link explicit datasets rather than silently select the newest
-folder or pool different prompt versions.
+The retained morning hub links explicit datasets without selecting the newest
+folder or pooling different prompt versions.
 
 | Dataset | Measured result | Scope |
 | --- | --- | --- |
@@ -18,6 +18,9 @@ folder or pool different prompt versions.
 | October 29 pilot, prompt v5 | 11 complete narrations: 2 Pass, 9 Review; 1 additional failed sleep generation | Two generated scripts, portable Michael and MLX Ryan/Aiden/Serena, plus deep male VoiceDesign |
 | Final prompt v6, timing compiler v3 sleep | 299.999792 seconds; full-file Review, all 16 selected native segments Pass | Actual prompt-to-audio High Ministral + MLX Ryan |
 | Final prompt v6 no-breath focus | 180.000083 seconds; full-file Review, all 9 selected native segments Pass | Actual prompt-to-audio High Ministral + MLX Ryan |
+| Corrected prompt v6 grounding | 180.000042 seconds; full-file Pass, all 9 selected native segments Pass | High Ministral + MLX Ryan; earlier failed attempts retained |
+| Five matched grounding voice auditions | 5 Review; actual lengths 167.797542–192.733042 seconds | Portable Michael and MLX Ryan/Aiden/Serena/VoiceDesign on the same authored script |
+| Matched writing, common Michael 0.8 voice | New recipe: 185.507375 seconds, Pass; old plan-first: 180.223375 seconds, Review | Both generated with the same pinned High writer settings; human content review pending |
 
 Pass means automated speech screening, not listener approval. Every normalized
 word mismatch remains Review; major omissions, truncation, no speech, invalid
@@ -28,8 +31,26 @@ The v6 grounding campaign initially failed on two validator false positives:
 “lift your hands / shift your weight” was missed as movement, and “body touches
 the seat” was missed as contact. The actual failed attempts remain unchanged.
 The recognizers now accept those physical instructions while still rejecting
-missing sound/contact/movement and metaphorical shifts. A fresh run must establish
-the corrected result; historical failures are not relabeled.
+missing sound/contact/movement and metaphorical shifts. The completed outer
+handoff records the corrected grounding result above; historical failures remain
+failed and were not relabeled.
+
+These results come from the supplied completed-evidence handoff, not fresh
+inference in this worktree. Final grounding and comparison generation used source
+`c31d4e309983d7ff7b8054e45ef37c8876004de9`; focus/sleep used `2e13ae4`
+with the same prompt v6/compiler v3 and earlier physical-word recognizers.
+The retained grounding manifest SHA256 is
+`4cc36b386f6ca764c316c1d8d7063be731fe08818c3eb6a6fa90e6f0c1519e35`;
+the common-voice writing manifest is
+`d59c634b0ab4d1daf567afd7bc0fe2e43a9fe95be9231f749cfb6aa8797dc506`.
+The new writer produced 142 words in one attempt (46.655388 seconds); plan-first
+produced 217 words across five attempts (94.612602 seconds). Both used Ministral
+3 14B Q4_K_M revision `74fac473c43357d7fb2671713608183cc72496d0`,
+llama.cpp b10142, context 32768, temperature 0.7 and top-p 0.9. Text-only review
+still found repetition, weak independence wording, and missing clear fallback,
+check-in and carryforward in the new sample. Automated screening establishes
+neither human warmth nor teaching quality. Final review-source smoke remains
+separate from these earlier live-source results.
 
 ## What changed in writing
 
@@ -350,12 +371,40 @@ seconds respectively, with only the existing Starlette/httpx warning. No source
 changes followed the initial batch. These are focused deterministic checks, not
 new live-model, platform or full-suite qualification.
 
-Raw trace cleanup is **not complete**. All 31 inventoried originals are preserved
-in an ignored worktree-local archive, but the requested original-checkout archive
-conflicts with this phase's explicit workspace boundary. Publication copies remain
-tracked pending destination resolution and preservation there; new ignore rules
-do not untrack them. The [inventory](RAW-TRACE-RETENTION.json) provides sizes and
-SHA256 values without raw contents. The outer executor must finish this cleanup
-before publication, and remains responsible for completed live receipt and exact
-source/CI reconciliation, Document/PR work and separate live source smoke. Human
-listening remains pending; experimental MLX remains CLI-only.
+At the close of that review, raw-trace cleanup was blocked on archive destination.
+The outer executor subsequently supplied a verified transfer handoff, resolving
+the boundary without external-checkout access in this phase. The follow-up after
+`74725e9` below records completed publication cleanup. Human listening remains
+pending; experimental MLX remains CLI-only.
+
+
+## Review follow-up after 74725e9
+
+All seven selected findings are addressed. Revision controls now share initial
+capability validation before mutation; valid furniture guidance and external
+orientation use affirmative cues with negation handling. Export activation
+failure restores old bytes or retains the recovery backup. Immutable Lab evidence
+syncs publication directories before acknowledgement, and installed-bundle
+receipts require an explicit unchanged-workspace-model-readiness flag.
+
+The archive handoff is resolved: all 31 originals matched the supplied inventory
+hash, 29 raw console publication copies were removed, and two traced reports were
+sanitized while preserving every non-traceback field. The
+[retention receipt](RAW-TRACE-RETENTION.json) records completed cleanup, original
+hashes and sanitized hashes. Raw originals remain in ignored local archives; no
+Git history was rewritten and no other checkout was accessed in this phase.
+
+The integrated focused batch passed 600 tests and exposed 18 revision failures
+in 51.70 seconds. After correcting the effective-default ambiguity comparison
+and one adapter-specific fixture, the affected suites passed all 142 tests in
+40.72 seconds, with no weakened assertions. Only the existing Starlette/httpx
+warning remained. The artifact audit passed and excluded frontend paths still
+match the original base. See the
+[per-finding record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-74725e9).
+
+The completed outer live-evidence summary is reflected in the opening tables,
+with source `c31d4e3` and earlier focus/sleep source `2e13ae4` kept distinct from
+this review revision. This phase ran no model inference or full repository gate.
+Human quality remains unreviewed, MLX remains experimental and CLI-only, and
+final native source smoke, CI, Document/PR reconciliation and publication remain
+with the outer workflow.

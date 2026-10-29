@@ -6,11 +6,12 @@ import wave
 from datetime import UTC, datetime
 from itertools import combinations, product
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 import pytest
 
+from whoopy.adapters.tts import MossTTSAdapter, SherpaOnnxKokoroAdapter
 from whoopy.artifacts import TargetPlatform
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.audio.models import PcmAudio
@@ -57,6 +58,11 @@ from whoopy.pipeline.runs import (
     RunStatus,
     RunStore,
 )
+from whoopy.pipeline.speech_controls import (
+    apply_speech_capability_fallbacks,
+    effective_voice_mode,
+    speech_capabilities,
+)
 from whoopy.pipeline.worker import LocalWorker
 from whoopy.timeline import (
     BreathSegment,
@@ -80,7 +86,8 @@ def _completed_script_run(root: Path) -> RunStore:
         profile="basic",
         target=TargetPlatform(operating_system="linux", architecture="x86_64"),
         tts=TTSRunSettings(
-            voice_name="af_heart",
+            backend="moss-local-v1.5",
+            voice_name="reference",
             speaker_id=0,
             speed=0.8,
             num_threads=2,
@@ -280,7 +287,7 @@ def test_pronunciation_edit_rejects_missing_or_duplicate_sources_without_revisio
 def test_local_application_rejects_pronunciation_for_unsupported_adapter(
     tmp_path: Path,
 ) -> None:
-    store = _completed_script_run(tmp_path / "runs")
+    store = _completed_backend_script_run(tmp_path / "runs", "kokoro")
     application = LocalWebApplication(
         project_root=tmp_path,
         config_directory=Path("config"),
@@ -547,7 +554,8 @@ def _completed_generated_run(root: Path, generated: MeditationGenerationResult) 
         profile="standard",
         target=TargetPlatform(operating_system="linux", architecture="x86_64"),
         tts=TTSRunSettings(
-            voice_name="af_heart",
+            backend="moss-local-v1.5",
+            voice_name="reference",
             speaker_id=0,
             speed=0.8,
             num_threads=2,
@@ -1769,3 +1777,151 @@ def test_control_correspondence_matches_every_optimal_ordered_alignment() -> Non
             assert _control_correspondence(previous, requested) == {
                 "pace": {(3 * new, 1): (2 * old + 1, 1) for old, new in mandatory}
             }, (previous_values, requested_values)
+
+
+def _completed_backend_script_run(
+    root: Path, backend: Literal["kokoro", "moss-local-v1.5"]
+) -> RunStore:
+    store = _completed_script_run(root)
+    config = store.load_resolved_config(RUN_ID)
+    settings = config.tts.model_copy(update={"backend": backend})
+    config = config.model_copy(update={"tts": settings})
+    store._write_json(store.resolved_config_path(RUN_ID), config.model_dump_json(indent=2))
+    store.write_timeline(
+        RUN_ID,
+        apply_speech_capability_fallbacks(
+            store.load_timeline(RUN_ID),
+            speech_capabilities(settings),
+            voice_mode=effective_voice_mode(settings),
+        ),
+    )
+    return store
+
+
+@pytest.mark.parametrize(
+    ("backend", "revision_request", "field"),
+    [
+        (
+            "kokoro",
+            RevisionRequest(timeline=TimelineEdit(delivery={"speech-0001": "warm"})),
+            "delivery",
+        ),
+        ("kokoro", RevisionRequest(script="[delivery: warm]\n\n" + SCRIPT), "delivery"),
+        (
+            "kokoro",
+            RevisionRequest(timeline=TimelineEdit(intensity={"speech-0001": "moderate"})),
+            "intensity",
+        ),
+        (
+            "kokoro",
+            RevisionRequest(
+                timeline=TimelineEdit(
+                    pronunciation_overrides={
+                        "speech-0001": (
+                            PronunciationOverride(source="Welcome", pronunciation="Well-come"),
+                        )
+                    }
+                )
+            ),
+            "pronunciation_overrides",
+        ),
+        (
+            "moss-local-v1.5",
+            RevisionRequest(script="[voice-mode: designed]\n\n" + SCRIPT),
+            "voice_mode",
+        ),
+        (
+            "moss-local-v1.5",
+            RevisionRequest(
+                script="[voice-mode: designed]\n\n"
+                + SCRIPT
+                + "\nListen to nearby sounds.\n\nFeel the support of the chair.\n"
+            ),
+            "voice_mode",
+        ),
+    ],
+)
+def test_unsupported_revision_controls_leave_all_run_artifacts_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    backend: Literal["kokoro", "moss-local-v1.5"],
+    revision_request: RevisionRequest,
+    field: str,
+) -> None:
+    store = _completed_backend_script_run(tmp_path / "runs", backend)
+    root = store.run_directory(RUN_ID)
+    before = {
+        path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()
+    }
+
+    def reject_construction(self: object, *args: object, **kwargs: object) -> None:
+        raise AssertionError("Revision validation must not construct a speech adapter")
+
+    monkeypatch.setattr(SherpaOnnxKokoroAdapter, "__init__", reject_construction)
+    monkeypatch.setattr(MossTTSAdapter, "__init__", reject_construction)
+
+    with pytest.raises(RevisionError, match=rf"{backend} cannot apply {field}="):
+        RevisionStore(store).create(RUN_ID, revision_request)
+
+    after = {
+        path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()
+    }
+    assert after == before
+    assert not (root / "revisions").exists()
+
+
+@pytest.mark.parametrize("backend", ["kokoro", "moss-local-v1.5"])
+def test_supported_revision_keeps_fixed_voice_and_explicit_timing(
+    tmp_path: Path, backend: Literal["kokoro", "moss-local-v1.5"]
+) -> None:
+    store = _completed_backend_script_run(tmp_path / "runs", backend)
+    revisions = RevisionStore(store)
+    settings = store.load_resolved_config(RUN_ID).tts
+    revision = revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            timeline=TimelineEdit(
+                pace={"speech-0001": "slow"},
+                silence_duration_ms={"silence-0001": 7_000},
+            )
+        ),
+    )
+    accepted = store.load_timeline(RUN_ID)
+    revisions.create(
+        RUN_ID,
+        RevisionRequest(
+            script=store.load_script(RUN_ID).replace(
+                "Notice the support beneath you.", "Notice the steady support beneath you."
+            )
+            + "\nListen to nearby sounds.\n"
+        ),
+    )
+    edited = store.load_timeline(RUN_ID)
+    assert edited.preserve_timing
+    assert edited.segments[:2] == accepted.segments[:2]
+    assert all(
+        segment.voice_mode == effective_voice_mode(settings)
+        for segment in edited.segments
+        if isinstance(segment, SpeechSegment)
+    )
+    assert store.load_resolved_config(RUN_ID).tts.speed == settings.speed
+    revisions.restore(RUN_ID, revision.revision_id)
+    assert store.load_timeline(RUN_ID) == accepted
+
+
+def test_wording_edit_preserves_previously_accepted_nondefault_controls(tmp_path: Path) -> None:
+    store = _completed_backend_script_run(tmp_path / "runs", "kokoro")
+    timeline = store.load_timeline(RUN_ID)
+    first = timeline.segments[0]
+    assert isinstance(first, SpeechSegment)
+    accepted = first.model_copy(update={"delivery": "warm"})
+    store.write_timeline(
+        RUN_ID, timeline.model_copy(update={"segments": [accepted, *timeline.segments[1:]]})
+    )
+
+    RevisionStore(store).create(
+        RUN_ID,
+        RevisionRequest(script=SCRIPT.replace("Notice the support", "Feel the steady support")),
+    )
+
+    assert store.load_timeline(RUN_ID).segments[0] == accepted

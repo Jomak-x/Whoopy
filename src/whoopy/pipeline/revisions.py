@@ -21,6 +21,11 @@ from whoopy.meditation import (
 from whoopy.meditation.generator import TECHNIQUE_DELIVERY
 from whoopy.pipeline.locks import RunLock, RunLockUnavailable
 from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore, RunStoreError
+from whoopy.pipeline.speech_controls import (
+    apply_speech_capability_fallbacks,
+    effective_voice_mode,
+    speech_capabilities,
+)
 from whoopy.pipeline.takes import PendingAlternativeTake, SegmentTakeError, SegmentTakeStore
 from whoopy.timeline import (
     BreathSegment,
@@ -31,6 +36,7 @@ from whoopy.timeline import (
     SilenceSegment,
     SpeechSegment,
     Timeline,
+    TimelineSegment,
 )
 from whoopy.timeline.compiler import ScriptControls, compile_script, rewrite_script_pauses
 
@@ -38,6 +44,15 @@ REVISION_ROOT = "revisions"
 ACTIVE_REVISION = "active.json"
 REVISION_DRAFT_SECTIONS = "draft-sections"
 REVISION_RAW_ATTEMPTS = "raw-model-output"
+SPEECH_CONTROL_FIELDS = (
+    "delivery",
+    "intensity",
+    "pace",
+    "voice_mode",
+    "language",
+    "pronunciation_overrides",
+    "target_duration_ms",
+)
 
 
 class RevisionError(RunStoreError):
@@ -294,6 +309,12 @@ class RevisionStore:
                         "beats, or outcome; the existing run was not changed."
                     )
                 new_timeline = old_timeline
+                preserved_controls = {
+                    segment.id: {name: getattr(segment, name) for name in SPEECH_CONTROL_FIELDS}
+                    for segment in old_timeline.segments
+                    if isinstance(segment, SpeechSegment)
+                }
+                requested_controls_by_segment: dict[str, set[str]] = {}
                 active_plan = current_plan
                 change_kind: Literal[
                     "initial", "assembly_only", "selective_speech", "script", "plan"
@@ -332,6 +353,9 @@ class RevisionStore:
                     ]
                     previous_segments = previous_script_timeline.segments
                     requested_segments = new_timeline.segments
+                    effective_requested_segments = self._prepare_speech_controls(
+                        parsed, new_timeline, preserved={}, requested={}
+                    ).segments
                     current_segments = {segment.id: segment for segment in old_timeline.segments}
                     previous_keys = [
                         segment.model_dump_json(
@@ -403,7 +427,9 @@ class RevisionStore:
                         previous_controls, requested_controls
                     )
                     merged_segments = []
+                    preserved_controls = {}
                     for index, requested in enumerate(requested_segments):
+                        effective_requested = effective_requested_segments[index]
                         previous_index = correspondence.get(index)
                         candidates = (
                             [previous_index]
@@ -478,6 +504,7 @@ class RevisionStore:
                                     explicit = getattr(request.timeline, edit_name, {})
                                     if (
                                         value != getattr(requested, name)
+                                        and value != getattr(effective_requested, name)
                                         and requested.id not in explicit
                                     ):
                                         raise RevisionError(
@@ -487,6 +514,14 @@ class RevisionStore:
                                         )
                                 updates = {}
                         merged_segments.append(requested.model_copy(update=updates))
+                        if isinstance(requested, SpeechSegment):
+                            preserved_controls[requested.id] = updates
+                            requested_controls_by_segment[requested.id] = {
+                                name
+                                for name in ("delivery", "intensity", "pace", "voice_mode")
+                                if name in requested_controls.origins[requested.id]
+                                and name not in updates
+                            }
                     new_timeline = new_timeline.model_copy(update={"segments": merged_segments})
                     merged_pauses = [
                         segment.duration_ms
@@ -551,6 +586,15 @@ class RevisionStore:
                     raise RevisionError(
                         "The revision does not change the active script, timeline, or plan."
                     )
+                for name in ("delivery", "intensity", "pace", "pronunciation_overrides"):
+                    for segment_id in getattr(request.timeline, name):
+                        requested_controls_by_segment.setdefault(segment_id, set()).add(name)
+                new_timeline = self._prepare_speech_controls(
+                    parsed,
+                    new_timeline,
+                    preserved=preserved_controls,
+                    requested=requested_controls_by_segment,
+                )
                 current_revision = self._ensure_initial(parsed)
                 manifest = self._write_revision(
                     parsed,
@@ -653,6 +697,13 @@ class RevisionStore:
             )
         if generated.timeline.run_id != parsed:
             raise RevisionError("The production draft belongs to another run.")
+        generated = generated.model_copy(
+            update={
+                "timeline": self._prepare_speech_controls(
+                    parsed, generated.timeline, preserved={}, requested={}
+                )
+            }
+        )
         current = self._ensure_initial(parsed)
         old_speech = {
             segment.id: segment
@@ -897,6 +948,42 @@ class RevisionStore:
             raise RevisionError(f"Could not save immutable revision: {error}") from error
         finally:
             shutil.rmtree(staging, ignore_errors=True)
+
+    def _prepare_speech_controls(
+        self,
+        run_id: UUID,
+        timeline: Timeline,
+        *,
+        preserved: dict[str, dict[str, object]],
+        requested: dict[str, set[str]],
+    ) -> Timeline:
+        if self.store.load(run_id).source_kind == "fixture_prompt":
+            return timeline
+        settings = self.store.load_resolved_config(run_id).tts
+        normalized = apply_speech_capability_fallbacks(
+            timeline,
+            speech_capabilities(settings),
+            voice_mode=effective_voice_mode(settings),
+        )
+        segments: list[TimelineSegment] = []
+        for original, effective in zip(timeline.segments, normalized.segments, strict=True):
+            if not isinstance(original, SpeechSegment):
+                segments.append(original)
+                continue
+            updates = {}
+            accepted = preserved.get(original.id, {})
+            for name in SPEECH_CONTROL_FIELDS:
+                value = getattr(original, name)
+                if name in accepted and value == accepted[name]:
+                    updates[name] = value
+                elif value != getattr(effective, name) and name in requested.get(original.id, ()):
+                    raise RevisionError(
+                        f"{settings.backend} cannot apply {name}={value!r} to {original.id}; "
+                        f"use {getattr(effective, name)!r} for this run or start a new run "
+                        "with a compatible voice configuration."
+                    )
+            segments.append(effective.model_copy(update=updates))
+        return normalized.model_copy(update={"segments": segments})
 
     def _apply_timeline_edits(
         self, timeline: Timeline, edits: TimelineEdit

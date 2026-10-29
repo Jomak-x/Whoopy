@@ -38,7 +38,7 @@ from whoopy.model_packs.operations import HeavyweightModelSlot
 from whoopy.pipeline.cache import CachedSegment, SegmentCache
 from whoopy.pipeline.checkpoints import CheckpointedSegment, SegmentCheckpointStore
 from whoopy.ports import AdapterMetadata, SpeechCapabilities, SpeechSynthesizer
-from whoopy.timeline import SpeechSegment
+from whoopy.timeline import SpeechSegment, VoiceMode
 
 MLX_QWEN_BACKENDS = {
     "mlx-qwen3-custom-voice-1.7b-8bit": "custom_voice",
@@ -106,6 +106,17 @@ class MlxQwenSettings:
 class MlxQwenAdapter:
     sample_rate = 24_000
 
+    @staticmethod
+    def capabilities_for_mode(mode: VoiceMode) -> SpeechCapabilities:
+        return SpeechCapabilities(
+            voice_modes=(mode,),
+            delivery_styles=tuple(_DELIVERY),  # type: ignore[arg-type]
+            intensity_levels=("subtle", "moderate"),
+            pace_intents=tuple(_PACE),  # type: ignore[arg-type]
+            languages=("English",),
+            supports_freeform_instruction=False,
+        )
+
     def __init__(self, settings: MlxQwenSettings) -> None:
         self.settings = settings
         install = settings.installation
@@ -114,13 +125,8 @@ class MlxQwenAdapter:
         self._diagnostics = BoundedDiagnostics()
         self._slot = HeavyweightModelSlot(settings.models_root, install.backend)
         self.last_evidence: dict[str, Any] | None = None
-        self.capabilities = SpeechCapabilities(
-            voice_modes=("preset",) if install.task == "custom_voice" else ("designed",),
-            delivery_styles=tuple(_DELIVERY),  # type: ignore[arg-type]
-            intensity_levels=("subtle", "moderate"),
-            pace_intents=tuple(_PACE),  # type: ignore[arg-type]
-            languages=("English",),
-            supports_freeform_instruction=False,
+        self.capabilities = self.capabilities_for_mode(
+            "preset" if install.task == "custom_voice" else "designed"
         )
         self.metadata = AdapterMetadata(
             adapter_id="whoopy.experimental_mlx_qwen3." + install.task,

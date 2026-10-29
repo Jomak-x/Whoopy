@@ -138,6 +138,12 @@
   "load_seconds": 2.16363620798802,
   "status": "failed",
   "error": "OSError: [E050] Can't find model 'en_core_web_sm'. It doesn't seem to be a Python package or a valid path to a data directory.",
-  "traceback": "Traceback (most recent call last):\n  File \"/Users/jakob/codestuff/Whoopy/scripts/benchmark_voice_candidates.py\", line 139, in run\n    report[\"codec\"] = {\"repo\": \"OpenMOSS-Team/MOSS-Audio-Tokenizer-v2\", \"revision\": \"f6e20e543b33d2c252a7ef71bdf8aa71e5ff9169\", \"local_path\": str(codec.relative_to(ROOT)), \"config_sha256\": digest(codec / \"config.json\")}\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/mlx_audio/tts/models/kokoro/kokoro.py\", line 304, in generate\n    pipeline = self._get_pipeline(lang_code)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/mlx_audio/tts/models/kokoro/kokoro.py\", line 287, in _get_pipeline\n    self._pipelines[lang_code] = KokoroPipeline(\n                                 ^^^^^^^^^^^^^^^\n  File \"/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/mlx_audio/tts/models/kokoro/pipeline.py\", line 155, in __init__\n    self.g2p = en.G2P(\n               ^^^^^^^\n  File \"/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/misaki/en.py\", line 503, in __init__\n    self.nlp = spacy.load(name, enable=components)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/spacy/__init__.py\", line 74, in load\n    return util.load_model(\n           ^^^^^^^^^^^^^^^^\n  File \"/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/spacy/util.py\", line 531, in load_model\n    raise IOError(Errors.E050.format(name=name))\nOSError: [E050] Can't find model 'en_core_web_sm'. It doesn't seem to be a Python package or a valid path to a data directory.\n",
-  "process_peak_rss_bytes": 691109888
+  "process_peak_rss_bytes": 691109888,
+  "traceback_sha256": "155e2c59e45b4a5a5c484ff8e3bf9438c11f6a18b0bb4f194101a206ebfe2d28",
+  "failure_phase": "initializing the Kokoro English grapheme-to-phoneme pipeline",
+  "original_report": {
+    "size_bytes": 6169,
+    "sha256": "2a2c7b24e8ad7cacc4955be494345a84958bb40b5c9ffe78e03fcc341ef02c13",
+    "preservation_receipt": "../../../../2026-10-29/RAW-TRACE-RETENTION.json"
+  }
 }

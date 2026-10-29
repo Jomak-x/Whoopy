@@ -994,6 +994,7 @@ def assess_installed_bundles(
                 and value.get("api_started") is True
                 and value.get("bundled_frontend_served") is True
                 and value.get("installed_defaults_resolved_without_checkout") is True
+                and value.get("workspace_model_readiness_unchanged") is True
                 and value.get("bound_host") == "127.0.0.1"
                 and value.get("independent_platform_evidence") is False
                 and value.get("local_v1_release_ready") is False

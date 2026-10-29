@@ -26,13 +26,15 @@ from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.cli import (
     QWEN_BACKEND_VARIANTS,
     _apply_global_speech_overrides,
-    _apply_speech_capability_fallbacks,
     main,
 )
 from whoopy.hardware import HardwareSnapshot
 from whoopy.pipeline.generation import PendingGenerationConfig, TTSRunSettings
 from whoopy.pipeline.locks import RunLock
 from whoopy.pipeline.runs import RunExecution, RunStage, RunStatus, RunStore
+from whoopy.pipeline.speech_controls import (
+    apply_speech_capability_fallbacks as _apply_speech_capability_fallbacks,
+)
 from whoopy.ports import (
     AdapterMetadata,
     ScriptGenerationRequest,

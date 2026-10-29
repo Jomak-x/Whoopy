@@ -1,9 +1,0 @@
-Using Python 3.12.14 environment at: models/experimental/voice-benchmark-2026-10-28/.venv
-Resolved 38 packages in 496ms
-   Updating https://github.com/sb1992/dots-tts-mlx.git (f64479f51a2a9d7093533732cae86e765d8fb96e)
-    Updated https://github.com/sb1992/dots-tts-mlx.git (f64479f51a2a9d7093533732cae86e765d8fb96e)
-   Building dots-tts-mlx @ git+https://github.com/sb1992/dots-tts-mlx.git@f64479f51a2a9d7093533732cae86e765d8fb96e
-      Built dots-tts-mlx @ git+https://github.com/sb1992/dots-tts-mlx.git@f64479f51a2a9d7093533732cae86e765d8fb96e
-Prepared 1 package in 3.25s
-Installed 1 package in 7ms
- + dots-tts-mlx==0.7.0 (from git+https://github.com/sb1992/dots-tts-mlx.git@f64479f51a2a9d7093533732cae86e765d8fb96e)

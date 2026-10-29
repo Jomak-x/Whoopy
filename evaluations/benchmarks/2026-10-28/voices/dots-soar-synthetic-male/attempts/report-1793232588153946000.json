@@ -153,6 +153,12 @@
   },
   "status": "failed",
   "error": "Error: unknown format: 3",
-  "traceback": "Traceback (most recent call last):\n  File \"/Users/jakob/codestuff/Whoopy/scripts/benchmark_voice_candidates.py\", line 352, in run\n    profile = model.enroll(\n              ^^^^^^^^^^^^^\n  File \"/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/dots_tts_mlx/model.py\", line 962, in enroll\n    prompt_audio48k = _load_prompt_audio48k(prompt_audio, self.sample_rate)\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/dots_tts_mlx/model.py\", line 188, in _load_prompt_audio48k\n    raw, sr = _load_wav_mono(prompt_audio)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/jakob/codestuff/Whoopy/models/experimental/voice-benchmark-2026-10-28/.venv/lib/python3.12/site-packages/dots_tts_mlx/model.py\", line 89, in _load_wav_mono\n    with wave.open(str(path), \"rb\") as wf:\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.12/3.12.14/Frameworks/Python.framework/Versions/3.12/lib/python3.12/wave.py\", line 649, in open\n    return Wave_read(f)\n           ^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.12/3.12.14/Frameworks/Python.framework/Versions/3.12/lib/python3.12/wave.py\", line 286, in __init__\n    self.initfp(f)\n  File \"/opt/homebrew/Cellar/python@3.12/3.12.14/Frameworks/Python.framework/Versions/3.12/lib/python3.12/wave.py\", line 266, in initfp\n    self._read_fmt_chunk(chunk)\n  File \"/opt/homebrew/Cellar/python@3.12/3.12.14/Frameworks/Python.framework/Versions/3.12/lib/python3.12/wave.py\", line 383, in _read_fmt_chunk\n    raise Error('unknown format: %r' % (wFormatTag,))\nwave.Error: unknown format: 3\n",
-  "process_peak_rss_bytes": 412729344
+  "process_peak_rss_bytes": 412729344,
+  "traceback_sha256": "22e7105a41cce833429eead215ba9190b4596fe0ad1b5e78af709ba1497aafff",
+  "failure_phase": "loading the synthetic FLOAT WAV reference during speaker enrollment",
+  "original_report": {
+    "size_bytes": 6423,
+    "sha256": "7f2623f440890929c8fede2bde5d8f1eac2740339281a49e94a60bfbc535a024",
+    "preservation_receipt": "../../../../2026-10-29/RAW-TRACE-RETENTION.json"
+  }
 }

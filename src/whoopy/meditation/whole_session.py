@@ -171,7 +171,17 @@ LYING_CONTRADICTION = re.compile(
     re.I,
 )
 SITTING_CONTRADICTION = re.compile(
-    r"\b(?:lie|lay|lying)\s+(?:down|in bed)|\b(?:bed|mattress|pillow)\b",
+    r"\b(?:lie|lay|lying)\s+(?:down|(?:in|on)\s+(?:(?:your|the|a)\s+)?"
+    r"(?:bed|mattress|floor|mat|back|side|stomach))\b|"
+    r"\b(?:recline|reclining)\b|"
+    r"\b(?:rest|resting)\s+flat\s+on\s+(?:your|the)\s+(?:back|side|stomach)\b",
+    re.I,
+)
+POSTURE_INSTRUCTION = rf"(?:{LYING_CONTRADICTION.pattern}|{SITTING_CONTRADICTION.pattern})"
+NEGATED_POSTURE_INSTRUCTION = re.compile(
+    rf"(?:{ACTION_NEGATION}|\b(?:not|without|avoid)\s+)(?:be\s+)?"
+    rf"{POSTURE_INSTRUCTION}"
+    rf"(?:\s+(?:or|and)\s+(?:to\s+)?{POSTURE_INSTRUCTION})*",
     re.I,
 )
 
@@ -447,7 +457,10 @@ def _validate_session(
             contradictory = (
                 LYING_CONTRADICTION if session.posture == "lying_down" else SITTING_CONTRADICTION
             )
-            if contradictory.search(text):
+            posture_guidance = NEGATED_POSTURE_INSTRUCTION.sub(
+                lambda match: " " * len(match.group()), text
+            )
+            if contradictory.search(posture_guidance):
                 errors.append(f"{label}: posture contradicts {session.posture}")
             sentences = split_sentences(text)
             if allocated_quiets is not None:
@@ -469,7 +482,7 @@ def _validate_session(
     ):
         errors.append("comfort: offer permission to adjust or move")
     orientation = " ".join(draft.sections[1].paragraphs)
-    if not re.search(r"\b(?:sound\w*|hear\w*|listen\w*)\b", orientation, re.I):
+    if not _has_positive_return_cue(orientation, RETURN_SOUND):
         errors.append("orientation: establish surrounding sound before inward practice")
     if not re.search(
         r"\b(?:support|contact|weight|surface|seat|chair|bed|floor|mattress)\b|"

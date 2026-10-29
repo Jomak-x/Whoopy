@@ -92,6 +92,7 @@ def _installed_bundle_receipt(target: str) -> dict[str, object]:
         "api_started": True,
         "bundled_frontend_served": True,
         "installed_defaults_resolved_without_checkout": True,
+        "workspace_model_readiness_unchanged": True,
         "bound_host": "127.0.0.1",
         "studio_lifecycle_evidence_sha256": lifecycle_identity,
         "studio_lifecycle_evidence": lifecycle,
@@ -247,6 +248,37 @@ def test_installed_bundle_gate_requires_a_bound_lifecycle_on_every_target(
 
     assert gate.outcome == "passed"
     assert gate.facts["passed_targets"] == sorted(RELEASE_TARGETS)
+
+
+@pytest.mark.parametrize(
+    ("flag_present", "flag_value", "expected_outcome"),
+    (
+        (False, None, "failed"),
+        (True, False, "failed"),
+        (True, True, "passed"),
+    ),
+)
+def test_installed_bundle_gate_requires_unchanged_workspace_model_readiness(
+    tmp_path: Path,
+    flag_present: bool,
+    flag_value: object,
+    expected_outcome: str,
+) -> None:
+    paths = _write_installed_bundle_receipts(tmp_path)
+    target_path = paths[0]
+    receipt = json.loads(target_path.read_text("utf-8"))
+    if flag_present:
+        receipt["workspace_model_readiness_unchanged"] = flag_value
+    else:
+        del receipt["workspace_model_readiness_unchanged"]
+    target_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    gate = assess_installed_bundles(tuple(paths), product_version="1.2.3")
+
+    assert gate.outcome == expected_outcome
+    passed_targets = gate.facts["passed_targets"]
+    assert isinstance(passed_targets, list)
+    assert (RELEASE_TARGETS[0] in passed_targets) is (expected_outcome == "passed")
 
 
 def test_installed_bundle_gate_accepts_bound_macos_process_sandbox_proof(

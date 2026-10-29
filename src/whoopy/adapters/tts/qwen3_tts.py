@@ -260,32 +260,18 @@ class Qwen3TTSAdapter:
 
     sample_rate: int = SAMPLE_RATE
 
-    def __init__(self, settings: Qwen3TTSSettings) -> None:
-        self.settings = settings
-        self.task, official_name = _VARIANTS[settings.variant]
-        self._controller: JsonLineProcessController | None = None
-        self._runtime_device: str | None = None
-        self._diagnostics = BoundedDiagnostics()
-        pack_id = f"qwen3-tts-{settings.variant}"
-        self._runtime_slot = HeavyweightModelSlot(
-            settings.models_root or models_root_for_runtime(settings.runtime_directory), pack_id
+    @staticmethod
+    def capabilities_for_variant(variant: Qwen3TTSVariant) -> SpeechCapabilities:
+        task, _ = _VARIANTS[variant]
+        voice_mode: VoiceMode = (
+            "reference"
+            if task == "voice_clone"
+            else "designed"
+            if task == "voice_design"
+            else "preset"
         )
-        if self.task == "voice_clone":
-            assert settings.reference_audio is not None
-            assert settings.reference_text is not None
-            reference_hash = hashlib.sha256()
-            for path in (settings.reference_audio, settings.reference_text):
-                reference_hash.update(path.read_bytes() if path.is_file() else str(path).encode())
-            reference_identity = reference_hash.hexdigest()
-            voice_mode: VoiceMode = "reference"
-        elif self.task == "voice_design":
-            reference_identity = "none"
-            voice_mode = "designed"
-        else:
-            reference_identity = "none"
-            voice_mode = "preset"
-        expressive = self.task != "voice_clone" and settings.variant != "custom-voice-0.6b"
-        self.capabilities = SpeechCapabilities(
+        expressive = task != "voice_clone" and variant != "custom-voice-0.6b"
+        return SpeechCapabilities(
             voice_modes=(voice_mode,),
             delivery_styles=(
                 (
@@ -309,6 +295,27 @@ class Qwen3TTSAdapter:
             supports_freeform_instruction=expressive,
             supports_pronunciation_overrides=False,
         )
+
+    def __init__(self, settings: Qwen3TTSSettings) -> None:
+        self.settings = settings
+        self.task, official_name = _VARIANTS[settings.variant]
+        self._controller: JsonLineProcessController | None = None
+        self._runtime_device: str | None = None
+        self._diagnostics = BoundedDiagnostics()
+        pack_id = f"qwen3-tts-{settings.variant}"
+        self._runtime_slot = HeavyweightModelSlot(
+            settings.models_root or models_root_for_runtime(settings.runtime_directory), pack_id
+        )
+        if self.task == "voice_clone":
+            assert settings.reference_audio is not None
+            assert settings.reference_text is not None
+            reference_hash = hashlib.sha256()
+            for path in (settings.reference_audio, settings.reference_text):
+                reference_hash.update(path.read_bytes() if path.is_file() else str(path).encode())
+            reference_identity = reference_hash.hexdigest()
+        else:
+            reference_identity = "none"
+        self.capabilities = self.capabilities_for_variant(settings.variant)
         self.metadata = AdapterMetadata(
             adapter_id=f"whoopy.qwen3_tts.{settings.variant}",
             versioned_model_id=f"Qwen/{official_name}@{settings.model_revision}",
