@@ -878,7 +878,7 @@ def _stop_acceptance_command(process: subprocess.Popen[str]) -> None:
         with suppress(psutil.NoSuchProcess):
             child.kill()
     psutil.wait_procs(alive, timeout=2)
-    if os.name == "posix":
+    if sys.platform != "win32":
         with suppress(ProcessLookupError):
             cast(Any, os).killpg(process.pid, signal.SIGKILL)
     elif process.poll() is None:

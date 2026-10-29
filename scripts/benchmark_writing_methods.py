@@ -8,11 +8,11 @@ default. Run from the project root with the ordinary development environment.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import json
 import os
 import signal
+import sys
 import threading
 import time
 from datetime import UTC, datetime
@@ -25,6 +25,18 @@ import psutil
 from whoopy.adapters.llm.llama_cpp import LlamaCppScriptGenerator, LlamaCppSettings
 from whoopy.artifacts import ArtifactStore, TargetPlatform, load_artifact_lock
 from whoopy.meditation import GenerationWorkspace, LocalMeditationGenerator, load_prompt_bundle
+
+if sys.platform == "win32":
+
+    def _lock_exclusively(file_descriptor: int) -> None:
+        raise RuntimeError("The benchmark GPU lock requires a POSIX runtime.")
+
+else:
+    import fcntl
+
+    def _lock_exclusively(file_descriptor: int) -> None:
+        fcntl.flock(file_descriptor, fcntl.LOCK_EX)
+
 
 CASES = {
     "grounding-3m": (
@@ -124,7 +136,7 @@ def main() -> int:
             write_json(folder / "result.json", result)
             lock_start = time.monotonic()
             with Path("/tmp/whoopy-benchmark-gpu.lock").open("a") as lock:
-                fcntl.flock(lock, fcntl.LOCK_EX)
+                _lock_exclusively(lock.fileno())
                 result["gpu_lock_wait_seconds"] = time.monotonic() - lock_start
                 result["status"] = "generating"
                 write_json(folder / "result.json", result)

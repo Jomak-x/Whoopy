@@ -9,13 +9,13 @@ passed to ASR as a prompt. Each inference takes the benchmark GPU flock.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import importlib.metadata
 import importlib.util
 import json
 import os
 import platform
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -36,6 +36,17 @@ HARNESS_SOURCE_SHA256 = file_sha256(Path(__file__))
 
 LOCK_PATH = Path("/tmp/whoopy-benchmark-gpu.lock")
 DEFAULT_RUNTIME = ROOT / "models/experimental/verification-2026-10-28/.venv/bin/python"
+
+if sys.platform == "win32":
+
+    def _lock_exclusively(file_descriptor: int) -> None:
+        raise RuntimeError("The benchmark GPU lock requires a POSIX runtime.")
+
+else:
+    import fcntl
+
+    def _lock_exclusively(file_descriptor: int) -> None:
+        fcntl.flock(file_descriptor, fcntl.LOCK_EX)
 
 
 def default_model() -> Path:
@@ -63,7 +74,7 @@ def asr_worker(audio: Path, model: Path, output: Path) -> None:
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     lock_started = time.monotonic()
     with LOCK_PATH.open("a") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        _lock_exclusively(lock.fileno())
         lock_wait_seconds = time.monotonic() - lock_started
         audio_digest = file_sha256(audio)
         import mlx_whisper  # type: ignore[import-not-found]

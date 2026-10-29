@@ -13,6 +13,7 @@ import pytest
 
 from whoopy.audio.synthesis import FatalSynthesisError
 from whoopy.evaluation import EvaluationRepository, PromotionDecision
+from whoopy.hardware import HardwareSnapshot
 from whoopy.voice_references import VoiceConsent
 from whoopy.webui.api import GenerationRequest, _studio_voice_promotion_error
 from whoopy.webui.catalog import LocalCatalog
@@ -348,7 +349,21 @@ def test_qwen_promotion_check_fails_closed_for_tampered_or_missing_decision(tmp_
     assert application._qwen_has_current_studio_promotion("qwen3-base-clone-1.7b") is False
 
 
-def test_local_application_refuses_qwen_without_current_production_smoke(tmp_path: Path) -> None:
+def test_local_application_refuses_qwen_without_current_production_smoke(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "whoopy.model_packs.registry.inspect_hardware",
+        lambda _path: HardwareSnapshot(
+            operating_system="darwin",
+            architecture="arm64",
+            cpu_count=10,
+            total_ram_gb=48,
+            available_ram_gb=32,
+            free_disk_gb=100,
+            accelerators=["cpu", "metal"],
+        ),
+    )
     _declared_installation(tmp_path / "models")
     project_root = Path(__file__).resolve().parents[1]
     captured: dict[str, list[str]] = {}

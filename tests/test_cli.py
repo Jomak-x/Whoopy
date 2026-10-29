@@ -96,8 +96,10 @@ def test_help_exits_successfully(capsys: CaptureFixture[str]) -> None:
 
 
 def test_models_runtime_list_reports_unpublished_packs_truthfully(
-    tmp_path: Path, capsys: CaptureFixture[str]
+    tmp_path: Path, capsys: CaptureFixture[str], monkeypatch: MonkeyPatch
 ) -> None:
+    monkeypatch.setattr("whoopy.model_packs.runtime.current_runtime_target", lambda: "darwin-arm64")
+
     assert (
         main(
             [

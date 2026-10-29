@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import signal
 import struct
 import sys
 import time
@@ -200,8 +199,10 @@ def test_voice_candidate_relative_output_finishes_with_resolvable_artifact_paths
     monkeypatch.setattr(module, "ROOT", tmp_path)
     monkeypatch.setattr(module, "SCRIPT", script)
     monkeypatch.setattr(time, "sleep", lambda _: None)
-    monkeypatch.setattr(signal, "signal", lambda *args: None)
-    monkeypatch.setattr(signal, "alarm", lambda *args: None)
+    monkeypatch.setattr(module, "_lock_exclusively", lambda _: None)
+    monkeypatch.setattr(module, "_process_peak_rss_bytes", lambda: 0)
+    monkeypatch.setattr(module, "_install_segment_timeout", lambda: None)
+    monkeypatch.setattr(module, "_set_segment_alarm", lambda _: None)
     monkeypatch.setattr(
         module,
         "ResourceWatchdog",

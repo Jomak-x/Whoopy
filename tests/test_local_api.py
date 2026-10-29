@@ -1363,7 +1363,10 @@ def test_api_startup_rebuilds_all_versioned_lab_definitions_from_json(tmp_path: 
     assert all(item["status"] == "defined" for item in projection["experiments"])
 
 
-def test_lab_restart_pauses_stale_batch_until_explicit_resume(tmp_path: Path) -> None:
+@pytest.mark.parametrize("missing_active_run", [False, True])
+def test_lab_restart_pauses_stale_batch_until_explicit_resume(
+    tmp_path: Path, missing_active_run: bool
+) -> None:
     evaluation_directory = tmp_path / "config" / "evaluation"
     evaluation_directory.mkdir(parents=True)
     evaluation_directory.joinpath("local-v1.yaml").write_text(
@@ -1374,6 +1377,7 @@ def test_lab_restart_pauses_stale_batch_until_explicit_resume(tmp_path: Path) ->
     repository = EvaluationRepository(application.runs_directory / ".whoopy-lab")
     definition = ExperimentDefinition.model_validate(_unsupported_llm_experiment())
     repository.save_definition(definition)
+    active_run_id = uuid4() if missing_active_run else None
     repository.save_execution_control(
         experiment_id=definition.experiment_id,
         version=definition.version,
@@ -1385,7 +1389,7 @@ def test_lab_restart_pauses_stale_batch_until_explicit_resume(tmp_path: Path) ->
             "requested_case_ids": ["grounding-3m"],
             "trials": [],
             "resumable_runs": {},
-            "active_run_id": str(uuid4()),
+            "active_run_id": str(active_run_id) if active_run_id is not None else None,
             "halt_action": None,
             "failure": None,
             "created_at": datetime.now(UTC).isoformat(),
@@ -1414,7 +1418,24 @@ def test_lab_restart_pauses_stale_batch_until_explicit_resume(tmp_path: Path) ->
             time.sleep(0.01)
 
     assert state == "completed"
-    assert len(application.list_runs()) == 2
+    report = repository.load_report(experiment_id=definition.experiment_id, version=1)
+    assert [trial.candidate_id for trial in report.trials] == ["lite", "tiny"]
+    assert all(not trial.success for trial in report.trials)
+    runs = application.list_runs()
+    if active_run_id is not None:
+        # A lost owned run is retained as failed evidence, not silently regenerated.
+        assert report.trials[0].source_run_id == active_run_id
+        assert report.trials[0].failure == "Interrupted production run no longer exists."
+        assert len(runs) == 1
+    else:
+        assert len(runs) == 2
+        assert report.trials[0].failure == (
+            "LLM 'unknown-0.8b' is not exposed by the production generator."
+        )
+    assert report.trials[1].failure == (
+        "LLM 'unknown-0.6b' is not exposed by the production generator."
+    )
+    assert str(report.trials[1].source_run_id) in {run["run_id"] for run in runs}
 
 
 def test_lab_resume_reconciles_pause_before_first_trial_queue_race(

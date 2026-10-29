@@ -13,6 +13,7 @@ from whoopy.adapters.tts.qwen3_tts import (
     resolve_qwen3_tts_installation,
 )
 from whoopy.audio.synthesis import FatalSynthesisError
+from whoopy.hardware import HardwareSnapshot
 from whoopy.model_packs.registry import load_model_pack_registry
 from whoopy.timeline import SpeechSegment, build_script_timeline
 
@@ -44,6 +45,18 @@ def _settings(
         reference_text=reference_text,
         consent_scope=consent_scope,  # type: ignore[arg-type]
         models_root=tmp_path / "models",
+    )
+
+
+def _reviewed_qwen_hardware() -> HardwareSnapshot:
+    return HardwareSnapshot(
+        operating_system="darwin",
+        architecture="arm64",
+        cpu_count=10,
+        total_ram_gb=48,
+        available_ram_gb=32,
+        free_disk_gb=100,
+        accelerators=["cpu", "metal"],
     )
 
 
@@ -197,7 +210,12 @@ def test_qwen_cache_identity_changes_with_preset_speaker(tmp_path: Path) -> None
 
 def test_reviewed_custom_voice_pack_is_exact_and_absent_files_fail_closed(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        "whoopy.model_packs.registry.inspect_hardware",
+        lambda _path: _reviewed_qwen_hardware(),
+    )
     registry_path = Path("config/model_packs.yaml")
     registry = load_model_pack_registry(registry_path, models_root=tmp_path)
     pack = registry.get("qwen3-tts-custom-voice-0.6b")
@@ -225,6 +243,7 @@ def test_reviewed_custom_voice_pack_is_exact_and_absent_files_fail_closed(
 )
 def test_registered_but_missing_qwen_variants_remain_fail_closed(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     variant: Literal[
         "custom-voice-1.7b",
         "voice-design-1.7b",
@@ -232,6 +251,10 @@ def test_registered_but_missing_qwen_variants_remain_fail_closed(
         "base-clone-1.7b",
     ],
 ) -> None:
+    monkeypatch.setattr(
+        "whoopy.model_packs.registry.inspect_hardware",
+        lambda _path: _reviewed_qwen_hardware(),
+    )
     with pytest.raises(FatalSynthesisError, match=r"is missing; 0 of 11 pinned files"):
         resolve_qwen3_tts_installation(
             tmp_path,

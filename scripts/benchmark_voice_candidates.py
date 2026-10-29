@@ -11,12 +11,10 @@ from __future__ import annotations
 
 import _thread
 import argparse
-import fcntl
 import hashlib
 import importlib.metadata
 import json
 import math
-import resource
 import signal
 import sys
 import threading
@@ -24,6 +22,37 @@ import time
 import traceback
 from pathlib import Path
 from typing import Any
+
+if sys.platform == "win32":
+
+    def _lock_exclusively(file_descriptor: int) -> None:
+        raise RuntimeError("The benchmark GPU lock requires a POSIX runtime.")
+
+    def _process_peak_rss_bytes() -> int:
+        raise RuntimeError("Process peak RSS collection requires a POSIX runtime.")
+
+    def _install_segment_timeout() -> None:
+        raise RuntimeError("Segment timeout alarms require a POSIX runtime.")
+
+    def _set_segment_alarm(seconds: int) -> None:
+        raise RuntimeError("Segment timeout alarms require a POSIX runtime.")
+
+else:
+    import fcntl
+    import resource
+
+    def _lock_exclusively(file_descriptor: int) -> None:
+        fcntl.flock(file_descriptor, fcntl.LOCK_EX)
+
+    def _process_peak_rss_bytes() -> int:
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+    def _install_segment_timeout() -> None:
+        signal.signal(signal.SIGALRM, segment_timeout)
+
+    def _set_segment_alarm(seconds: int) -> None:
+        signal.alarm(seconds)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "models/experimental/voice-benchmark-2026-10-28"
@@ -166,7 +195,7 @@ class ResourceWatchdog:
             "monotonic_time": time.monotonic(),
             "available_bytes": int(self.psutil.virtual_memory().available),
             "swap_used_bytes": int(self.psutil.swap_memory().used),
-            "process_peak_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+            "process_peak_rss_bytes": _process_peak_rss_bytes(),
         }
 
     def payload(self) -> dict[str, Any]:
@@ -179,7 +208,7 @@ class ResourceWatchdog:
             "available_floor_sustain_seconds": 2,
             "reason": self.reason,
             "observations": list(self.observations),
-            "peak_process_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+            "peak_process_rss_bytes": _process_peak_rss_bytes(),
         }
 
     def start(self) -> None:
@@ -307,7 +336,7 @@ def run(name: str, seed: int, *, output_dir: Path | None = None) -> None:
     }
     save(folder / "report.json", {**report, "status": "waiting_for_shared_gpu_lock"})
     with Path("/tmp/whoopy-benchmark-gpu.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        _lock_exclusively(lock.fileno())
         # Allow the previous process's Metal allocations to settle after exit.
         # Keep the same conservative threshold and headroom-based allocator cap.
         time.sleep(2)
@@ -345,7 +374,7 @@ def run(name: str, seed: int, *, output_dir: Path | None = None) -> None:
             )
             return
         try:
-            signal.signal(signal.SIGALRM, segment_timeout)
+            _install_segment_timeout()
             np.random.seed(seed)
             load_start = time.monotonic()
             if family.startswith("qwen"):
@@ -508,7 +537,7 @@ def run(name: str, seed: int, *, output_dir: Path | None = None) -> None:
                 )
             for i, text in enumerate(paragraphs, 1):
                 t = time.monotonic()
-                signal.alarm(480)
+                _set_segment_alarm(480)
                 stop_evidence: dict[str, Any] = {"status": "not_exposed_by_model_api"}
                 if family.startswith("qwen"):
                     torch.manual_seed(seed + i - 1)
@@ -551,7 +580,7 @@ def run(name: str, seed: int, *, output_dir: Path | None = None) -> None:
                         raise RuntimeError("no model output")
                     audio = np.concatenate(chunks, axis=0)
                 elapsed = time.monotonic() - t
-                signal.alarm(0)
+                _set_segment_alarm(0)
                 if audio.ndim > 1 and audio.shape[0] <= 2:
                     audio = audio.T
                 if audio.size == 0 or not np.isfinite(audio).all():
@@ -593,7 +622,7 @@ def run(name: str, seed: int, *, output_dir: Path | None = None) -> None:
                 duration_seconds=duration,
                 synthesis_seconds=synth_total,
                 speech_output_rtf=synth_total / duration,
-                process_peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                process_peak_rss_bytes=_process_peak_rss_bytes(),
                 allocator_peak_bytes=int(mx.get_peak_memory())
                 if not family.startswith("qwen")
                 else None,
@@ -609,7 +638,7 @@ def run(name: str, seed: int, *, output_dir: Path | None = None) -> None:
                 ),
             )
         except (Exception, KeyboardInterrupt) as e:
-            signal.alarm(0)
+            _set_segment_alarm(0)
             report.update(
                 status="incomplete_memory_pressure"
                 if watchdog.reason
@@ -618,13 +647,13 @@ def run(name: str, seed: int, *, output_dir: Path | None = None) -> None:
                 else "failed",
                 error=f"{type(e).__name__}: {e}",
                 traceback=traceback.format_exc(),
-                process_peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                process_peak_rss_bytes=_process_peak_rss_bytes(),
             )
             traceback.print_exc()
         finally:
-            signal.alarm(0)
+            _set_segment_alarm(0)
             report["resource_watchdog"] = watchdog.finish()
-            report["process_peak_rss_bytes"] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            report["process_peak_rss_bytes"] = _process_peak_rss_bytes()
             if not family.startswith("qwen") and "mx" in locals():
                 report["allocator_peak_bytes"] = int(mx.get_peak_memory())
         if watchdog.reason:
