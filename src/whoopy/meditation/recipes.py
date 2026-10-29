@@ -96,6 +96,10 @@ INTENT_NEGATION = (
 )
 NEGATED_SLEEP = re.compile(rf"{INTENT_NEGATION}{SLEEP.pattern}", re.I)
 SLEEP_DIFFICULTY = re.compile(
+    r"^\s*not\s+(?:sleeping\s+(?:well|enough|properly|soundly|lately|recently|"
+    r"through\s+the\s+night|at\s+night|last\s+night|these\s+days|"
+    r"as\s+(?:deeply|well|soundly)\s+as|since)\b|"
+    r"getting(?:\s+[\w'\u2019-]+){0,4}\s+sleep\b)|"
     r"\b(?:could|can|did|was|were)\s+not\b|"
     r"\b(?:(?:am|is|are)\s+not|(?:is|are)n['\u2019]t|"
     r"(?:i['\u2019]m|(?:we|they|you)['\u2019]re|(?:he|she)['\u2019]s)\s+not)\s+"
@@ -105,7 +109,8 @@ SLEEP_DIFFICULTY = re.compile(
 SLEEP_INTENT_SCOPE = re.compile(
     r"\b(?:during|throughout|for|in)\s+(?:(?:this|the|my|our|a)\s+)?"
     r"(?:meditation|session|meeting)\b|"
-    r"\b(?:goal|aim|intention|preference)\s+(?:is|are|isn['\u2019]t|aren['\u2019]t)\b",
+    r"\b(?:goal|aim|intention|preference)\s+(?:is|are|isn['\u2019]t|aren['\u2019]t)\b|"
+    r"\b(?:is|are)\s+(?:(?:my|our|the)\s+)?(?:goal|aim|intention|preference)\b",
     re.I,
 )
 AWAKE = re.compile(r"\b(?:(?:stay|remain)|keep\s+(?:me|us))\s+awake\b", re.I)

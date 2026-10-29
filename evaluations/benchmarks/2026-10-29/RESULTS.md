@@ -444,3 +444,27 @@ remain identical to the original base, and publication cleanup is preserved.
 Full repository gates, guarded synchronization, native source smoke, actual
 API export validation, Document/PR reconciliation and final CI belong to the
 outer executor.
+
+
+## Review follow-up after be9942d
+
+This bounded round corrects subjectless sleep-difficulty routing and removes
+repeated sample-level quality analysis from library/playback identity checks.
+Retained audio remains bound to its active timeline, resolved synthesis and
+processing settings, streamed PCM hashes, WAV metadata and saved quality
+receipt. These checks do not rerender speech or establish listening quality.
+
+The deterministic test revision for this round is the worktree patch on
+`be9942d0b966aca50f38a67e538e5fa09f3d373f`; the resulting commit ID belongs to
+the outer executor. Earlier live campaign evidence remains bound to `c31d4e3`
+and `2e13ae4`, and the separate prevalidation probe remains bound to
+`ec45495c`. None is relabeled as final-source testing. Full gates, native
+hardware smoke, final Document/PR reconciliation and publication remain with
+the outer executor. See the
+[per-finding record](../2026-10-28/REVIEW-FIXES.md#review-fixes-after-be9942d).
+
+The single affected deterministic batch passed **547 tests in 16.73 seconds**,
+including the complete retained routing matrix, bounded streaming playback,
+artifact tampering and stale-revision playback/export coverage. Only the
+existing Starlette/httpx deprecation warning appeared. No live model inference
+was performed; human quality remains pending.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import array
 import hashlib
+import math
 import re
 import sys
 import wave
@@ -14,7 +15,7 @@ from typing import Any
 from whoopy.audio.fixture import FixtureSpeechSynthesizer
 from whoopy.audio.models import AudioManifest, AudioQualityReport
 from whoopy.audio.processing import processed_speech_metadata
-from whoopy.audio.quality import inspect_wave
+from whoopy.audio.quality import HEADROOM_LIMIT_DBFS, MAX_JOIN_DELTA
 from whoopy.audio.synthesis import cache_key_for_identity
 from whoopy.meditation import DraftedSection, MeditationPlan
 from whoopy.meditation.pacing import pace_section
@@ -76,32 +77,102 @@ def current_audio_artifacts(
             elif span.requested_duration_ms != segment.duration_ms:
                 raise AudioInspectionError("Narration differs from the active pause timing.")
         audio = store.audio_path(record.run_id)
-        actual = inspect_wave(audio.read_bytes(), manifest)
-        if not actual.passed or any(
-            getattr(actual, name) != getattr(quality, name)
-            for name in (
-                "pcm_sha256",
-                "sample_rate",
-                "channels",
-                "sample_width_bytes",
-                "frame_count",
-                "duration_ms",
-                "peak_dbfs",
-                "clipped_samples",
-                "max_join_delta",
-                "headroom_limit_dbfs",
-            )
-        ):
-            raise AudioInspectionError("Narration bytes do not match their quality evidence.")
-        if quality.passed != all(check.passed for check in quality.checks) or not all(
-            check in quality.checks for check in actual.checks
-        ):
-            raise AudioInspectionError("Narration quality evidence is inconsistent.")
+        _validate_audio_evidence(audio, manifest, quality)
         return audio, manifest, quality
     except AudioInspectionError:
         raise
     except (OSError, ValueError, RunStoreError, wave.Error, EOFError) as error:
         raise AudioInspectionError(f"Current narration cannot be verified: {error}") from error
+
+
+def _validate_audio_evidence(
+    audio: Path, manifest: AudioManifest, quality: AudioQualityReport
+) -> None:
+    required_checks = {
+        "mono",
+        "sample_width",
+        "sample_rate",
+        "frame_count",
+        "duration",
+        "segment_joins",
+        "requested_silence_timing",
+        "exact_silence",
+        "audible_speech",
+        "segment_pcm_hashes",
+        "whole_pcm_hash",
+        "boundary_continuity",
+        "peak_headroom",
+        "no_clipping",
+    }
+    if (
+        quality.passed != all(check.passed for check in quality.checks)
+        or not required_checks.issubset({check.name for check in quality.checks if check.passed})
+        or any(not check.passed for check in quality.checks if check.name in required_checks)
+        or quality.peak_dbfs is None
+        or not math.isfinite(quality.peak_dbfs)
+        or quality.peak_dbfs > HEADROOM_LIMIT_DBFS
+        or quality.headroom_limit_dbfs != HEADROOM_LIMIT_DBFS
+        or quality.clipped_samples != 0
+        or quality.max_join_delta is None
+        or quality.max_join_delta > MAX_JOIN_DELTA
+    ):
+        raise AudioInspectionError("Narration quality evidence is inconsistent.")
+    with wave.open(str(audio), "rb") as source:
+        metadata = {
+            "sample_rate": source.getframerate(),
+            "channels": source.getnchannels(),
+            "sample_width_bytes": source.getsampwidth(),
+        }
+        if (
+            source.getcomptype() != "NONE"
+            or source.getnframes() != manifest.total_frames
+            or source.getnframes() != quality.frame_count
+            or manifest.duration_ms != round(source.getnframes() * 1_000 / manifest.sample_rate, 3)
+            or quality.duration_ms != manifest.duration_ms
+            or any(
+                value != getattr(manifest, name) or value != getattr(quality, name)
+                for name, value in metadata.items()
+            )
+        ):
+            raise AudioInspectionError("Narration metadata differs from its assembly evidence.")
+        whole_hash = hashlib.sha256()
+        expected_start = 0
+        for span in manifest.segments:
+            if (
+                span.start_frame != expected_start
+                or span.end_frame - span.start_frame != span.frame_count
+                or span.end_frame > manifest.total_frames
+                or span.actual_duration_ms
+                != round(span.frame_count * 1_000 / manifest.sample_rate, 3)
+                or (
+                    span.segment_type in {"SILENCE", "BREATH"}
+                    and (
+                        span.requested_duration_ms is None
+                        or span.frame_count
+                        != (span.requested_duration_ms * manifest.sample_rate + 500) // 1_000
+                    )
+                )
+            ):
+                raise AudioInspectionError("Narration segment timing evidence is inconsistent.")
+            segment_hash = hashlib.sha256()
+            remaining = span.frame_count
+            while remaining:
+                frames = min(remaining, 32_768)
+                chunk = source.readframes(frames)
+                if len(chunk) != frames * manifest.channels * manifest.sample_width_bytes:
+                    raise AudioInspectionError("Narration PCM is truncated.")
+                whole_hash.update(chunk)
+                segment_hash.update(chunk)
+                remaining -= frames
+            if segment_hash.hexdigest() != span.pcm_sha256:
+                raise AudioInspectionError("Narration segment bytes differ from assembly evidence.")
+            expected_start = span.end_frame
+        if (
+            expected_start != manifest.total_frames
+            or whole_hash.hexdigest() != manifest.pcm_sha256
+            or whole_hash.hexdigest() != quality.pcm_sha256
+        ):
+            raise AudioInspectionError("Narration bytes do not match their quality evidence.")
 
 
 def _validate_resolved_synthesis(metadata: AdapterMetadata, settings: TTSRunSettings) -> None:

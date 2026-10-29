@@ -662,3 +662,35 @@ check passed and both excluded frontend trees remain identical to base
 publication remain with the outer executor. RESULTS.md records the supplied
 completed live probe at its actual earlier source revision, with human
 listening still pending.
+
+
+## Review fixes after be9942d
+
+Both selected findings were confirmed in the current worktree. The routing
+regression treated a subjectless description of sleep difficulty as a request
+to avoid sleep. The playback regression repeated sample-level quality analysis
+on read paths that only need to verify the retained artifact's identity.
+
+| Finding | Correction and behavioral coverage |
+| --- | --- |
+| REVIEW-SUBJECTLESS-SLEEP-DIFFICULTY | Recognize bounded subjectless descriptions of sleep difficulty while preserving explicit sleep exclusions and awake requests. Retain the accumulated routing matrix. |
+| REVIEW-REPEATED-PLAYBACK-QC | Replace repeated sample-level analysis with bounded streaming PCM hashes and WAV metadata checks, retaining canonical timeline, synthesis, processing and saved QC bindings. Changed, missing, malformed and stale artifacts remain unavailable as current playback. |
+
+This round's deterministic verification applies to the changes on top of
+`be9942d0b966aca50f38a67e538e5fa09f3d373f`. It is separate from the earlier
+`c31d4e3` campaign and `ec45495c` live probe. The outer executor owns the final
+commit identity, full gates and hardware smoke; no live inference or human
+listening qualification is claimed here.
+
+The single focused batch passed **547 tests in 16.73 seconds** across routing,
+whole-session generation, bounded playback identity, public web playback/export
+boundaries, audio inspection and take finalization. The new executable checks
+limit WAV reads to 32,768 frames (64 KiB), fail if playback repeats sample-level
+QC or loads the whole narration, and reject 13 artifact-damage variants.
+Additional failed quality evidence remains visible as failed without rewriting
+its receipt. The accumulated routing and stale-revision assertions all passed.
+Only the existing Starlette/httpx deprecation warning appeared.
+
+Touched Python files were formatted. The whitespace check passed; excluded
+frontend trees remain identical to base `01680383`. No full test/lint/type gate,
+model inference, external paid call or publication action ran in this phase.
