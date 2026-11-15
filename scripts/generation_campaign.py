@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import os
 import shutil
@@ -358,7 +359,7 @@ def build_queue(
 def exclusive_lock(path: Path) -> Iterator[None]:
     if os.name != "posix":
         raise RuntimeError("Campaign execution currently requires POSIX advisory locking")
-    import fcntl
+    fcntl = importlib.import_module("fcntl")
 
     if path.is_symlink():
         raise ValueError(f"Lock must not be a symlink: {path}")
@@ -409,7 +410,10 @@ def terminate_tree(process: subprocess.Popen[bytes], psutil: Any) -> None:
             child.send_signal(signal.SIGINT)
     if process.poll() is None:
         with suppress(ProcessLookupError):
-            os.killpg(process.pid, signal.SIGINT)
+            if sys.platform == "win32":
+                process.terminate()
+            else:
+                os.killpg(process.pid, signal.SIGINT)
     with suppress(subprocess.TimeoutExpired):
         process.wait(timeout=15)
     for child in reversed(children):

@@ -373,7 +373,7 @@ def test_detached_coordinator_finishes_after_manager_replacement_without_models(
     # The fixture patches host support; the real child uses the actual host.
     import platform
 
-    if sys.platform != "darwin" or platform.machine() != "arm64":
+    if platform.system() != "Darwin" or platform.machine() != "arm64":
         pytest.skip("The real isolated coordinator supports macOS Apple Silicon only")
     service, run_id = setup_screen
     fixture_leaf = tmp_path / "fake-asr.py"

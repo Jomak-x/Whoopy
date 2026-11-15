@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import importlib.metadata
 import json
 import math
@@ -117,10 +118,13 @@ def transcribe_local(
         watcher.start()
     lock_fd: int | None = None
     try:
-        import fcntl
+        fcntl = importlib.import_module("fcntl")
 
         lock_started = time.monotonic()
-        lock_fd = os.open(GPU_LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        nofollow_flag = getattr(os, "O_NOFOLLOW", None)
+        if nofollow_flag is None:
+            raise RuntimeError("Speech screening requires no-follow file locking.")
+        lock_fd = os.open(GPU_LOCK, os.O_CREAT | os.O_RDWR | nofollow_flag, 0o600)
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
         lock_wait_seconds = time.monotonic() - lock_started
         audio_digest = file_sha256(audio)

@@ -135,7 +135,11 @@ def _read_local(root: Path, relative: str, limit: int) -> bytes:
     if os.open in os.supports_dir_fd:
         # Pin every directory while walking, so a concurrent parent symlink
         # swap cannot redirect the open outside the trusted preview directory.
-        directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        directory_flag = getattr(os, "O_DIRECTORY", None)
+        nofollow_flag = getattr(os, "O_NOFOLLOW", None)
+        if directory_flag is None or nofollow_flag is None:
+            raise ValueError("Secure directory-relative preview reads are unavailable")
+        directory_flags = os.O_RDONLY | directory_flag | nofollow_flag
         parent = os.open(root, directory_flags)
         try:
             for part in parts[:-1]:
