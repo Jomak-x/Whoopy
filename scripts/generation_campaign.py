@@ -117,7 +117,7 @@ def inventory(root: Path) -> dict[str, str]:
         if path.is_symlink():
             raise ValueError(f"Snapshot input must not be a symlink: {path}")
         if path.is_file():
-            result[str(path.relative_to(root))] = digest(path)
+            result[path.relative_to(root).as_posix()] = digest(path)
     return result
 
 

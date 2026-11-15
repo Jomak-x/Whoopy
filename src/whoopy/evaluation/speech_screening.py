@@ -449,7 +449,7 @@ class SpeechScreening:
                 with (attempt / name).open("xb") as destination:
                     destination.write(source.read_bytes())
                 (attempt / name).chmod(0o444)
-            (attempt / "expected.txt").write_text(expected, encoding="utf-8")
+            (attempt / "expected.txt").write_bytes(expected.encode("utf-8"))
             (attempt / "timeline.json").write_bytes(timeline)
             for name in ("expected.txt", "timeline.json"):
                 (attempt / name).chmod(0o444)
@@ -809,13 +809,20 @@ class SpeechScreening:
 
 def compare_attempt(attempt: Path, *, parent_pid: int | None = None) -> int:
     if parent_pid is not None:
-        if os.getppid() != parent_pid:
+        parent = psutil.Process(parent_pid)
+        direct = psutil.Process(os.getppid())
+        if direct.pid != parent.pid and not (
+            os.name == "nt"
+            and direct.ppid() == parent.pid
+            and os.path.samefile(direct.exe(), sys.executable)
+            and direct.create_time() <= psutil.Process().create_time()
+        ):
             raise SpeechScreenError("Speech-screen coordinator is no longer the parent.")
 
         def watch_parent() -> None:
             while True:
                 time.sleep(0.1)
-                if os.getppid() != parent_pid:
+                if not parent.is_running() or not direct.is_running():
                     os._exit(75)
 
         threading.Thread(target=watch_parent, daemon=True).start()

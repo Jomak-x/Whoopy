@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import time
 from collections.abc import Iterator
@@ -70,7 +71,7 @@ class GenerationRequests:
         if path.is_symlink() or path.stat().st_size > 256_000:
             raise ValueError("Unsafe or oversized browser request receipt.")
         value = json.loads(
-            path.read_text(),
+            path.read_text(encoding="utf-8"),
             parse_constant=lambda _x: (_ for _ in ()).throw(ValueError("Nonfinite receipt")),
         )
         if not isinstance(value, dict):
@@ -230,4 +231,11 @@ class GenerationRequests:
             self.admit(receipt)
             return record
         finally:
-            shutil.rmtree(staging, ignore_errors=True)
+
+            def remove_readonly(function: Any, path: str, _error: Any) -> None:
+                # This is only the unpublished, owned transaction staging tree.
+                os.chmod(path, 0o700)
+                function(path)
+
+            if staging.exists():
+                shutil.rmtree(staging, onerror=remove_readonly)

@@ -308,10 +308,12 @@ assert not any(t.active for t in app._tasks.values())
         for child in children:
             stdout, stderr = child.communicate(timeout=15)
             assert child.returncode == 0, stdout + stderr
-        results = [json.loads((tmp_path / f"result{i}.json").read_text()) for i in range(2)]
+        results = [
+            json.loads((tmp_path / f"result{i}.json").read_text(encoding="utf-8")) for i in range(2)
+        ]
         assert {r["run_id"] for r in results} == {request["request_id"]}
         assert sorted(r["idempotent_replay"] for r in results) == [False, True]
-        assert (tmp_path / "launches").read_text().count("worker") == 1
+        assert (tmp_path / "launches").read_text(encoding="utf-8").count("worker") == 1
         assert (
             len([p for p in (tmp_path / "runs").iterdir() if p.name == request["request_id"]]) == 1
         )
@@ -506,7 +508,7 @@ def test_mismatched_client_receipt_cannot_expose_identity_or_replay(
     app.start_generation(request)
     wait_stopped(app, request["request_id"])
     path = app.runs_directory / request["request_id"] / "web-client-request.json"
-    value = json.loads(path.read_text())
+    value = json.loads(path.read_text(encoding="utf-8"))
     value["payload"]["text"] = "Changed receipt"
     path.chmod(0o644)
     path.write_text(json.dumps(value))

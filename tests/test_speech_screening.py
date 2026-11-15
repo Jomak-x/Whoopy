@@ -152,6 +152,7 @@ def test_one_word_change_reviews_and_evidence_survives_runtime_removal(
     service.observed = " ".join(words)
     status, _attempt = finish(service, run_id)
     assert status["word_status"] == "review", status
+    service.installation_path.chmod(0o644)
     service.installation_path.unlink()
     restarted = screening.SpeechScreening(service.runs_root, service.models_root)
     status = restarted.status(run_id)
@@ -209,6 +210,7 @@ def test_missing_or_changed_installation_stays_unverified_without_inference(
     status, _attempt = finish(service, run_id)
     assert status["operation_status"] == "failed" and status["word_status"] == "unverified"
     assert service.commands == []
+    service.installation_path.chmod(0o644)
     service.installation_path.unlink()
     with pytest.raises(screening.SpeechScreenError, match="not configured"):
         service.start(run_id)

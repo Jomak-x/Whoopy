@@ -92,6 +92,7 @@ def test_windows_watch_uses_handle_state_instead_of_relooking_up_pid() -> None:
     watch = values["ParentWatch"].__new__(values["ParentWatch"])
     states = iter([258, 0, 0xFFFFFFFF])
     watch._handle = 41
+    watch._redirector = None
     watch._kernel = SimpleNamespace(WaitForSingleObject=lambda handle, delay: next(states))
     assert watch.alive() is True
     assert watch.alive() is False
@@ -288,3 +289,60 @@ def test_packaged_sibling_helper_loads_under_isolated_python(
     assert result.stdout.startswith("usage:")
     assert "Whoopy parent guard" not in result.stdout
     assert result.stderr == ""
+
+
+@pytest.mark.parametrize("fault", [None, "image", "ancestry", "reused_pid"])
+def test_windows_redirector_requires_exact_image_ancestry_and_birth(
+    monkeypatch: pytest.MonkeyPatch, fault: str | None
+) -> None:
+    values = namespace()
+    function = values["_windows_redirector_parent"]
+    closed: list[int] = []
+
+    class NativeCall:
+        def __init__(self, callback: Any) -> None:
+            self.callback = callback
+
+        def __call__(self, *args: Any) -> Any:
+            return self.callback(*args)
+
+    def image(_handle: Any, _flags: Any, buffer: Any, _size: Any) -> int:
+        buffer.value = sys.executable if fault != "image" else sys.executable + ".untrusted"
+        return 1
+
+    def entry(_snapshot: Any, pointer: Any) -> int:
+        pointer._obj.th32ProcessID = os.getppid()
+        pointer._obj.th32ParentProcessID = 777 if fault != "ancestry" else 778
+        return 1
+
+    kernel = SimpleNamespace(
+        CloseHandle=closed.append,
+        WaitForSingleObject=lambda *_: 258,
+        QueryFullProcessImageNameW=NativeCall(image),
+        CreateToolhelp32Snapshot=NativeCall(lambda *_: 333),
+        Process32FirstW=NativeCall(entry),
+        Process32NextW=NativeCall(lambda *_: 0),
+    )
+
+    def process(pid: int) -> tuple[Any, int, str]:
+        if pid == os.getpid():
+            return kernel, 222, "20"
+        return kernel, 111, "30" if fault == "reused_pid" else "10"
+
+    monkeypatch.setitem(function.__globals__, "_windows_parent", process)
+    if fault is None:
+        assert function(777) == (kernel, 111)
+        assert closed == [222, 333]
+    else:
+        with pytest.raises(RuntimeError):
+            function(777)
+        assert 111 in closed and 222 in closed
+
+
+def test_windows_watch_also_stops_when_its_verified_redirector_exits() -> None:
+    cls = namespace()["ParentWatch"]
+    watch = object.__new__(cls)
+    watch._handle = 1
+    watch._kernel = SimpleNamespace(WaitForSingleObject=lambda *_: 258)
+    watch._redirector = (SimpleNamespace(WaitForSingleObject=lambda *_: 0), 2)
+    assert watch.alive() is False

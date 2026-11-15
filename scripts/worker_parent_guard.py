@@ -7,6 +7,7 @@ import hashlib
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -58,6 +59,76 @@ def _validated_windows_parent(pid: int, expected_token: str | None) -> tuple[Any
     return kernel, handle
 
 
+def _windows_redirector_parent(parent_pid: int) -> tuple[Any, Any]:
+    """Accept only one verified Python venv redirector between worker and caller."""
+    import ctypes
+    from ctypes import wintypes
+
+    class ProcessEntry(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", wintypes.LONG),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    direct = os.getppid()
+    kernel, handle, birth = _windows_parent(direct)
+    snapshot = None
+    try:
+        self_kernel, self_handle, self_birth = _windows_parent(os.getpid())
+        self_kernel.CloseHandle(self_handle)
+        if int(birth) > int(self_birth) or kernel.WaitForSingleObject(handle, 0) != 258:
+            raise RuntimeError("Worker redirector identity is stale")
+        kernel.QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.LPWSTR,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        kernel.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        image = ctypes.create_unicode_buffer(32768)
+        size = wintypes.DWORD(len(image))
+        if not kernel.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(size)):
+            raise OSError("Cannot inspect the Python launch redirector")
+        if os.path.normcase(os.path.realpath(image.value)) != os.path.normcase(
+            os.path.realpath(sys.executable)
+        ):
+            raise RuntimeError("Worker intermediate parent is not its Python redirector")
+        kernel.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        kernel.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessEntry)]
+        kernel.Process32FirstW.restype = wintypes.BOOL
+        kernel.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessEntry)]
+        kernel.Process32NextW.restype = wintypes.BOOL
+        snapshot = kernel.CreateToolhelp32Snapshot(2, 0)
+        if snapshot in (None, wintypes.HANDLE(-1).value):
+            snapshot = None
+            raise OSError("Cannot inspect the Python launch ancestry")
+        entry = ProcessEntry()
+        entry.dwSize = ctypes.sizeof(entry)
+        found = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
+        while found:
+            if entry.th32ProcessID == direct:
+                if entry.th32ParentProcessID != parent_pid:
+                    raise RuntimeError("Worker launch parent is not the redirector's parent")
+                return kernel, handle
+            found = kernel.Process32NextW(snapshot, ctypes.byref(entry))
+        raise RuntimeError("Worker redirector disappeared during ancestry verification")
+    except BaseException:
+        kernel.CloseHandle(handle)
+        raise
+    finally:
+        if snapshot is not None:
+            kernel.CloseHandle(snapshot)
+
+
 def launch_environment() -> dict[str, str]:
     """Call in the process that will actually create the guarded child."""
     token = ""
@@ -82,13 +153,23 @@ class ParentWatch:
         on_death: Callable[[], None] | None = None,
         poll_seconds: float = 0.1,
     ) -> None:
-        if parent_pid <= 0 or parent_pid == os.getpid() or os.getppid() != parent_pid:
+        if parent_pid <= 0 or parent_pid == os.getpid():
             raise RuntimeError("Worker launch parent identity does not match")
         self.parent_pid = parent_pid
         self._kernel: Any = None
         self._handle: Any = None
+        self._redirector: tuple[Any, Any] | None = None
         if os.name == "nt":
             self._kernel, self._handle = _validated_windows_parent(parent_pid, creation_token)
+            if os.getppid() != parent_pid:
+                try:
+                    self._redirector = _windows_redirector_parent(parent_pid)
+                except BaseException:
+                    self._kernel.CloseHandle(self._handle)
+                    self._handle = None
+                    raise
+        elif os.getppid() != parent_pid:
+            raise RuntimeError("Worker launch parent identity does not match")
         self._stop = threading.Event()
         self._on_death = on_death
         self._poll_seconds = poll_seconds
@@ -98,10 +179,16 @@ class ParentWatch:
     def alive(self) -> bool:
         if self._handle is None:
             return os.getppid() == self.parent_pid
-        state = self._kernel.WaitForSingleObject(self._handle, 0)
-        if state not in (0, 258):
-            raise OSError("Parent process handle observation failed")
-        return bool(state == 258)
+        handles = [(self._kernel, self._handle)]
+        if self._redirector is not None:
+            handles.append(self._redirector)
+        for kernel, handle in handles:
+            state = kernel.WaitForSingleObject(handle, 0)
+            if state not in (0, 258):
+                raise OSError("Parent process handle observation failed")
+            if state == 0:
+                return False
+        return True
 
     def _run(self) -> None:
         try:
@@ -124,6 +211,10 @@ class ParentWatch:
             if self._handle is not None:
                 self._kernel.CloseHandle(self._handle)
                 self._handle = None
+            if self._redirector is not None:
+                kernel, handle = self._redirector
+                kernel.CloseHandle(handle)
+                self._redirector = None
 
     def close(self) -> None:
         self._stop.set()

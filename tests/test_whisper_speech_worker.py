@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,6 +24,10 @@ def leaf() -> Any:
 @pytest.fixture
 def inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Path, Path, Path]:
     worker = leaf()
+    if os.name == "nt":
+        # Only inference policy is under test; real MLX/POSIX locking is Mac-only.
+        monkeypatch.setitem(sys.modules, "fcntl", SimpleNamespace(flock=lambda *_: None, LOCK_EX=2))
+        monkeypatch.setattr(os, "O_NOFOLLOW", 0, raising=False)
     monkeypatch.setattr(worker, "_supported_host", lambda: True)
     monkeypatch.setattr(worker, "GPU_LOCK", tmp_path / "gpu.lock")
     model = tmp_path / "immutable-model-revision"
