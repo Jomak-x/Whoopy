@@ -1,0 +1,64 @@
+/* Original flat SVG artwork. Every design has an explicit light and dark palette. */
+[data-studio-background] {
+  --studio-canvas-color: var(--canvas);
+  --studio-canvas-image: none;
+  --studio-canvas-size: cover;
+  --studio-canvas-position: center;
+  --studio-canvas-repeat: no-repeat;
+}
+[data-studio-background='ink'] { --studio-canvas-image: url('/backgrounds/ink-dark.svg'); }
+[data-studio-background='ink'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/ink-light.svg'); }
+[data-studio-background='paper'] { --studio-canvas-image: url('/backgrounds/paper-dark.svg'); --studio-canvas-size: 200px 200px; --studio-canvas-repeat: repeat; }
+[data-studio-background='paper'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/paper-light.svg'); }
+[data-studio-background='daylight'] { --studio-canvas-image: url('/backgrounds/daylight-dark.svg'); }
+[data-studio-background='daylight'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/daylight-light.svg'); }
+[data-studio-background='midnight'] { --studio-canvas-image: url('/backgrounds/midnight-dark.svg'); }
+[data-studio-background='midnight'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/midnight-light.svg'); }
+[data-studio-background='dots'] { --studio-canvas-image: url('/backgrounds/dots-dark.svg'); --studio-canvas-size: 80px 80px; --studio-canvas-repeat: repeat; }
+[data-studio-background='dots'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/dots-light.svg'); }
+[data-studio-background='blueprint'] { --studio-canvas-image: url('/backgrounds/blueprint-dark.svg'); --studio-canvas-size: 240px 240px; --studio-canvas-repeat: repeat; }
+[data-studio-background='blueprint'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/blueprint-light.svg'); }
+[data-studio-background='contour'] { --studio-canvas-image: url('/backgrounds/contour-dark.svg'); }
+[data-studio-background='contour'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/contour-light.svg'); }
+[data-studio-background='blue-hour'] { --studio-canvas-image: url('/backgrounds/blue-hour-dark.svg'); }
+[data-studio-background='blue-hour'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/blue-hour-light.svg'); }
+[data-studio-background='gingham'] { --studio-canvas-image: url('/backgrounds/gingham-dark.svg'); --studio-canvas-size: 160px 160px; --studio-canvas-repeat: repeat; }
+[data-studio-background='gingham'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/gingham-light.svg'); }
+[data-studio-background='arches'] { --studio-canvas-image: url('/backgrounds/arches-dark.svg'); --studio-canvas-size: 240px 320px; --studio-canvas-repeat: repeat; }
+[data-studio-background='arches'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/arches-light.svg'); }
+[data-studio-background='terrazzo'] { --studio-canvas-image: url('/backgrounds/terrazzo-dark.svg'); --studio-canvas-size: 360px 320px; --studio-canvas-repeat: repeat; }
+[data-studio-background='terrazzo'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/terrazzo-light.svg'); }
+[data-studio-background='woven'] { --studio-canvas-image: url('/backgrounds/woven-dark.svg'); }
+[data-studio-background='woven'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/woven-light.svg'); }
+[data-studio-background='cats'] { --studio-canvas-image: url('/backgrounds/cats-dark.svg'); --studio-canvas-size: 460px 360px; --studio-canvas-repeat: repeat; }
+[data-studio-background='cats'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/cats-light.svg'); }
+[data-studio-background='aurora'] { --studio-canvas-image: url('/backgrounds/aurora-dark.svg'); }
+[data-studio-background='aurora'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/aurora-light.svg'); }
+[data-studio-background='sunplay'] { --studio-canvas-image: url('/backgrounds/sunplay-dark.svg'); }
+[data-studio-background='sunplay'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/sunplay-light.svg'); }
+[data-studio-background='tide'] { --studio-canvas-image: url('/backgrounds/tide-dark.svg'); }
+[data-studio-background='tide'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/tide-light.svg'); }
+[data-studio-background='rooftops'] { --studio-canvas-image: url('/backgrounds/rooftops-dark.svg'); }
+[data-studio-background='rooftops'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/rooftops-light.svg'); }
+[data-studio-background='clouds'] { --studio-canvas-image: url('/backgrounds/clouds-dark.svg'); }
+[data-studio-background='clouds'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/clouds-light.svg'); }
+[data-studio-background='sky'] { --studio-canvas-image: url('/backgrounds/sky-dark.svg'); }
+[data-studio-background='sky'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/sky-light.svg'); }
+[data-studio-background='stars'] { --studio-canvas-image: url('/backgrounds/stars-dark.svg'); }
+[data-studio-background='stars'][data-studio-theme='light'] { --studio-canvas-image: url('/backgrounds/stars-light.svg'); }
+
+.studio-background-surface {
+  background-color: var(--studio-canvas-color);
+  background-image: var(--studio-canvas-image);
+  background-size: var(--studio-canvas-size);
+  background-position: var(--studio-canvas-position);
+  background-repeat: var(--studio-canvas-repeat);
+}
+body[data-studio-background] { background: var(--studio-canvas-color); isolation: isolate; }
+body[data-studio-background]::before {
+  content: ''; position: fixed; z-index: -1; inset: 0; pointer-events: none;
+  background-color: var(--studio-canvas-color); background-image: var(--studio-canvas-image);
+  background-size: var(--studio-canvas-size); background-position: var(--studio-canvas-position);
+  background-repeat: var(--studio-canvas-repeat);
+}
+body[data-studio-background]::after { display: none; }

@@ -1,0 +1,22 @@
+@import '@fontsource-variable/nunito-sans';
+
+:root {
+  --whoopy-navy: #08162f;
+  --whoopy-deep: #0c1d3a;
+  --whoopy-surface: #102746;
+  --whoopy-surface-strong: #17375e;
+  --whoopy-line: #29476b;
+  --whoopy-orange: #ff5e00;
+  --whoopy-orange-deep: #ff5e00;
+  --whoopy-orange-soft: #ff5e00;
+  --whoopy-text: #f5eee8;
+  --whoopy-muted: #9cadc4;
+  --whoopy-success: #63d3a1;
+  --whoopy-warning: #f2bd62;
+  --whoopy-danger: #ff7480;
+  --whoopy-radius-sm: 8px;
+  --whoopy-radius-md: 12px;
+  --whoopy-radius-lg: 18px;
+  color-scheme: dark;
+  font-family: 'Nunito Sans Variable', 'Avenir Next', system-ui, sans-serif;
+}

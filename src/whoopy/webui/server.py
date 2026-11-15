@@ -49,6 +49,7 @@ from whoopy.pipeline.locks import RunLock, RunLockUnavailable
 from whoopy.pipeline.runs import RunNotFoundError, RunStoreError
 from whoopy.timeline import SpeechSegment
 from whoopy.voices import KOKORO_ENGLISH_VOICES
+from whoopy.webui.studio import StudioAssets, studio_environment, studio_generation_request
 
 MAX_REQUEST_BYTES = 64_000
 MAX_RECENT_RUNS = 24
@@ -898,7 +899,7 @@ class LocalWebApplication:
 
 
 def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHandler]:
-    asset_root = files("whoopy.webui").joinpath("static")
+    assets = StudioAssets(files("whoopy.webui").joinpath("static"))
 
     class WhoopyRequestHandler(BaseHTTPRequestHandler):
         server_version = "WhoopyLocal/1"
@@ -906,11 +907,15 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
             path = unquote(parsed.path)
+            versioned = path.startswith("/api/v1/")
+            if versioned:
+                path = "/api/" + path.removeprefix("/api/v1/")
             if path == "/api/health":
                 self._send_json({"ok": True, "service": "whoopy-local"})
                 return
             if path == "/api/status":
-                self._send_json(application.environment_status())
+                environment = application.environment_status()
+                self._send_json(studio_environment(environment) if versioned else environment)
                 return
             if path == "/api/model-packs":
                 try:
@@ -936,41 +941,41 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
                 # the local log focused on actual application problems.
                 self._send_bytes(b"", "image/x-icon", status=HTTPStatus.NO_CONTENT)
                 return
-            static_name = {"/": "index.html", "/styles.css": "styles.css", "/app.js": "app.js"}.get(
-                path
-            )
-            if static_name is None:
+            asset = assets.response(path)
+            if asset is None:
                 self._send_error(HTTPStatus.NOT_FOUND, "Page not found.")
                 return
-            asset = asset_root.joinpath(static_name)
-            payload = asset.read_bytes()
-            content_type = mimetypes.guess_type(static_name)[0] or "application/octet-stream"
-            self._send_bytes(payload, content_type)
+            self._send_bytes(*asset)
 
         def do_POST(self) -> None:
             if not self._origin_is_local():
                 self._send_error(HTTPStatus.FORBIDDEN, "Only the local Whoopy page may post.")
                 return
-            parsed = urlparse(self.path)
-            if parsed.path == "/api/generate":
+            path = urlparse(self.path).path
+            versioned = path.startswith("/api/v1/")
+            if versioned:
+                path = "/api/" + path.removeprefix("/api/v1/")
+            if path == "/api/generate":
                 try:
                     payload = self._read_json()
+                    if versioned:
+                        payload = studio_generation_request(payload)
                     task = application.start_generation(payload)
                 except ValueError as error:
                     self._send_error(HTTPStatus.BAD_REQUEST, str(error))
                     return
                 self._send_json(task, status=HTTPStatus.ACCEPTED)
                 return
-            if parsed.path.startswith("/api/model-packs"):
-                self._post_model_pack_action(parsed.path)
+            if path.startswith("/api/model-packs"):
+                self._post_model_pack_action(path)
                 return
-            if parsed.path.startswith("/api/runs/"):
-                self._post_run_action(parsed.path)
+            if path.startswith("/api/runs/"):
+                self._post_run_action(path)
                 return
-            if parsed.path.startswith("/api/tasks/") and parsed.path.endswith("/cancel"):
+            if path.startswith("/api/tasks/") and path.endswith("/cancel"):
                 # Compatibility with the temporary Phase 3 tester. New code
                 # uses the durable run endpoint below.
-                task_id = parsed.path.removeprefix("/api/tasks/").removesuffix("/cancel")
+                task_id = path.removeprefix("/api/tasks/").removesuffix("/cancel")
                 cancelled_task = application.cancel_task(task_id)
                 if cancelled_task is None:
                     self._send_error(HTTPStatus.NOT_FOUND, "Task not found.")
@@ -1193,7 +1198,7 @@ def _handler_factory(application: LocalWebApplication) -> type[BaseHTTPRequestHa
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy", "default-src 'self'; media-src 'self'")
+            self.send_header("Content-Security-Policy", assets.content_security_policy)
             self.end_headers()
             try:
                 self.wfile.write(payload)

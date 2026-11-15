@@ -77,8 +77,8 @@ def test_static_interface_is_packaged() -> None:
 
     html = static.joinpath("index.html").read_text(encoding="utf-8")
     assert "Whoopy Local Studio" in html
-    assert static.joinpath("styles.css").is_file()
-    assert static.joinpath("app.js").is_file()
+    assert static.joinpath("_app").is_dir()
+    assert static.joinpath("backgrounds", "contour-dark.svg").is_file()
 
 
 def test_model_pack_routes_are_allow_listed_and_keep_removal_explicit(tmp_path: Path) -> None:

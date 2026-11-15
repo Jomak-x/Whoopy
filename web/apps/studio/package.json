@@ -1,0 +1,15 @@
+{
+  "name": "@whoopy/studio",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "dependencies": {
+    "@whoopy/ui": "0.2.0"
+  },
+  "scripts": {
+    "dev": "vite dev --host 127.0.0.1 --port 5173",
+    "preview": "vite preview",
+    "build": "vite build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  }
+}

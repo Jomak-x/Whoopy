@@ -30,7 +30,7 @@ whoopy = "whoopy.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"whoopy.webui" = ["static/*.html", "static/*.css", "static/*.js"]
+"whoopy.webui" = ["static/*", "static/**/*"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers --strict-config -ra"

@@ -1,0 +1,118 @@
+/* Blue and orange belong to the interface as well as the illustrations. */
+:root { font-family: 'Nunito Sans Variable', 'Avenir Next', system-ui, sans-serif; font-synthesis: none; }
+:root,
+[data-studio-theme='dark'] {
+  color-scheme: dark;
+  --canvas: #0b1c33;
+  --surface: #102945;
+  --surface-soft: #183654;
+  --surface-hover: #224763;
+  --text: #fff7ec;
+  --muted: #b9cfee;
+  --line: #36536e;
+  --orange: #ff862e;
+  --accent-text: #ffae69;
+  --on-accent: #122b50;
+  --accent-soft: #543827;
+  --danger: #ffb6ac;
+  --backdrop: #04132dc9;
+  --shadow: 0 14px 42px #020e282b;
+  --header: #0b1c33;
+  --card-cool: #204667;
+  --card-warm: #70452f;
+  --card-neutral: #e6a75d;
+  --card-ink: #fff3e2;
+  --card-ink-muted: #d2dce4;
+  --hero: #102945;
+  --hero-text: #fff4e4;
+  --hero-muted: #bed0e0;
+  --invite: #193852;
+  --invite-line: #46677e;
+  --library-banner: #183b5c;
+  --art-frame: #6aa7e3;
+  --sky-text: #94cfff;
+  --gold-text: #f8d675;
+  --focus: #a7d8ff;
+}
+[data-studio-theme='light'] {
+  color-scheme: light;
+  --canvas: #e9f0f4;
+  --surface: #fffdf7;
+  --surface-soft: #e6edf0;
+  --surface-hover: #d9e5ec;
+  --text: #142f54;
+  --muted: #4d6584;
+  --line: #b7c8d2;
+  --orange: #ff872f;
+  --accent-text: #a73f0a;
+  --on-accent: #122b50;
+  --accent-soft: #ffead7;
+  --danger: #a73732;
+  --backdrop: #102e5b80;
+  --shadow: 0 14px 42px #214d8714;
+  --header: #f4f5f1;
+  --card-cool: #d1e3ed;
+  --card-warm: #ffd0a1;
+  --card-neutral: #f6dfa1;
+  --card-ink: #18354d;
+  --card-ink-muted: #405970;
+  --hero: #fff0d9;
+  --hero-text: #18354d;
+  --hero-muted: #435970;
+  --invite: #f4e4ce;
+  --invite-line: #d4b996;
+  --library-banner: #d4e4ed;
+  --art-frame: #75afe1;
+  --sky-text: #225f9c;
+  --gold-text: #815300;
+  --focus: #215aa8;
+}
+:root, [data-studio-theme] {
+  --brand-ink: #102e5b;
+  --brand-cream: #fff7ec;
+  --brand-blue: #2e5b7d;
+  /* Shared-package controls inherit Studio's appearance without changing Developer. */
+  --whoopy-navy: var(--canvas);
+  --whoopy-deep: var(--canvas);
+  --whoopy-surface: var(--surface);
+  --whoopy-surface-strong: var(--surface-soft);
+  --whoopy-line: var(--line);
+  --whoopy-orange: var(--orange);
+  --whoopy-orange-deep: var(--accent-text);
+  --whoopy-orange-soft: var(--accent-text);
+  --whoopy-text: var(--text);
+  --whoopy-muted: var(--muted);
+  --whoopy-success: var(--sky-text);
+  --whoopy-warning: var(--gold-text);
+  --whoopy-danger: var(--danger);
+  --whoopy-radius-sm: 8px;
+  --whoopy-radius-md: 12px;
+  --whoopy-radius-lg: 16px;
+  /* Compatibility names for established Studio controls. */
+  --navy: var(--canvas);
+  --navy-2: var(--surface);
+  --navy-3: var(--surface-soft);
+  --orange-soft: var(--accent-text);
+  --orange-dark: var(--accent-text);
+  --green: var(--sky-text);
+  --yellow: var(--gold-text);
+  --red: var(--danger);
+  --canvas-heading: var(--text);
+  --canvas-muted: var(--muted);
+  --canvas-rule: var(--line);
+}
+/* CreatorModeSwitch uses navy as the foreground on its filled active button. */
+body[data-studio-theme] .creator-mode { --whoopy-navy: var(--on-accent); }
+html { color: var(--text); background: var(--canvas); }
+body { color: var(--text); }
+input, textarea, select { color-scheme: inherit; accent-color: var(--orange); }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
+option { color: var(--text); background: var(--surface); }
+body[data-studio-theme] :is(button, a, input, textarea, select, summary):focus-visible { outline-color: var(--focus); }
+button, a, input, textarea, select, summary {
+  transition: color .28s ease, background-color .28s ease, border-color .28s ease, box-shadow .28s ease, transform .28s ease;
+}
+::selection { background: var(--orange); color: var(--on-accent); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

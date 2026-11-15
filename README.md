@@ -1,6 +1,6 @@
 # Whoopy
 
-Whoopy is a local-first, timeline-driven system for generating guided meditation audio. It is named after the creator's first cat, Whoopy. The project will first prove a deterministic native CLI across ordinary Windows, macOS, and Linux laptops, then add a local web application, and only later add the optional public Whoopy Commons.
+Whoopy is a local-first, timeline-driven system for generating guided meditation audio. It is named after the creator's first cat, Whoopy. It includes a native CLI and a private local meditation Studio for Windows, macOS, and Linux. Optional public sharing through Whoopy Commons is planned for later.
 
 > [!IMPORTANT]
 > The model worker runs **natively, without Docker**. Whoopy uses one automatic runtime path across Windows, macOS, and Linux: llama.cpp/GGUF for local text generation and sherpa-onnx/Kokoro for speech. Metal, CUDA, Vulkan, and CPU execution are runtime details selected for the user.
@@ -202,10 +202,10 @@ src/whoopy/            Python domain package and future local control plane
   pipeline/            run storage, segment cache/checkpoints, retry, and recovery
   qc/                  audio and content quality gates
   api/                 future expanded local control plane
-  webui/               dependency-free local tester and HTTP boundary
+  webui/               local Studio assets and HTTP boundary
 assets/                 redistributable, provenance-tracked source assets
 db/                     future SQLAlchemy models and migrations
-web/                    future local SvelteKit PWA
+web/                    SvelteKit Studio source and shared UI components
 commons/                future optional public platform
 tests/                  unit, contract, golden, and integration tests
 docs/                   architecture, setup, roadmap, and contribution docs
@@ -262,7 +262,7 @@ uv sync --extra dev --locked                 # exact cross-platform setup
 uv run whoopy doctor                         # select a safe native profile
 uv run whoopy models doctor                  # inspect its immutable artifact plan
 uv run whoopy models install --profile auto  # explicitly install verified artifacts
-uv run --offline whoopy web --open           # private browser tester
+uv run --offline whoopy web --open           # private local Studio
 uv run whoopy draft "A calm pause." --minutes 3
 uv run whoopy generate "A calm pause." --minutes 3
 uv run whoopy generate --script-file examples/first-meditation.md

@@ -1,0 +1,10 @@
+import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
+
+const proxy = { '/api': 'http://127.0.0.1:8765' };
+
+export default defineConfig({
+  plugins: [sveltekit()],
+  server: { proxy },
+  preview: { host: '127.0.0.1', port: 4173, proxy }
+});
