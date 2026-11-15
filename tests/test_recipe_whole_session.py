@@ -171,7 +171,7 @@ def test_sleep_reflection_has_all_prior_and_future_beats_in_single_prompt() -> N
     assert contract["original_user_need"] == "A ten minute good-night reflection after a busy day"
     assert contract["posture"] == "lying_down"
     assert contract["ending"] == "sleep_taper"
-    assert result.plan.blueprint_id == "good-night-reflection@1"
+    assert result.plan.blueprint_id == "good-night-reflection@2"
     assert result.plan.posture == "lying_down"
     assert result.estimated_duration_seconds == pytest.approx(600, abs=0.02)
 
@@ -231,6 +231,7 @@ def test_writer_receives_invitation_and_daytime_ending_editorial_contract() -> N
     system_prompt = adapter.requests[0].system_prompt
 
     assert system_prompt is not None
+    assert 500 <= len(system_prompt.split()) <= 650
     for guidance in (
         "orientation cues, not a paired practice",
         "an explicitly optional replacement, not a second anchor",
@@ -243,7 +244,7 @@ def test_writer_receives_invitation_and_daytime_ending_editorial_contract() -> N
         "within the ending word budget and question_count",
     ):
         assert guidance in system_prompt
-    assert result.plan.writing_prompt_version == 6
+    assert result.plan.writing_prompt_version == 10
     # These assertions cover the writer's input, not the fixture's editorial quality.
     assert len(adapter.requests) == 1
 
@@ -254,7 +255,7 @@ def test_revision_receives_entire_prior_draft_and_every_gate_failure() -> None:
         output["sections"][-1]["paragraphs"][0] = "Open your eyes and wake up."
 
     adapter = WholeSessionAdapter(mutate)
-    result = run(adapter, "Good night, I am lying down", 600)
+    result = run(adapter, "Good-night reflection, I am lying down", 600)
     assert len(adapter.requests) == 2
     revision = adapter.requests[1].prompt
     assert "posture contradicts lying_down" in revision
@@ -264,6 +265,37 @@ def test_revision_receives_entire_prior_draft_and_every_gate_failure() -> None:
     assert result.sections[0].text == "\n\n".join(adapter.outputs[1]["sections"][0]["paragraphs"])
     assert result.raw_attempts[0].validation_error
     assert result.raw_attempts[-1].validation_error is None
+
+
+def test_request_coverage_and_conditional_choices_remain_in_both_writer_inputs() -> None:
+    need = (
+        "Observe natural breathing at one comfortable place. "
+        "Offer chair contact as an alternative if breath attention is uncomfortable."
+    )
+
+    def mutate(output: FixtureDraft) -> None:
+        output["sections"][-1]["paragraphs"][0] = "How calm do you feel now?"
+
+    adapter = WholeSessionAdapter(mutate)
+    result = run(adapter, need, 180)
+    assert len(adapter.requests) == 2
+    for request in adapter.requests:
+        contract = json.JSONDecoder().raw_decode(request.prompt.split("\n", 1)[1])[0]
+        assert contract["original_user_need"] == need
+        system = request.system_prompt
+        assert system is not None
+        assert "assign every explicit requested action and listener option" in system
+        assert (
+            "an optional or discomfort-triggered action must remain optional or conditional"
+            in system
+        )
+        assert "Feedback is not an exhaustive request checklist" in system
+        assert "Preserve request-specific actions and choices already satisfied" in system
+        assert "restore omitted ones, and recheck their conditions" in system
+        assert len(system.split()) <= 650
+    assert result.plan.writing_prompt_version == 10
+    # Delivery of the experiment is tested here; generated request fidelity
+    # requires the separately preserved real-model comparison and review.
 
 
 @pytest.mark.parametrize(
@@ -447,7 +479,7 @@ def test_recipe_contract_change_invalidates_completed_checkpoint(tmp_path: Path)
     workspace = GenerationWorkspace(tmp_path)
     run(adapter, workspace=workspace)
     library = load_recipe_library()
-    recipe = library.recipes[-1]
+    recipe = next(item for item in library.recipes if item.id == "daytime-steadying")
     changed_beat = recipe.beats[2].model_copy(
         update={"purpose": "A newly reviewed anchor instruction."}
     )
@@ -455,7 +487,11 @@ def test_recipe_contract_change_invalidates_completed_checkpoint(tmp_path: Path)
         update={"beats": [*recipe.beats[:2], changed_beat, *recipe.beats[3:]]}
     )
     changed_library = library.model_copy(
-        update={"recipes": [*library.recipes[:-1], changed_recipe]}
+        update={
+            "recipes": [
+                changed_recipe if item.id == recipe.id else item for item in library.recipes
+            ]
+        }
     )
 
     changed_writer = LocalMeditationGenerator(
@@ -517,14 +553,14 @@ def test_installed_recipe_generation_works_outside_checkout(
     monkeypatch.chdir(outside_checkout)
 
     library = load_recipe_library()
-    assert any(recipe.versioned_id == "good-night-reflection@1" for recipe in library.recipes)
+    assert any(recipe.versioned_id == "good-night-reflection@2" for recipe in library.recipes)
     result = writer.generate(
         prompt="Good-night reflection after a busy day",
         duration_seconds=600,
         run_id=RUN_ID,
         writing_method="recipe_whole_session",
     )
-    assert result.plan.blueprint_id == "good-night-reflection@1"
+    assert result.plan.blueprint_id == "good-night-reflection@2"
     assert len(adapter.requests) == 1
     assert result.estimated_duration_seconds == pytest.approx(600, abs=0.02)
 
@@ -572,7 +608,7 @@ def test_emitted_budget_contract_is_complete_and_consistent() -> None:
         assert section.section_id == beat["section_id"]
         for slot in beat["paragraphs"]:
             assert slot["minimum_words_guidance"] <= slot["target_words"] <= slot["maximum_words"]
-    assert result.plan.writing_prompt_version == 6
+    assert result.plan.writing_prompt_version == 10
 
 
 def test_unconditional_safety_assurance_is_reported_for_holistic_revision() -> None:
@@ -1270,7 +1306,7 @@ def test_custom_recipe_library_controls_draft_and_checkpoint(tmp_path: Path) -> 
         writing_method="recipe_whole_session",
     )
     contract = json.JSONDecoder().raw_decode(adapter.requests[0].prompt.split("\n", 1)[1])[0]
-    assert result.plan.blueprint_version == 2
+    assert result.plan.blueprint_version == 3
     assert contract["recipe"] == result.plan.blueprint_id
     with pytest.raises(WorkspaceError, match="different"):
         run(WholeSessionAdapter(), workspace=workspace)
@@ -1485,7 +1521,7 @@ def test_duration_word_budget_uses_planning_rate(wpm: int, need: str, duration: 
     assert "floor" in contract["word_budget_guidance"]
     system_prompt = adapter.requests[0].system_prompt
     assert system_prompt is not None
-    assert "Aim near the contract's total_target_words" in system_prompt
+    assert "Aim near total_target_words, not the maximum" in system_prompt
     assert result.estimated_duration_seconds == pytest.approx(duration, abs=0.02)
     assert len(adapter.requests) == 1
 
@@ -1548,6 +1584,10 @@ def test_overlong_revision_explains_shortening_instead_of_expansion() -> None:
     assert "fewer words" in error
     assert "Shorten the complete session" in error
     assert "Expand the complete session" not in error
+    contract = json.JSONDecoder().raw_decode(adapter.requests[0].prompt.split("\n", 1)[1])[0]
+    assert (
+        f"At most {contract['total_maximum_words']} spoken words fit both timing and paragraph caps"
+    ) in error
     assert all(message in adapter.requests[1].prompt for message in error.split("; "))
     assert len(adapter.requests) == 2
     assert result.raw_attempts[1].validation_error is None

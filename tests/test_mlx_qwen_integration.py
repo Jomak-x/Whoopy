@@ -28,7 +28,12 @@ from whoopy.adapters.tts.mlx_qwen3_tts import (
     pcm_from_native_float_wave,
     source_sha256,
 )
-from whoopy.audio.synthesis import InvalidSynthesisOutput, cache_key_for, synthesis_input_bytes
+from whoopy.audio.synthesis import (
+    FatalSynthesisError,
+    InvalidSynthesisOutput,
+    cache_key_for,
+    synthesis_input_bytes,
+)
 from whoopy.cli import _build_parser, _mlx_adapter_from_durable, main
 from whoopy.hardware import HardwareSnapshot
 from whoopy.meditation import GenerationError
@@ -68,6 +73,7 @@ def durable(**changes: Any) -> TTSRunSettings:
         experimental_model_revision="model-test",
         experimental_runtime_revision="runtime-test",
         experimental_worker_sha256=source_sha256(Path("scripts/mlx_qwen3_tts_worker.py")),
+        experimental_parent_guard_sha256=source_sha256(Path("scripts/worker_parent_guard.py")),
         experimental_adapter_sha256=adapter_source_sha256(),
         experimental_classification="experimental_local",
         experimental_managed_ready=False,
@@ -581,3 +587,57 @@ def test_runner_binds_repeated_speech_to_shared_native_attempt(
             selected_native_evidence(tmp_path, delivered, repeated.model_dump(mode="json"))
     finally:
         processed.close()
+
+
+def test_legacy_mlx_receipt_stays_readable_but_cannot_resume_unattested_helper(
+    tmp_path: Path,
+) -> None:
+    saved = durable(experimental_parent_guard_sha256=None)
+    assert saved.experimental_parent_guard_sha256 is None
+    with pytest.raises(GenerationError, match="predates parent-guard attestation"):
+        _mlx_adapter_from_durable(
+            saved,
+            models_dir=tmp_path / "models/managed",
+            config_dir=Path("config"),
+            raw_output_directory=tmp_path / "raw",
+        )
+    assert saved.experimental_parent_guard_sha256 is None
+
+
+def test_durable_mlx_reconstruction_rejects_a_different_helper_hash(
+    tmp_path: Path,
+    stub_runtime: None,
+) -> None:
+    with pytest.raises(GenerationError, match="changed"):
+        _mlx_adapter_from_durable(
+            durable(experimental_parent_guard_sha256="b" * 64),
+            models_dir=tmp_path / "models/managed",
+            config_dir=Path("config"),
+            raw_output_directory=tmp_path / "raw",
+        )
+
+
+def test_mlx_helper_is_required_bound_to_cache_and_rechecked_before_launch(tmp_path: Path) -> None:
+    worker = tmp_path / "mlx_qwen3_tts_worker.py"
+    worker.write_bytes(Path("scripts/mlx_qwen3_tts_worker.py").read_bytes())
+    settings = MlxQwenSettings(
+        installation=installation(tmp_path),
+        worker_script=worker,
+        models_root=tmp_path / "models",
+        raw_output_directory=tmp_path / "native",
+    )
+    with pytest.raises(FatalSynthesisError, match="parent guard helper is missing"):
+        MlxQwenAdapter(settings)
+    helper = tmp_path / "worker_parent_guard.py"
+    helper.write_bytes(Path("scripts/worker_parent_guard.py").read_bytes())
+    first = MlxQwenAdapter(settings)
+    original_identity = first.cache_identity
+    helper.write_bytes(helper.read_bytes() + b"\n# changed fixture helper\n")
+    second = MlxQwenAdapter(settings)
+    try:
+        assert second.cache_identity != original_identity
+        with pytest.raises(FatalSynthesisError, match="helper changed before launch"):
+            first.prepare()
+    finally:
+        first.close()
+        second.close()

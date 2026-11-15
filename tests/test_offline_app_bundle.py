@@ -455,7 +455,11 @@ def test_builder_uses_lock_export_and_hash_required_binary_download(
     (repository / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     wheel = repository / "dist/whoopy-9.8.7-py3-none-any.whl"
     wheel.parent.mkdir()
-    wheel.write_bytes(b"whoopy")
+    with zipfile.ZipFile(wheel, "w") as product:
+        product.writestr(
+            "whoopy-9.8.7.data/data/share/whoopy/config/artifacts.yaml",
+            Path("config/artifacts.yaml").read_bytes(),
+        )
     commands: list[list[str]] = []
 
     def fake_run(
@@ -640,3 +644,80 @@ def test_ci_style_bundle_proof_cannot_become_offline_or_platform_acceptance(
     assert lifecycle["isolated_models_directory_used"] is True
     assert lifecycle["runtime_fingerprint_match"] is True
     assert lifecycle["workspace_model_readiness_unchanged"] is True
+
+
+@pytest.mark.parametrize("python", ["3.11", "3.12"])
+def test_bundle_qualification_checks_embedded_voice_wheel_abi_before_acquisition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python: str
+) -> None:
+    import yaml
+    from packaging.tags import Tag
+
+    from scripts.build_app_offline_bundle import _verify_baseline_wheel_abi
+
+    lock = yaml.safe_load(Path("config/artifacts.yaml").read_text())
+    wheel = tmp_path / "whoopy-1-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as product:
+        product.writestr(
+            "whoopy-1.data/data/share/whoopy/config/artifacts.yaml", yaml.safe_dump(lock)
+        )
+    monkeypatch.setattr(
+        "scripts.build_app_offline_bundle.sys_tags",
+        lambda: iter([Tag("cp311", "cp311", "macosx_11_0_arm64")]),
+    )
+    if python == "3.11":
+        _verify_baseline_wheel_abi(wheel, target="darwin-arm64", python=python)
+    else:
+        with pytest.raises(ValueError, match=r"Portable Basic/Kokoro.*incompatible.*Python 3\.12"):
+            _verify_baseline_wheel_abi(wheel, target="darwin-arm64", python=python)
+
+
+def test_bundle_rejects_incompatible_embedded_plan_before_any_acquisition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel = tmp_path / "whoopy-1-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as product:
+        product.writestr(
+            "whoopy-1.data/data/share/whoopy/config/artifacts.yaml",
+            Path("config/artifacts.yaml").read_bytes(),
+        )
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        "scripts.build_app_offline_bundle._run", lambda command, **_: commands.append(command)
+    )
+    output = tmp_path / "output"
+    with pytest.raises(ValueError, match=r"Portable Basic/Kokoro.*incompatible"):
+        build_bundle(
+            repository=tmp_path,
+            wheel=wheel,
+            output_directory=output,
+            target=_target_id(),
+            python="3.12",
+            uv="uv",
+        )
+    assert commands == []
+    assert not output.exists()
+
+
+def test_bundle_accepts_reviewed_cp312_baseline_plan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import yaml
+    from packaging.tags import Tag
+
+    from scripts.build_app_offline_bundle import _verify_baseline_wheel_abi
+
+    lock = yaml.safe_load(Path("config/artifacts.yaml").read_text())
+    for artifact in lock["artifacts"]:
+        if artifact["kind"] == "python_wheel":
+            artifact["filename"] = artifact["filename"].replace("cp311-cp311", "cp312-cp312")
+    wheel = tmp_path / "whoopy-1-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as product:
+        product.writestr(
+            "whoopy-1.data/data/share/whoopy/config/artifacts.yaml", yaml.safe_dump(lock)
+        )
+    monkeypatch.setattr(
+        "scripts.build_app_offline_bundle.sys_tags",
+        lambda: iter([Tag("cp311", "cp311", "macosx_11_0_arm64")]),
+    )
+    _verify_baseline_wheel_abi(wheel, target="darwin-arm64", python="3.12")

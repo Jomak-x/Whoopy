@@ -263,7 +263,7 @@ def test_compound_breath_exclusions_preserve_external_anchor(prompt: str) -> Non
     session = route_session(prompt, 180)
 
     assert session.breath_excluded
-    assert session.anchor == "sound"
+    assert session.anchor == ("contact" if "use contact" in prompt else "sound")
 
 
 @pytest.mark.parametrize(

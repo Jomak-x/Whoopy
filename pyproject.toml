@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
   "fastapi>=0.116,<1",
+  "packaging>=26.2,<27",
   "psutil>=6.1,<8",
   "pydantic>=2.10,<3",
   "PyYAML>=6,<7",
@@ -54,11 +55,15 @@ where = ["src"]
   "config/README.md",
 ]
 "share/whoopy/config/acceptance" = ["config/acceptance/*.json"]
-"share/whoopy/config/evaluation" = ["config/evaluation/*.yaml", "config/evaluation/README.md"]
+"share/whoopy/config/evaluation" = ["config/evaluation/*.yaml", "config/evaluation/*.json", "config/evaluation/README.md"]
 "share/whoopy/config/prompts" = ["config/prompts/*.md"]
 "share/whoopy/docs" = [
   "docs/setup.md",
   "docs/experimental-mlx-qwen.md",
+  "docs/speech-screening.md",
+  "docs/generation-request-ids.md",
+  "docs/worker-lifecycle.md",
+  "docs/local-decision-review.md",
   "docs/troubleshooting.md",
   "docs/model-capabilities.md",
   "docs/privacy.md",
@@ -72,6 +77,8 @@ where = ["src"]
   "scripts/moss_tts_worker.py",
   "scripts/qwen3_tts_worker.py",
   "scripts/mlx_qwen3_tts_worker.py",
+  "scripts/whisper_speech_worker.py",
+  "scripts/worker_parent_guard.py",
 ]
 
 [tool.pytest.ini_options]

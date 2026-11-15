@@ -9,15 +9,11 @@ passed to ASR as a prompt. Each inference takes the benchmark GPU flock.
 from __future__ import annotations
 
 import argparse
-import importlib.metadata
 import importlib.util
 import json
-import os
-import platform
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 from typing import Any
 
@@ -63,68 +59,13 @@ def write_json(path: Path, value: dict[str, Any]) -> None:
 
 
 def asr_worker(audio: Path, model: Path, output: Path) -> None:
-    # Fail before importing Hugging Face clients if the local snapshot is absent.
-    model = model.resolve(strict=True)
-    weights = model / "weights.npz"
-    if not weights.is_file() or weights.stat().st_size < 1_000_000:
-        raise ValueError("Complete local Whisper weights.npz is required.")
-    if not (model / "config.json").is_file():
-        raise ValueError("Local Whisper config.json is required.")
-    os.environ["HF_HUB_OFFLINE"] = "1"
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"
-    lock_started = time.monotonic()
-    with LOCK_PATH.open("a") as lock:
-        _lock_exclusively(lock.fileno())
-        lock_wait_seconds = time.monotonic() - lock_started
-        audio_digest = file_sha256(audio)
-        import mlx_whisper  # type: ignore[import-not-found]
-
-        started = time.monotonic()
-        result = mlx_whisper.transcribe(
-            str(audio.resolve()),
-            path_or_hf_repo=str(model),
-            language="en",
-            temperature=0.0,
-            condition_on_previous_text=False,
-            word_timestamps=True,
-            verbose=False,
-        )
-        elapsed = time.monotonic() - started
-        if file_sha256(audio) != audio_digest:
-            raise ValueError("Audio changed during ASR inference; refusing stale evidence.")
-    versions = {}
-    for package in ("mlx-whisper", "mlx", "mlx-metal", "numpy", "soundfile"):
-        try:
-            versions[package] = importlib.metadata.version(package)
-        except importlib.metadata.PackageNotFoundError:
-            versions[package] = "unavailable"
-    write_json(
-        output,
-        {
-            "engine": "mlx-whisper",
-            "model_path": str(model),
-            "model_revision": model.name,
-            "model_weights_sha256": file_sha256(weights),
-            "model_config_sha256": file_sha256(model / "config.json"),
-            "audio_sha256": audio_digest,
-            "text": result["text"],
-            "language": result.get("language"),
-            "segments": result.get("segments", []),
-            "inference_seconds": elapsed,
-            "versions": versions,
-            "python": platform.python_version(),
-            "platform": platform.platform(),
-            "decoding": {
-                "language": "en",
-                "temperature": 0.0,
-                "condition_on_previous_text": False,
-                "expected_text_prompted": False,
-            },
-            "gpu_lock": str(LOCK_PATH),
-            "gpu_lock_wait_seconds": lock_wait_seconds,
-            "network": "offline; existing local snapshot only",
-        },
-    )
+    # The same isolated ASR leaf is used by on-demand Studio speech screening.
+    worker_path = Path(__file__).with_name("whisper_speech_worker.py")
+    spec = importlib.util.spec_from_file_location("whoopy_whisper_leaf", worker_path)
+    assert spec is not None and spec.loader is not None
+    worker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker)
+    worker.transcribe_local(audio, model, output)
 
 
 def main() -> int:
@@ -144,7 +85,12 @@ def main() -> int:
     args = parser.parse_args()
     if not args.asr_worker and args.expected_file is None and args.expected_text is None:
         parser.error("--expected-file or --expected-text is required")
+    if args.report.exists() or args.report.is_symlink():
+        raise SystemExit("Evidence already exists; use a new report path.")
     args.report.parent.mkdir(parents=True, exist_ok=True)
+    if args.asr_worker:
+        asr_worker(args.audio, args.model, args.report)
+        return 0
     try:
         with args.report.open("x", encoding="utf-8") as receipt:
             receipt.write(
@@ -155,9 +101,6 @@ def main() -> int:
         raise SystemExit(
             "Evidence already exists; use a new report path."
         ) from existing_report_error
-    if args.asr_worker:
-        asr_worker(args.audio, args.model, args.report)
-        return 0
     expected = (
         args.expected_file.read_text(encoding="utf-8") if args.expected_file else args.expected_text
     )

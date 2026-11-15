@@ -27,8 +27,6 @@ def _replace_return(output: FixtureDraft, ending: str) -> None:
         "Notice the sound of one heartbeat. You may move your fingers gently.",
         "Hear the sound of breathing in the room. You may move your fingers gently.",
         "Notice your breathing sounds around you. You may move your fingers gently.",
-        "Listen to sounds. You may move your fingers gently.",
-        "Notice an ordinary sound. You may move your fingers gently.",
     ],
 )
 def test_daytime_return_requires_external_listening_as_reorientation(ending: str) -> None:
@@ -59,6 +57,8 @@ def test_daytime_return_requires_external_listening_as_reorientation(ending: str
         "Listen to the sounds outside the room. You may move your fingers gently.",
         "Return to nearby sounds. You may move your fingers gently.",
         "Notice, if you wish, surrounding sounds. You may move your fingers gently.",
+        "Listen to sounds. You may move your fingers gently.",
+        "Notice an ordinary sound. You may move your fingers gently.",
     ],
 )
 def test_daytime_return_accepts_explicit_external_sound_reorientation(ending: str) -> None:
@@ -96,3 +96,29 @@ def test_daytime_return_rejects_negated_external_sound_with_permissive_movement(
 
     assert len(adapter.requests) == 2
     assert "include surrounding sound and an optional small movement" in adapter.requests[1].prompt
+
+
+@pytest.mark.parametrize(
+    "body_sound",
+    [
+        "one heartbeat",
+        "both heartbeats",
+        "several breaths",
+        "two breaths",
+        "4 breaths",
+        "a few breaths",
+        "your own heartbeat",
+        "the next breath",
+        "each of your breaths",
+        "several deep breaths",
+        "a rhythmic heartbeat",
+    ],
+)
+def test_internal_sound_quantifiers_do_not_establish_external_orientation(body_sound: str) -> None:
+    ending = f"Notice the sounds of {body_sound}. You may move your fingers gently."
+    adapter = WholeSessionAdapter(
+        lambda output: _replace_return(output, ending), always_mutate=True
+    )
+    with pytest.raises(GenerationError, match="include surrounding sound"):
+        run(adapter, "Grounding before my meeting", 180)
+    assert len(adapter.requests) == 2

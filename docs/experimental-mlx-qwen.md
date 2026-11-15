@@ -3,8 +3,21 @@
 The two explicit CLI backends `mlx-qwen3-custom-voice-1.7b-8bit` and
 `mlx-qwen3-voice-design-1.7b-8bit` use the normal durable generation pipeline.
 They are experimental local installations, not managed model-pack READY states.
-They are intentionally absent from the web/API voice selection. Native Qwen,
-MOSS, and portable Kokoro keep their existing paths.
+The local API also exposes them as explicit Lab-only experimental choices when
+the pinned installation verifies on macOS ARM64 with at least 16 GiB available
+RAM. `ready` means that local preflight passed; `managed_ready` and
+`studio_eligible` remain false, and no listening approval is implied. Status
+snapshots are cached briefly; every new launch rechecks the installation and
+resources. Native Qwen, MOSS, and portable Kokoro keep their existing paths.
+
+API requests use `surface: "lab"`, the backend ID, `qwen_language: "English"`,
+and either `qwen_speaker` (Ryan, Aiden, or Serena) for CustomVoice or
+`qwen_voice_design_preset` for VoiceDesign. VoiceDesign presets are
+`warm_meditation`, `grounded_meditation`, and `sleep_meditation`. Both consume
+reviewed `delivery`, `intensity`, and `pace` controls. Numeric `speed`, reference
+recordings, and free-form voice instructions are unsupported. For prompt
+generation, select `writing_method: "recipe_whole_session"` and an explicit
+writer profile; this interface does not silently substitute a model or backend.
 
 `config/experimental_tts.yaml` pins the currently installed machine-local MLX
 runtime, interpreter, every installed distribution's actual contents, and all
@@ -20,12 +33,38 @@ fakes and run without MLX/NumPy.
 A worker runs in isolated Python with a fresh bytecode cache prefix, imports
 MLX only in that process, uses local checkpoints with offline flags, and holds
 `/tmp/whoopy-benchmark-gpu.lock` for its lifetime. It requires 16 GiB available
-RAM, preserves 6 GiB allocator headroom (at most 24 GiB allocation), and exits on
+RAM and sets an allocator guideline of `min(24 GiB, available RAM - 6 GiB)`.
+MLX can exceed this guideline; it does not guarantee that headroom remains free.
+The worker exits on
 sustained available RAM below 2 GiB or swap growth above 4 GiB. Startup and
 request deadlines are bounded. Run writer, voice, and ASR jobs sequentially;
 do not hold this same advisory lock around the whole CLI invocation because
 the speech child must acquire it. The writer stage does not acquire that lock. Each llama.cpp invocation exits
 before returning; the HIGH writer model is not resident when MLX admission runs.
+
+New native attempt sidecars include `memory_measurements` version 1: MLX allocator
+active/cache/cumulative peak bytes and system available/swap bytes at `before_load`,
+`after_load`, `before_generation`, and each `after_generation_and_decode` boundary.
+The final observation follows the worker's existing audio evaluation. No extra
+evaluation, synchronization, cache clearing, or peak reset is performed. Allocator
+counters are not process RSS, and peaks are cumulative across the worker's lifetime,
+including earlier segments. System snapshots are not continuous minima or maxima.
+The pinned nonstreaming API yields already decoded audio, so separate code-generation
+and decoder peaks are explicitly unavailable. Missing, unsupported, or malformed
+counters are `null` with an `unavailable_reasons` entry; unavailable optional metrics
+do not make otherwise valid audio fail. The sidecar hash binds these observations
+to that immutable attempt. Earlier sidecars are not backfilled or reinterpreted;
+existing worker-hash drift checks remain authoritative for reuse and resume.
+
+Historical memory evidence is distinct from these new, not yet live-measured
+observations. The October 28 raw voice reports measured 7.707 GiB CustomVoice and
+7.491 GiB VoiceDesign allocator peaks despite roughly 3.25 GiB RSS and 2.864 GiB
+of model/codec weight files. The earlier VoiceDesign run exceeded its 6.386 GiB
+allocator guideline. October 29 fixed-script voice runs showed system available-RAM
+drops of about 7.90–11.85 GiB with no observed swap growth. These examples establish
+neither a lower safe admission threshold nor readiness promotion. The 16 GiB guard
+remains unchanged. See `evaluations/benchmarks/2026-10-28/voices/` raw reports and
+the October 29 campaign `generation/resources.jsonl` files for the original evidence.
 
 For whole-session live work use the qualified HIGH Ministral profile; Standard
 Qwen4B is not a qualified whole-session baseline. From a synchronized checkout:

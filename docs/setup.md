@@ -21,9 +21,15 @@ targets. Windows ARM64 is not a Local V1 target.
 
 Install:
 
-- Python 3.11 or 3.12 with `venv`/`ensurepip` support for a product-bundle install;
+- Python 3.11 with `venv`/`ensurepip` support for the current portable product bundle;
 - Git and [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for a source install;
 - FFmpeg, including `ffprobe`, if you need finished FLAC, AAC/M4A, and Opus exports.
+
+The core package metadata also permits Python 3.12, but the current Kokoro artifact lock contains
+CPython 3.11 native wheels. Use Python 3.11 for that speech path. Materialization and bundle
+qualification reject incompatible wheel tags before installation; a Python 3.12 audio bundle needs
+a separately reviewed lock containing compatible wheels. Isolated optional voice runtimes may use
+their own pinned Python version without changing the application's host ABI.
 
 Use an FFmpeg package from your operating system's trusted package manager or the official FFmpeg
 download references. Confirm both executable names resolve:
@@ -51,8 +57,8 @@ not pass backend flags.
 
 ## 2. Install The Product Bundle
 
-Use the archive matching the exact target in the table above and Python 3.11 or 3.12 named by its
-filename. The archive contains Whoopy, the retained local Studio frontend, installed defaults, worker
+Use the archive matching the exact target in the table above and Python family named by its
+filename. The current portable audio plan requires Python 3.11. The archive contains Whoopy, the retained local Studio frontend, installed defaults, worker
 scripts, and every Python dependency as a target-native wheel. It does not contain Python, FFmpeg,
 model checkpoints, or machine-local `config/local.yaml` overrides.
 

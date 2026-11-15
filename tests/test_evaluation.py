@@ -277,6 +277,11 @@ def test_kokoro_lab_payload_excludes_other_adapter_controls() -> None:
     validated = GenerationRequest.model_validate(payload)
 
     assert validated.tts_model == "kokoro"
+    assert payload["voice"] == request.condition.voice.voice_id
+    assert (
+        payload["speed"]
+        == executor.pacing_profiles.get(request.condition.pacing_profile_id).speech_speed
+    )
     assert validated.qwen_speaker is None
     assert validated.qwen_language is None
     assert validated.moss_language is None
@@ -421,6 +426,9 @@ def test_lab_routes_each_production_voice_contract_without_foreign_controls(
     validated = GenerationRequest.model_validate(payload)
 
     assert validated.tts_model == expected_backend
+    assert "speed" not in payload
+    assert "voice" not in payload
+    assert validated.speed is None
     for field, value in expected_controls.items():
         assert getattr(validated, field) == value
     if not expected_backend.startswith("moss-"):
@@ -2065,8 +2073,13 @@ def test_lab_voice_design_launch_and_attestation_preserve_requested_preset(prese
         seed=42,
     )
     executor = LocalProductionExperimentExecutor(cast(Any, object()))
-    payload = GenerationRequest.model_validate(executor._generation_payload(request))
+    generated_payload = executor._generation_payload(request)
+    assert "voice" not in generated_payload
+    assert "speed" not in generated_payload
+    payload = GenerationRequest.model_validate(generated_payload)
     assert payload.qwen_voice_design_preset == preset
+    assert payload.qwen_speaker is None
+    assert payload.qwen_reference is None
     resolved = {
         "mode": "generated_prompt",
         "profile": "standard",
@@ -2109,3 +2122,36 @@ def test_lab_voice_design_launch_and_attestation_preserve_requested_preset(prese
         with pytest.raises(ValueError, match=rf"tts\.{field}="):
             attest()
         tts[field] = preset
+
+
+@pytest.mark.parametrize(
+    ("backend", "voice_mode", "voice_id"),
+    [
+        ("mlx-qwen3-custom-voice-1.7b-8bit", "preset", "Serena"),
+        ("mlx-qwen3-voice-design-1.7b-8bit", "designed", "warm_meditation"),
+    ],
+)
+def test_lab_experimental_mlx_requires_an_explicit_executor_route(
+    backend: str,
+    voice_mode: Literal["preset", "designed"],
+    voice_id: str,
+) -> None:
+    evaluation = load_evaluation_set(Path("config/evaluation/local-v1.yaml"))
+    voice = VoiceConfiguration(
+        configuration_id="experimental-mlx",
+        model_id=backend,
+        voice_id=voice_id,
+        voice_mode=voice_mode,
+    )
+    request = ProductionTrialRequest(
+        experiment_id="experimental-mlx",
+        experiment_version=1,
+        trial_id=uuid4(),
+        case=evaluation.cases[0],
+        candidate_id="candidate",
+        condition=_condition(method="plan_first").model_copy(update={"voice": voice}),
+        seed=42,
+    )
+    executor = LocalProductionExperimentExecutor(cast(Any, object()))
+    with pytest.raises(ValueError, match="not exposed by production"):
+        executor._generation_payload(request)

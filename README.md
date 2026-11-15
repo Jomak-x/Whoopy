@@ -13,7 +13,9 @@ CLI options below for the new writer. Courses are future work.
 
 ## Start locally
 
-Requires Python 3.11 or 3.12, [uv](https://docs.astral.sh/uv/), and FFmpeg/FFprobe.
+Use Python 3.11 for the current pinned portable audio stack, [uv](https://docs.astral.sh/uv/), and
+FFmpeg/FFprobe. Core metadata also permits Python 3.12; its native speech wheels must match that
+interpreter before it can use the portable audio path. See [setup](docs/setup.md).
 
 ```bash
 uv sync --extra dev --locked

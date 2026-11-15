@@ -94,6 +94,8 @@ class TTSRunSettings(BaseModel):
     voice_mode: VoiceMode = "preset"
     experimental_installation_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     experimental_worker_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    # Legacy receipts remain readable; reconstruction rejects an unattested helper.
+    experimental_parent_guard_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     experimental_adapter_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     experimental_model_revision: str | None = None
     experimental_runtime_revision: str | None = None
@@ -139,7 +141,9 @@ class TTSRunSettings(BaseModel):
             )
             if self.voice_name not in voices:
                 raise ValueError("Unsupported experimental MLX voice")
-        elif any(value is not None for value in experimental_values):
+        elif self.experimental_parent_guard_sha256 is not None or any(
+            value is not None for value in experimental_values
+        ):
             raise ValueError("Experimental provenance is valid only for experimental MLX backends")
         required_mode = _QWEN_BACKENDS.get(self.backend)
         reference_values = (

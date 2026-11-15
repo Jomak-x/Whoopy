@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -42,25 +42,28 @@ class CompletedGenerationApplication:
         recipe = payload["writing_method"] == "recipe_whole_session"
         plan = {
             "schema_version": 2,
-            "blueprint_id": "daytime-steadying@1" if recipe else "grounding@1",
-            "blueprint_version": 1,
+            "blueprint_id": "daytime-steadying@2" if recipe else "grounding@1",
+            "blueprint_version": 2 if recipe else 1,
         }
         if self.tamper == "recipe":
-            plan["blueprint_id"] = "sleep-settling@1"
+            plan["blueprint_id"] = "sleep-settling@2"
         if self.tamper == "version":
-            plan["blueprint_version"] = 2
+            plan["blueprint_version"] = 3
         moss = payload["tts_model"].startswith("moss-")
+        moss_reference = moss and payload["moss_use_reference"]
         tts = {
             "backend": payload["tts_model"],
             "seed": payload["seed"],
             "speed": 1.0 if moss else payload["speed"],
             "delivery_override": payload["delivery"],
             "intensity_override": payload["intensity"],
-            "voice_mode": "designed" if moss else "preset",
-            "voice_name": payload["voice"],
+            "voice_mode": "reference" if moss_reference else "designed" if moss else "preset",
+            "voice_name": ("whoopy-reference" if moss_reference else "direct-generated")
+            if moss
+            else payload["voice"],
             "language": payload["moss_language"] if moss else "en-us",
-            "reference_id": None,
-            "use_reference": False,
+            "reference_id": payload["voice_reference"] if moss_reference else None,
+            "use_reference": moss_reference,
             "instruction": payload.get("moss_instruction"),
         }
         if self.tamper == "instruction":
@@ -177,7 +180,7 @@ def test_writing_comparison_keeps_request_fixed_and_preserves_recipe_provenance(
         )
         for trial in report.trials
     ]
-    assert [plan["blueprint_id"] for plan in plans] == ["grounding@1", "daytime-steadying@1"]
+    assert [plan["blueprint_id"] for plan in plans] == ["grounding@1", "daytime-steadying@2"]
 
 
 @pytest.mark.parametrize("tamper", ["recipe", "version"])
@@ -195,25 +198,41 @@ def test_recipe_attestation_rejects_wrong_output_provenance(tmp_path: Path, tamp
 
 @pytest.mark.parametrize("instruction", [None, "Speak with a soft, steady low voice."])
 @pytest.mark.parametrize("tamper", [None, "instruction"])
+@pytest.mark.parametrize("voice_mode", ["designed", "reference"])
 def test_moss_instruction_attests_the_submitted_control(
-    tmp_path: Path, instruction: str | None, tamper: str | None
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    instruction: str | None,
+    tamper: str | None,
+    voice_mode: Literal["designed", "reference"],
 ) -> None:
     voice = VoiceConfiguration(
-        configuration_id="moss-designed",
+        configuration_id=f"moss-{voice_mode}",
         model_id="moss-5b",
-        voice_id="direct",
-        voice_mode="designed",
+        voice_id="managed-reference-1" if voice_mode == "reference" else "direct",
+        voice_mode=voice_mode,
         instruction=instruction,
     )
     request = _request(_condition().model_copy(update={"voice": voice}))
     application = CompletedGenerationApplication(tmp_path, tamper=tamper)
     executor = LocalProductionExperimentExecutor(cast(Any, application))
+    checked_references: list[str] = []
+    monkeypatch.setattr(executor, "_validate_managed_reference", checked_references.append)
 
     result = executor.execute(request)
 
     assert result.success == (tamper is None)
-    if instruction is not None:
-        assert application.payloads[0]["moss_instruction"] == instruction
+    payload = application.payloads[0]
+    assert "voice" not in payload
+    assert "speed" not in payload
+    assert payload["moss_use_reference"] == (voice_mode == "reference")
+    assert payload["voice_reference"] == (
+        "managed-reference-1" if voice_mode == "reference" else None
+    )
+    assert checked_references == (["managed-reference-1"] if voice_mode == "reference" else [])
+    assert payload["moss_instruction"] == (
+        instruction if instruction is not None else "Speak gently, with a calm meditative delivery."
+    )
     if tamper is not None:
         assert result.failure is not None and "tts.instruction" in result.failure
 

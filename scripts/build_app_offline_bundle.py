@@ -16,6 +16,16 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+import yaml
+from packaging.tags import compatible_tags, cpython_tags, sys_tags
+
+from whoopy.artifacts import (
+    ArtifactError,
+    ArtifactLock,
+    TargetPlatform,
+    require_compatible_python_wheels,
+)
+
 REPOSITORY_IMPORT_ROOT = str(Path(__file__).resolve().parent.parent)
 if REPOSITORY_IMPORT_ROOT not in sys.path:  # Direct ``python scripts/...`` execution.
     sys.path.insert(0, REPOSITORY_IMPORT_ROOT)
@@ -112,6 +122,39 @@ def _deterministic_zip(source: Path, destination: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _verify_baseline_wheel_abi(wheel: Path, *, target: str, python: str) -> None:
+    """Qualify the built product's portable voice plan for the requested host Python."""
+
+    with zipfile.ZipFile(wheel) as archive:
+        locks = [
+            name
+            for name in archive.namelist()
+            if name.endswith("/share/whoopy/config/artifacts.yaml")
+        ]
+        if len(locks) != 1:
+            raise ValueError("Product wheel must contain one baseline artifact lock.")
+        lock = ArtifactLock.model_validate(yaml.safe_load(archive.read(locks[0])))
+    operating_system, architecture = target.rsplit("-", 1)
+    artifacts = lock.resolve(
+        "basic", TargetPlatform(operating_system=operating_system, architecture=architecture)
+    )
+    version = tuple(int(part) for part in python.split("."))
+    interpreter = f"cp{version[0]}{version[1]}"
+    # The builder already requires a native target. Keep its native platform
+    # compatibility set, while selecting the requested destination Python ABI.
+    platforms = tuple(dict.fromkeys(tag.platform for tag in sys_tags()))
+    supported = set(cpython_tags(version, abis=(interpreter,), platforms=platforms))
+    supported.update(compatible_tags(version, interpreter=interpreter, platforms=platforms))
+    try:
+        require_compatible_python_wheels(
+            artifacts, supported_tags=supported, interpreter=f"Python {python} on {target}"
+        )
+    except ArtifactError as error:
+        raise ValueError(
+            f"Portable Basic/Kokoro plan cannot qualify this bundle: {error}"
+        ) from error
+
+
 def build_bundle(
     *,
     repository: Path,
@@ -131,6 +174,7 @@ def build_bundle(
         raise ValueError(f"Expected one built Whoopy wheel, got: {wheel}")
     if not re.fullmatch(r"3\.(?:11|12)", python):
         raise ValueError("--python must be the supported family '3.11' or '3.12'.")
+    _verify_baseline_wheel_abi(wheel, target=target, python=python)
     python_family = python
     output_directory = output_directory.resolve()
     output_directory.mkdir(parents=True, exist_ok=True)

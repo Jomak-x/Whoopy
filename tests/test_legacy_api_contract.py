@@ -39,7 +39,7 @@ def test_retained_generation_payload_reaches_application(
         "text": "Notice the support beneath you.",
         "tts_model": tts_model,
         "voice": "af_heart",
-        "speed": 0.6,
+        **({"speed": 0.6} if tts_model == "kokoro" else {}),
         "moss_language": "English",
         "moss_instruction": STUDIO_MOSS_INSTRUCTION,
         "moss_use_reference": True,

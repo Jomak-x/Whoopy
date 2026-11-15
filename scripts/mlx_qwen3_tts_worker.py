@@ -1,4 +1,4 @@
-# mypy: disable_error_code = import-not-found
+# mypy: disable_error_code = "import-not-found, import-untyped"
 """Experimental, offline MLX Qwen3 JSON-lines worker; no runtime imports at import time."""
 
 from __future__ import annotations
@@ -158,6 +158,49 @@ def _admission_limit(psutil: Any) -> int:
     return min(24 * _GIB, available - 6 * _GIB)
 
 
+def _memory_snapshot(phase: str, *, mx: Any, psutil: Any) -> dict[str, Any]:
+    """Read optional byte counters without changing evaluation or memory policy."""
+
+    snapshot: dict[str, Any] = {"phase": phase, "unavailable_reasons": {}}
+    for field, source, method, attribute in (
+        ("mlx_allocator_active_bytes", mx, "get_active_memory", None),
+        ("mlx_allocator_cache_bytes", mx, "get_cache_memory", None),
+        ("mlx_allocator_cumulative_peak_bytes", mx, "get_peak_memory", None),
+        ("system_available_bytes", psutil, "virtual_memory", "available"),
+        ("system_swap_used_bytes", psutil, "swap_memory", "used"),
+    ):
+        try:
+            if source is None:
+                raise RuntimeError("observer was not supplied")
+            value = getattr(source, method)()
+            if attribute is not None:
+                value = getattr(value, attribute)
+            if type(value) is not int or value < 0:
+                raise ValueError("counter did not return a nonnegative integer byte count")
+            snapshot[field] = value
+        except Exception as error:
+            snapshot[field] = None
+            snapshot["unavailable_reasons"][field] = f"{type(error).__name__}: {error}"[:300]
+    return snapshot
+
+
+def _memory_report(snapshots: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "units": "bytes",
+        "mlx_counter_scope": "MLX allocator counters, not process RSS",
+        "peak_scope": "cumulative worker lifetime; not reset for each synthesis attempt",
+        "sampling_scope": "existing phase boundaries only; no additional evaluation or "
+        "synchronization is forced, and system counters are not continuous extrema",
+        "snapshots": snapshots,
+        "separate_code_generation_measurement": {
+            "available": False,
+            "reason": "The pinned nonstreaming API yields already decoded audio; "
+            "code generation and decoder peaks cannot be separated by these observations.",
+        },
+    }
+
+
 class ResourceWatchdog:
     """Stop the entire worker on pressure, including a blocked native Metal call."""
 
@@ -235,6 +278,7 @@ def _preserve_invalid_native(
     elapsed: float,
     reason: str,
     np: Any,
+    memory_measurements: dict[str, Any],
 ) -> dict[str, Any]:
     key = _safe_component(request["native_artifact_key"], "native_artifact_key")
     attempt = uuid.uuid4().hex
@@ -281,6 +325,7 @@ def _preserve_invalid_native(
         "generation_arguments": kwargs,
         "stop_evidence": stops,
         "token_budget_policy": _TOKEN_BUDGET_POLICY,
+        "memory_measurements": memory_measurements,
     }
     with sidecar_path.open("x", encoding="utf-8") as handle:
         json.dump(metadata, handle, indent=2, allow_nan=False)
@@ -303,6 +348,7 @@ def _preserve_native(
     elapsed: float,
     pcm_sha256: str,
     sf: Any,
+    memory_measurements: dict[str, Any],
 ) -> dict[str, Any]:
     key = _safe_component(request["native_artifact_key"], "native_artifact_key")
     attempt = uuid.uuid4().hex
@@ -343,6 +389,7 @@ def _preserve_native(
         "generation_arguments": kwargs,
         "stop_evidence": stop,
         "token_budget_policy": _TOKEN_BUDGET_POLICY,
+        "memory_measurements": memory_measurements,
     }
     with sidecar_path.open("x", encoding="utf-8") as handle:
         json.dump(metadata, handle, indent=2, allow_nan=False)
@@ -364,16 +411,23 @@ def _synthesize(
     mx: Any,
     np: Any,
     sf: Any,
+    psutil: Any = None,
+    startup_memory_snapshots: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     kwargs = _request_arguments(request, task)
     mx.random.seed(request.get("seed", 42))
     started = time.monotonic()
+    memory_snapshots = list(startup_memory_snapshots or [])
+    memory_snapshots.append(_memory_snapshot("before_generation", mx=mx, psutil=psutil))
     chunks = []
     stops = []
     outputs = []
     iterator = model.generate(**kwargs)
     for result in iterator:
         mx.eval(result.audio)
+        memory_snapshots.append(
+            _memory_snapshot("after_generation_and_decode", mx=mx, psutil=psutil)
+        )
         audio = np.asarray(result.audio)
         outputs.append((audio, result.sample_rate))
         stops.append(_generator_stop_evidence(iterator))
@@ -395,6 +449,7 @@ def _synthesize(
                 elapsed=time.monotonic() - started,
                 reason=reason,
                 np=np,
+                memory_measurements=_memory_report(memory_snapshots),
             )
             raise NativeOutputError(reason, evidence)
         chunks.append(audio.astype(np.float32, copy=False))
@@ -420,6 +475,7 @@ def _synthesize(
         elapsed=elapsed,
         pcm_sha256=hashlib.sha256(pcm).hexdigest(),
         sf=sf,
+        memory_measurements=_memory_report(memory_snapshots),
     )
     if not stop["completion_valid"]:
         raise NativeOutputError("MLX Qwen output has no valid codec EOS within budget", evidence)
@@ -437,7 +493,7 @@ def _synthesize(
     }
 
 
-def main() -> int:
+def _run_worker() -> int:
     args = _arguments()
     _isolate_protocol_output()
     _offline_environment()
@@ -463,7 +519,9 @@ def main() -> int:
         from mlx_audio.tts.utils import load_model
 
         mx.set_memory_limit(limit)
+        startup_memory_snapshots = [_memory_snapshot("before_load", mx=mx, psutil=psutil)]
         model = load_model(str(model_path))
+        startup_memory_snapshots.append(_memory_snapshot("after_load", mx=mx, psutil=psutil))
         if getattr(model.config, "tts_model_type", None) != args.task:
             raise ValueError("checkpoint task does not match requested task")
         if int(model.sample_rate) != _SAMPLE_RATE:
@@ -498,6 +556,8 @@ def main() -> int:
                         mx=mx,
                         np=np,
                         sf=sf,
+                        psutil=psutil,
+                        startup_memory_snapshots=startup_memory_snapshots,
                     )
                 )
             except Exception as error:
@@ -524,6 +584,25 @@ def main() -> int:
             watchdog.close()
         if lock_fd is not None:
             os.close(lock_fd)
+
+
+def main() -> int:
+    # Isolated runtimes do not import the application package, and -I excludes
+    # ordinary sibling imports. Execute only these verified local helper bytes.
+    helper = Path(__file__).with_name("worker_parent_guard.py")
+    if helper.is_symlink():
+        raise RuntimeError("Parent guard helper must not be a symlink")
+    source = helper.read_bytes()
+    expected = os.environ.get("WHOOPY_PARENT_GUARD_SHA256")
+    if expected is not None and hashlib.sha256(source).hexdigest() != expected:
+        raise RuntimeError("Parent guard helper hash changed before worker launch")
+    namespace: dict[str, Any] = {"__file__": str(helper), "__name__": "whoopy_worker_parent_guard"}
+    exec(compile(source, str(helper), "exec"), namespace)
+    guard = namespace["start_parent_watch"]()
+    try:
+        return _run_worker()
+    finally:
+        guard.close()
 
 
 if __name__ == "__main__":

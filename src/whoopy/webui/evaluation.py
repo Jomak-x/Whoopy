@@ -446,8 +446,6 @@ class LocalProductionExperimentExecutor:
             "text": request.case.prompt,
             "minutes": request.case.duration_seconds / 60,
             "tts_model": backend,
-            "voice": voice.voice_id,
-            "speed": speed,
             "pacing_profile_id": pacing_profile.profile_id,
             "meditation_kind": kind,
             "delivery": delivery,
@@ -482,7 +480,9 @@ class LocalProductionExperimentExecutor:
                     "requested_duration_seconds": request.case.duration_seconds,
                 }
             )
-        if backend == "fish-1.4":
+        if backend == "kokoro":
+            payload.update({"voice": voice.voice_id, "speed": speed})
+        elif backend == "fish-1.4":
             payload["voice_reference"] = voice.voice_id
         elif backend.startswith("moss-"):
             payload.update(
