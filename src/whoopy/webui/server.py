@@ -43,6 +43,11 @@ from whoopy.adapters.tts import (
     Qwen3TTSVariant,
     resolve_qwen3_tts_installation,
 )
+from whoopy.adapters.tts.mlx_installation import (
+    MlxQwenInstallation,
+    resolve_mlx_qwen_installation,
+)
+from whoopy.adapters.tts.mlx_qwen3_tts import MLX_QWEN_BACKENDS, MLX_QWEN_SPEAKERS
 from whoopy.artifacts import (
     ArtifactError,
     ArtifactState,
@@ -52,8 +57,9 @@ from whoopy.artifacts import (
 )
 from whoopy.audio import ExportMetadata, export_finished_audio, load_export_manifest
 from whoopy.audio.models import AudioManifest, AudioQualityReport
+from whoopy.audio.synthesis import FatalSynthesisError
 from whoopy.evaluation.pacing_profiles import PacingProfileRegistry
-from whoopy.hardware import diagnose, inspect_hardware, load_runtime_profiles
+from whoopy.hardware import HardwareSnapshot, diagnose, inspect_hardware, load_runtime_profiles
 from whoopy.meditation import MeditationPlan
 from whoopy.model_packs import (
     ModelPackState,
@@ -90,6 +96,8 @@ from whoopy.webui.audio_inspection import (
     segment_wave_bytes,
     waveform_payload,
 )
+from whoopy.webui.generation_requests import GenerationRequests
+from whoopy.webui.voice_previews import VoicePreviewService
 
 if TYPE_CHECKING:
     from whoopy.evaluation import ProductionExperimentExecutor
@@ -100,6 +108,31 @@ SEGMENT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MODEL_PACK_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]{0,127}$")
 RUN_TRASH_RECEIPT_PATTERN = re.compile(r"^[0-9]{8}T[0-9]{6}-[0-9a-f]{10}$")
 WEB_LAUNCH_REQUEST_FILENAME = "web-launch-request.json"
+PUBLIC_GENERATION_REQUEST_KEYS = frozenset(
+    {
+        "mode",
+        "text",
+        "minutes",
+        "requested_duration_seconds",
+        "tts_model",
+        "surface",
+        "profile",
+        "writing_method",
+        "pacing_profile_id",
+        "voice",
+        "delivery",
+        "intensity",
+        "pace",
+        "speed",
+        "meditation_kind",
+        "qwen_language",
+        "qwen_speaker",
+        "qwen_voice_design_preset",
+        "moss_language",
+        "moss_use_reference",
+        "seed",
+    }
+)
 ALLOWED_ARTIFACTS = {
     "run": "run.json",
     "script": "script.md",
@@ -135,6 +168,29 @@ QWEN_BASE_CLONE_06_QUALITY_BLOCKER = (
     "of reaching a natural ending. Use Base Clone 1.7B or another playable voice while "
     "the 0.6B EOS strategy is reviewed."
 )
+
+
+def validate_mlx_controls(model: str, payload: dict[str, Any]) -> None:
+    """Keep browser and direct application requests inside the MLX adapter contract."""
+
+    if model not in MLX_QWEN_BACKENDS:
+        return
+    if payload.get("surface", "studio") != "lab":
+        raise ValueError("Experimental MLX voices are Lab-only; no Studio promotion is claimed.")
+    if payload.get("qwen_language") not in {None, "English"}:
+        raise ValueError("Experimental MLX voices support only English.")
+    if payload.get("qwen_reference") is not None or payload.get("voice_reference") is not None:
+        raise ValueError("Experimental MLX voices do not accept voice references.")
+    if MLX_QWEN_BACKENDS[model] == "custom_voice":
+        if payload.get("qwen_speaker", "Serena") not in MLX_QWEN_SPEAKERS:
+            raise ValueError("Experimental MLX CustomVoice requires Ryan, Aiden, or Serena.")
+        if payload.get("qwen_voice_design_preset") is not None:
+            raise ValueError("Experimental MLX CustomVoice accepts only a preset speaker.")
+    elif payload.get("qwen_speaker") is not None:
+        raise ValueError("Experimental MLX VoiceDesign accepts only a reviewed design preset.")
+    seed = payload.get("seed", 42)
+    if not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed < 2**32:
+        raise ValueError("Experimental MLX seed must be an unsigned 32-bit integer.")
 
 
 def _speech_model_capabilities(model: str) -> dict[str, Any]:
@@ -200,6 +256,28 @@ def _speech_model_capabilities(model: str) -> dict[str, Any]:
                 "moss_instruction",
                 "moss_use_reference",
                 "voice_reference",
+                "delivery",
+                "intensity",
+                "pace",
+            ],
+        }
+    if model in MLX_QWEN_BACKENDS:
+        custom = MLX_QWEN_BACKENDS[model] == "custom_voice"
+        return {
+            "voice_modes": ["preset" if custom else "designed"],
+            "languages": ["English"],
+            "delivery": {"values": deliveries, "fallback": None},
+            "intensity": {"values": ["subtle", "moderate"], "fallback": None},
+            "pace": {
+                "speed_range": [1.0, 1.0],
+                "values": ["natural", "unhurried", "slow", "very_slow"],
+            },
+            "preset_voices": list(MLX_QWEN_SPEAKERS)
+            if custom
+            else ["warm_meditation", "grounded_meditation", "sleep_meditation"],
+            "request_fields": [
+                "qwen_language",
+                "qwen_speaker" if custom else "qwen_voice_design_preset",
                 "delivery",
                 "intensity",
                 "pace",
@@ -313,6 +391,7 @@ class GenerationTask:
     launch_record: RunRecord | None = None
     finalizing_take: bool = False
     plan_source_record: RunRecord | None = None
+    request_first_launch: bool = False
 
     @property
     def active(self) -> bool:
@@ -359,7 +438,9 @@ class LocalWebApplication:
         self.config_directory = self._resolve(config_directory)
         self.models_directory = self._resolve(models_directory)
         self.model_pack_models_root = models_root_from_artifact_store(self.models_directory)
+        self.voice_previews = VoicePreviewService(self.model_pack_models_root)
         self.runs_directory = self._resolve(runs_directory)
+        self.generation_requests = GenerationRequests(self.runs_directory)
         self.voice_reference_manager = VoiceReferenceManager(
             self.model_pack_models_root / "voice-references"
         )
@@ -372,6 +453,11 @@ class LocalWebApplication:
         self._environment_status_cache: tuple[float, dict[str, Any]] | None = None
         # Injection keeps web tests independent from a shell child process.
         self._command_launcher: Callable[..., Any] = command_launcher or subprocess.Popen
+        from whoopy.evaluation.speech_screening import SpeechScreening
+
+        self.speech_screening = SpeechScreening(
+            self.runs_directory, self.model_pack_models_root, launcher=self._command_launcher
+        )
         # The web layer deliberately receives an already-composed service. It
         # never imports a TTS runtime or reconstructs pack file paths itself.
         self._model_pack_service_factory = model_pack_service_factory or _model_pack_service
@@ -410,6 +496,8 @@ class LocalWebApplication:
             yield
 
     def _has_active_generation(self) -> bool:
+        if self.speech_screening.has_active():
+            return True
         with self._task_lock:
             if any(task.active or task.finalizing_take for task in self._tasks.values()):
                 return True
@@ -795,6 +883,11 @@ class LocalWebApplication:
     def _require_speech_model_ready(self, tts_model: str, *, surface: str) -> None:
         """Reject selections that have not earned current production readiness."""
 
+        if tts_model in MLX_QWEN_BACKENDS:
+            if surface != "lab":
+                raise ValueError("Experimental MLX voices are Lab-only.")
+            self._verify_mlx_speech_model(tts_model)
+            return
         if tts_model in QWEN_BACKEND_VARIANTS:
             if surface != "lab" and not self._qwen_has_current_studio_promotion(tts_model):
                 raise ValueError(
@@ -832,6 +925,69 @@ class LocalWebApplication:
                 f"install, verify, and run Test voice for {pack_id}",
             )
             raise ValueError(f"{tts_model} is not ready on this machine: {remedy}.")
+
+    def _verify_mlx_speech_model(
+        self, backend: str, *, snapshot: HardwareSnapshot | None = None
+    ) -> MlxQwenInstallation:
+        """Verify local experimental assets without loading or acquiring models."""
+
+        if snapshot is None:
+            inspection_path = self.models_directory
+            while not inspection_path.exists() and inspection_path != inspection_path.parent:
+                inspection_path = inspection_path.parent
+            snapshot = inspect_hardware(inspection_path)
+        if (snapshot.operating_system, snapshot.architecture) != ("darwin", "arm64"):
+            raise ValueError(
+                "Experimental MLX voices require macOS on Apple Silicon. "
+                "Choose portable Kokoro explicitly for another system."
+            )
+        if snapshot.available_ram_gb < 16:
+            raise ValueError(
+                "Experimental MLX voices require at least 16 GiB available RAM. "
+                "Free memory or choose portable Kokoro explicitly."
+            )
+        try:
+            return resolve_mlx_qwen_installation(
+                self.model_pack_models_root,
+                backend,
+                manifest_path=self.config_directory / "experimental_tts.yaml",
+            )
+        except FatalSynthesisError as error:
+            raise ValueError(str(error)) from error
+
+    def _mlx_speech_model_status(self, backend: str, snapshot: HardwareSnapshot) -> dict[str, Any]:
+        status: dict[str, Any] = {
+            "classification": "experimental_local",
+            "managed_ready": False,
+            "studio_candidate": False,
+            "studio_eligible": False,
+            "lab_only": True,
+            "lab_visible": True,
+            "promotion_status": "experimental_not_promoted",
+            "license": "Apache-2.0",
+            "expression": "experimental local preset speaker + typed delivery"
+            if MLX_QWEN_BACKENDS[backend] == "custom_voice"
+            else "experimental local reviewed voice design + typed delivery",
+            "capabilities": _speech_model_capabilities(backend),
+        }
+        try:
+            installation = self._verify_mlx_speech_model(backend, snapshot=snapshot)
+        except ValueError as error:
+            return {
+                **status,
+                "ready": False,
+                "state": "experimental_unavailable",
+                "error": str(error),
+            }
+        return {
+            **status,
+            "ready": True,
+            "state": "experimental_available",
+            "installation_sha256": installation.installation_sha256,
+            "model_revision": installation.model_revision,
+            "runtime_revision": installation.runtime_revision,
+            "readiness_note": "Pinned local installation verified; listening quality is unrated.",
+        }
 
     def _qwen_current_studio_promotion(self, model_id: str) -> dict[str, Any] | None:
         """Return the exact promoted voice contract after immutable-evidence validation."""
@@ -982,6 +1138,19 @@ class LocalWebApplication:
             if cached is not None and now - cached[0] <= ENVIRONMENT_STATUS_CACHE_SECONDS:
                 return deepcopy(cached[1])
             status = self._compute_environment_status()
+            previews = self.voice_previews.status()
+            status["voice_previews"] = previews
+            for model_id, model in status.get("speech_models", {}).items():
+                entries = {
+                    entry["voice_id"]: entry
+                    for entry in previews["entries"]
+                    if entry["model_id"] == model_id
+                }
+                urls = {voice_id: entry["url"] for voice_id, entry in entries.items()}
+                if urls:
+                    capabilities = model.setdefault("capabilities", {})
+                    capabilities["voice_preview_urls"] = urls
+                    capabilities["voice_preview_metadata"] = entries
             self._environment_status_cache = (time.monotonic(), status)
             return deepcopy(status)
 
@@ -1015,6 +1184,19 @@ class LocalWebApplication:
                     and all(state is ArtifactState.INSTALLED for state in states),
                     "messages": diagnosis.messages,
                     "artifact_count": len(states),
+                    "writer_model": next(
+                        (
+                            {
+                                "display_name": artifact.display_name,
+                                "artifact_id": artifact.artifact_id,
+                                "version": artifact.version,
+                                "size_bytes": artifact.size_bytes,
+                            }
+                            for artifact in artifacts
+                            if artifact.component.startswith("llm_model_")
+                        ),
+                        None,
+                    ),
                 }
             pack_report = self.list_model_packs()
             pack_statuses = {
@@ -1200,6 +1382,10 @@ class LocalWebApplication:
                         }
                         for backend, variant in QWEN_BACKEND_VARIANTS.items()
                     },
+                    **{
+                        backend: self._mlx_speech_model_status(backend, snapshot)
+                        for backend in MLX_QWEN_BACKENDS
+                    },
                 },
             }
         except (ArtifactError, OSError, ValueError) as error:
@@ -1260,6 +1446,11 @@ class LocalWebApplication:
             record = self._record(run_id)
             if record is None:
                 return None
+            if self.speech_screening.status(run_id).get("operation_status") in {
+                "queued",
+                "running",
+            }:
+                raise ValueError("Cancel the active word check before deleting this meditation.")
             with self._task_lock:
                 task = self._tasks.get(str(record.run_id))
                 if task is not None and (task.active or task.finalizing_take):
@@ -1496,12 +1687,15 @@ class LocalWebApplication:
             "run_id": str(record.run_id),
             "status": record.status.value,
             "source_kind": record.source_kind,
+            "generation_request": self.generation_request_summary(str(record.run_id)),
             "audience": audience,
             "title": record.prompt,
             "created_at": record.created_at.isoformat(),
             "updated_at": record.updated_at.isoformat(),
             "duration_seconds": duration_seconds,
             "quality_passed": quality_passed,
+            "pcm_quality_passed": quality_passed,
+            "speech_screening": self.speech_screening.status(str(record.run_id)),
             "tts_model": tts_model,
             "voice": voice,
             "has_audio": current_audio is not None,
@@ -1524,6 +1718,9 @@ class LocalWebApplication:
             "execution": (execution.model_dump(mode="json") if execution is not None else None),
             "live_metrics": live_metrics,
         }
+        if (directory / "web-client-request.json").is_file():
+            with suppress(OSError, ValueError):
+                summary.update(self.generation_requests.metadata(str(record.run_id)))
         if (
             task is not None
             and task.mode == "plan_regeneration"
@@ -1605,6 +1802,33 @@ class LocalWebApplication:
             )
         return values
 
+    def speech_screen_status(self, run_id: str) -> dict[str, Any] | None:
+        if self._record(run_id) is None:
+            return None
+        return self.speech_screening.status(run_id)
+
+    def start_speech_screen(self, run_id: str) -> dict[str, Any] | None:
+        if self._record(run_id) is None:
+            return None
+        with self._admit_generation():
+            return self.speech_screening.start(run_id)
+
+    def cancel_speech_screen(self, run_id: str, attempt_id: str) -> dict[str, Any] | None:
+        if self._record(run_id) is None:
+            return None
+        try:
+            return self.speech_screening.cancel(run_id, attempt_id)
+        except OSError as error:
+            raise ValueError("Speech-screen attempt is unavailable.") from error
+
+    def speech_screen_report(self, run_id: str, attempt_id: str) -> dict[str, Any] | None:
+        if self._record(run_id) is None:
+            return None
+        try:
+            return self.speech_screening.report(run_id, attempt_id)
+        except OSError as error:
+            raise ValueError("Speech-screen report is unavailable.") from error
+
     def _record(self, run_id: str) -> RunRecord | None:
         try:
             return RunStore(self.runs_directory).load(run_id)
@@ -1627,11 +1851,38 @@ class LocalWebApplication:
         *,
         _resume_run_id: str | None = None,
         _run_created: Callable[[UUID], None] | None = None,
+        _validated_client_payload: dict[str, Any] | None = None,
+        _request_receipt: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Validate a browser request and start it without blocking HTTP."""
 
         if not isinstance(payload, dict):
             raise ValueError("The request body must be a JSON object.")
+        if payload.get("request_id") is not None and _resume_run_id is None:
+            # Direct Python callers get the same typed identity as the public API.
+            if _validated_client_payload is None:
+                from whoopy.webui.api import GenerationRequest
+
+                _validated_client_payload = GenerationRequest.model_validate(payload).model_dump(
+                    mode="json", exclude_none=True
+                )
+            request_id = str(UUID(str(payload["request_id"])))
+            client = {
+                key: value
+                for key, value in _validated_client_payload.items()
+                if key != "request_id"
+            }
+            client["text"] = client["text"].strip()
+            with self.generation_requests.lock(request_id):
+                client_receipt = self.generation_requests.register(request_id, client)
+                if self.generation_requests.existing(client_receipt):
+                    return {
+                        **cast(dict[str, Any], self.task(request_id)),
+                        "idempotent_replay": True,
+                    }
+            return self.start_generation(
+                client, _run_created=_run_created, _request_receipt=client_receipt
+            )
         mode = payload.get("mode")
         if mode not in ("prompt", "script"):
             raise ValueError("mode must be either 'prompt' or 'script'.")
@@ -1649,11 +1900,26 @@ class LocalWebApplication:
             "moss-local-v1.5",
             "moss-v1.5",
             *QWEN_BACKEND_VARIANTS,
+            *MLX_QWEN_BACKENDS,
         ):
             raise ValueError("Choose an available local speech model.")
         surface = payload.get("surface", "studio")
         if surface not in {"studio", "lab"}:
             raise ValueError("surface must be either 'studio' or 'lab'.")
+        control_payload = payload
+        if _resume_run_id is not None and tts_model in MLX_QWEN_BACKENDS:
+            # Durable envelopes also retain inactive defaults. They are compared
+            # in full below, but are not new client-supplied voice controls.
+            control_payload = dict(payload)
+            inactive = (
+                "qwen_voice_design_preset"
+                if MLX_QWEN_BACKENDS[tts_model] == "custom_voice"
+                else "qwen_speaker"
+            )
+            control_payload.pop(inactive, None)
+        validate_mlx_controls(tts_model, control_payload)
+        if _resume_run_id is None and payload.get("speed") is not None and tts_model != "kokoro":
+            raise ValueError("Numeric speed is supported only by Kokoro; use the pace control.")
         if (
             tts_model in QWEN_BACKEND_VARIANTS
             and surface != "lab"
@@ -1853,7 +2119,7 @@ class LocalWebApplication:
         pacing_profile = (
             pacing_registry.get(pacing_profile_id) if pacing_profile_id is not None else None
         )
-        if mode == "prompt" and pacing_profile is not None:
+        if mode == "prompt" and pacing_profile is not None and "speed" not in payload:
             speed = pacing_profile.speech_speed
         self._require_speech_model_ready(tts_model, surface=surface)
         durable_audience = cast(Literal["studio", "lab"], surface)
@@ -1890,62 +2156,90 @@ class LocalWebApplication:
 
         # Allocating the UUID and record before the child begins means the UI
         # can follow this run through planning and even after a web restart.
-        with self._admit_generation(), self._task_lock:
-            store = RunStore(self.runs_directory)
-            if _resume_run_id is None:
-                record = store.create(text, audience=durable_audience)
-                run_id = str(record.run_id)
-                try:
-                    self._write_web_launch_request(run_id, normalized_launch_request)
-                except (OSError, RunStoreError, ValueError) as error:
-                    self._persist_process_failure(
-                        run_id,
-                        f"Could not save the durable browser launch request: {error}",
-                    )
-                    raise ValueError(
-                        "Could not save the durable browser launch request."
-                    ) from error
-                task = GenerationTask(
-                    task_id=run_id, run_id=run_id, mode=mode, launch_record=record
+        request_lock = (
+            self.generation_requests.lock(_request_receipt["request_id"])
+            if _request_receipt is not None
+            else nullcontext()
+        )
+        with request_lock:
+            if _request_receipt is not None:
+                self.generation_requests.register(
+                    _request_receipt["request_id"], _request_receipt["payload"]
                 )
-            else:
-                record = store.load(_resume_run_id)
-                if (
-                    record.source_kind != "fixture_prompt"
-                    or record.status not in (RunStatus.FAILED, RunStatus.INTERRUPTED)
-                    or record.recovery is None
-                ):
-                    raise ValueError(
-                        "Only an unlaunched durable browser request can use this path."
+                if self.generation_requests.existing(_request_receipt):
+                    return {
+                        **cast(dict[str, Any], self.task(_request_receipt["request_id"])),
+                        "idempotent_replay": True,
+                    }
+            with self._admit_generation(), self._task_lock:
+                store = RunStore(self.runs_directory)
+                if _resume_run_id is None:
+                    record = (
+                        self.generation_requests.create_run(
+                            _request_receipt, normalized_launch_request, audience=durable_audience
+                        )
+                        if _request_receipt is not None
+                        else store.create(text, audience=durable_audience)
                     )
-                saved = self._load_web_launch_request(_resume_run_id)
-                # Requests saved before global typed pace existed reconstruct
-                # the former product default instead of becoming unresumable.
-                saved.setdefault("pace", "slow")
-                saved.setdefault("requested_duration_seconds", None)
-                if saved != normalized_launch_request:
-                    raise ValueError("Saved browser launch settings changed and cannot be resumed.")
-                with RunLock(store.run_directory(_resume_run_id)):
-                    if store.load(_resume_run_id) != record:
-                        raise ValueError("The browser request changed before it could resume.")
-                    receipt = (record.model_dump_json(indent=2) + "\n").encode("utf-8")
-                    receipt_id = hashlib.sha256(receipt).hexdigest()
-                    history = (
-                        store.run_directory(_resume_run_id) / "history" / "web-launch-attempts"
+                    run_id = str(record.run_id)
+                    try:
+                        if _request_receipt is None:
+                            self._write_web_launch_request(run_id, normalized_launch_request)
+                    except (OSError, RunStoreError, ValueError) as error:
+                        self._persist_process_failure(
+                            run_id,
+                            f"Could not save the durable browser launch request: {error}",
+                        )
+                        raise ValueError(
+                            "Could not save the durable browser launch request."
+                        ) from error
+                    task = GenerationTask(
+                        task_id=run_id,
+                        run_id=run_id,
+                        mode=mode,
+                        launch_record=record,
+                        request_first_launch=_request_receipt is not None,
                     )
-                    history.mkdir(parents=True, exist_ok=True)
-                    receipt_path = history / f"{receipt_id}.json"
-                    if not receipt_path.exists():
-                        store._write_bytes(receipt_path, receipt)
-                    elif receipt_path.read_bytes() != receipt:
-                        raise ValueError("Browser launch attempt history is corrupt.")
-                    record = record.model_copy(update={"updated_at": datetime.now(UTC)})
-                    store.save(record)
-                run_id = _resume_run_id
-                task = GenerationTask(
-                    task_id=run_id, run_id=run_id, mode=mode, launch_record=record
-                )
-            self._tasks[run_id] = task
+                else:
+                    record = store.load(_resume_run_id)
+                    if (
+                        record.source_kind != "fixture_prompt"
+                        or record.status not in (RunStatus.FAILED, RunStatus.INTERRUPTED)
+                        or record.recovery is None
+                    ):
+                        raise ValueError(
+                            "Only an unlaunched durable browser request can use this path."
+                        )
+                    saved = self._load_web_launch_request(_resume_run_id)
+                    # Requests saved before global typed pace existed reconstruct
+                    # the former product default instead of becoming unresumable.
+                    saved.setdefault("pace", "slow")
+                    saved.setdefault("requested_duration_seconds", None)
+                    if saved != normalized_launch_request:
+                        raise ValueError(
+                            "Saved browser launch settings changed and cannot be resumed."
+                        )
+                    with RunLock(store.run_directory(_resume_run_id)):
+                        if store.load(_resume_run_id) != record:
+                            raise ValueError("The browser request changed before it could resume.")
+                        receipt = (record.model_dump_json(indent=2) + "\n").encode("utf-8")
+                        receipt_id = hashlib.sha256(receipt).hexdigest()
+                        history = (
+                            store.run_directory(_resume_run_id) / "history" / "web-launch-attempts"
+                        )
+                        history.mkdir(parents=True, exist_ok=True)
+                        receipt_path = history / f"{receipt_id}.json"
+                        if not receipt_path.exists():
+                            store._write_bytes(receipt_path, receipt)
+                        elif receipt_path.read_bytes() != receipt:
+                            raise ValueError("Browser launch attempt history is corrupt.")
+                        record = record.model_copy(update={"updated_at": datetime.now(UTC)})
+                        store.save(record)
+                    run_id = _resume_run_id
+                    task = GenerationTask(
+                        task_id=run_id, run_id=run_id, mode=mode, launch_record=record
+                    )
+                self._tasks[run_id] = task
         if _run_created is not None:
             try:
                 _run_created(record.run_id)
@@ -1991,8 +2285,36 @@ class LocalWebApplication:
             name=f"whoopy-{run_id[:8]}",
             daemon=True,
         )
-        thread.start()
-        return self._task_public(task)
+        try:
+            thread.start()
+        except RuntimeError as error:
+            if _request_receipt is None:
+                raise
+            task.launching = False
+            self._persist_process_failure(
+                run_id, "Could not start the saved browser request.", task=task
+            )
+            raise ValueError(
+                "The request was saved but its worker could not start; check this run."
+            ) from error
+        result = self._task_public(task)
+        return {**result, "idempotent_replay": False} if _request_receipt is not None else result
+
+    def cancel_generation_request(self, request_id: str) -> dict[str, Any]:
+        request_id = str(UUID(request_id))
+        with self.generation_requests.lock(request_id):
+            first = self.generation_requests.cancel(request_id)
+            admitted = (self.generation_requests.directory(request_id) / "admitted.json").is_file()
+        record = self._record(request_id)
+        # An old repeated cancellation must not cancel a later explicit Resume.
+        if first and record is not None and record.status in {RunStatus.QUEUED, RunStatus.RUNNING}:
+            with suppress(ValueError):
+                self.cancel_task(request_id)
+        return {
+            "request_id": request_id,
+            "cancelled": True,
+            "run_id": request_id if admitted or record is not None else None,
+        }
 
     def task(self, task_id: str) -> dict[str, Any] | None:
         try:
@@ -2092,6 +2414,20 @@ class LocalWebApplication:
 
     def _web_launch_request_path(self, run_id: str) -> Path:
         return self.runs_directory / str(UUID(run_id)) / WEB_LAUNCH_REQUEST_FILENAME
+
+    def generation_request_summary(self, run_id: str) -> dict[str, Any] | None:
+        """Expose admitted controls for response-loss recovery, never filesystem locations."""
+
+        try:
+            payload = self._load_web_launch_request(run_id)
+        except (OSError, ValueError):
+            return None
+        return {
+            key: value
+            for key, value in payload.items()
+            if key in PUBLIC_GENERATION_REQUEST_KEYS
+            and (value is None or isinstance(value, str | int | float | bool))
+        }
 
     def _write_web_launch_request(self, run_id: str, payload: dict[str, Any]) -> None:
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -2987,10 +3323,6 @@ class LocalWebApplication:
                 intensity,
                 "--pace",
                 pace,
-                "--moss-language",
-                moss_language,
-                "--moss-instruction",
-                moss_instruction,
                 "--config-dir",
                 str(self.config_directory),
                 "--models-dir",
@@ -3002,11 +3334,21 @@ class LocalWebApplication:
             ]
             if tts_model == "kokoro":
                 command.extend(["--voice", voice, "--speed", str(speed)])
-            if not moss_use_reference:
-                command.append("--moss-direct-voice")
+            if tts_model.startswith("moss-"):
+                command.extend(
+                    ["--moss-language", moss_language, "--moss-instruction", moss_instruction]
+                )
+                if not moss_use_reference:
+                    command.append("--moss-direct-voice")
             if voice_reference is not None:
                 command.extend(["--voice-reference", voice_reference])
-            if tts_model in QWEN_BACKEND_VARIANTS:
+            if tts_model in MLX_QWEN_BACKENDS:
+                command.extend(["--qwen-language", qwen_language])
+                if MLX_QWEN_BACKENDS[tts_model] == "custom_voice":
+                    command.extend(["--qwen-speaker", qwen_speaker])
+                else:
+                    command.extend(["--qwen-voice-design-preset", qwen_voice_design_preset])
+            elif tts_model in QWEN_BACKEND_VARIANTS:
                 command.extend(["--qwen-language", qwen_language])
                 variant = QWEN_BACKEND_VARIANTS[tts_model]
                 if variant.startswith("custom-voice"):
@@ -3054,21 +3396,43 @@ class LocalWebApplication:
                     command.extend(
                         ["--requested-duration-seconds", str(requested_duration_seconds)]
                     )
-            process = self._command_launcher(
-                command,
-                cwd=self.project_root,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                **self._process_group_options(),
+            launch_lock = (
+                self.generation_requests.lock(task.run_id)
+                if task.request_first_launch
+                else nullcontext()
             )
-            with self._task_lock:
-                task.process = process
-                task.launching = False
-                cancel_after_launch = task.cancel_requested
+            with launch_lock:
+                if task.request_first_launch and self.generation_requests.cancelled(task.run_id):
+                    task.cancel_requested = True
+                    self._persist_cancel_intent(task.run_id, task=task)
+                    return
+                process = self._command_launcher(
+                    command,
+                    cwd=self.project_root,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    **self._process_group_options(),
+                )
+                with self._task_lock:
+                    task.process = process
+                    task.launching = False
+                    cancel_after_launch = task.cancel_requested
             if cancel_after_launch:
                 self._stop_process(process)
-            stdout, stderr = process.communicate()
+            if task.request_first_launch:
+                while True:
+                    if self.generation_requests.cancelled(task.run_id):
+                        with self._task_lock:
+                            task.cancel_requested = True
+                        self._stop_process(process)
+                    try:
+                        stdout, stderr = process.communicate(timeout=0.25)
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
+            else:
+                stdout, stderr = process.communicate()
             # The CLI owns all durable transitions and errors.  Do not write a
             # competing status from the web process merely because its child
             # exited; the record remains the source of truth.
@@ -3081,7 +3445,9 @@ class LocalWebApplication:
                     task.run_id, self._friendly_process_error(stderr), task=task
                 )
             _ = stdout
-        except OSError as error:
+        except (OSError, ValueError) as error:
+            if task.request_first_launch and task.process is not None:
+                self._stop_process(task.process)
             self._persist_process_failure(
                 task.run_id, f"Could not launch generation: {error}", task=task
             )
@@ -3719,6 +4085,7 @@ def serve(
     models_directory: Path,
     runs_directory: Path,
     open_browser: bool = False,
+    static_directory: Path | None = None,
 ) -> None:
     """Serve the permanent FastAPI application on the local loopback interface."""
 
@@ -3743,7 +4110,7 @@ def serve(
         threading.Timer(0.2, webbrowser.open, args=(url,)).start()
     try:
         uvicorn.run(
-            create_api(application),
+            create_api(application, static_directory=static_directory),
             host=host,
             port=port,
             access_log=False,

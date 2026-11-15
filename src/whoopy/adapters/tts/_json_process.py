@@ -13,7 +13,22 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, TextIO, cast
+
+from whoopy.locations import runtime_worker_script
+
+
+def parent_guard_environment(helper: Path | None = None) -> dict[str, str]:
+    """Bind the actual launcher identity and verified stdlib helper to one child."""
+    helper = helper or runtime_worker_script("worker_parent_guard.py")
+    if helper.is_symlink():
+        raise OSError("Parent guard helper must not be a symlink")
+    source = helper.read_bytes()
+    namespace: dict[str, Any] = {"__file__": str(helper), "__name__": "whoopy_worker_parent_guard"}
+    exec(compile(source, str(helper), "exec"), namespace)
+    identity = cast(dict[str, str], namespace["launch_environment"]())
+    return {**os.environ, **identity}
 
 
 class WorkerProcessError(RuntimeError):
@@ -208,6 +223,7 @@ class JsonLineProcessController:
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
+                env=parent_guard_environment(),
                 start_new_session=start_new_session,
                 creationflags=creationflags,
             )

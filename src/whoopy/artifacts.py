@@ -26,6 +26,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 import yaml
+from packaging.tags import Tag, sys_tags
+from packaging.utils import InvalidWheelFilename, parse_wheel_filename
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 
@@ -101,6 +103,35 @@ class ArtifactSpec(BaseModel):
         return (
             "all" in self.operating_systems or target.operating_system in self.operating_systems
         ) and ("all" in self.architectures or target.architecture in self.architectures)
+
+
+def require_compatible_python_wheels(
+    artifacts: Iterable[ArtifactSpec],
+    *,
+    supported_tags: Iterable[Tag] | None = None,
+    interpreter: str | None = None,
+) -> None:
+    """Reject incompatible native wheels before extraction, including cached trees."""
+
+    supported = set(sys_tags() if supported_tags is None else supported_tags)
+    description = interpreter or (
+        f"Python {platform.python_version()} on {platform.system()} {platform.machine()}"
+    )
+    for artifact in artifacts:
+        if artifact.kind != "python_wheel":
+            continue
+        try:
+            _, _, _, tags = parse_wheel_filename(artifact.filename)
+        except InvalidWheelFilename as error:
+            raise ArtifactError(
+                f"Invalid locked Python wheel filename: {artifact.filename}"
+            ) from error
+        if tags.isdisjoint(supported):
+            raise ArtifactError(
+                f"Locked wheel {artifact.filename} is incompatible with {description}. "
+                "Use an interpreter matching the pinned wheel ABI, or install a reviewed "
+                "artifact lock with compatible wheels."
+            )
 
 
 class ArtifactProfile(BaseModel):
@@ -488,6 +519,7 @@ class ArtifactStore:
         wheels = list(artifacts)
         if not wheels or any(artifact.kind != "python_wheel" for artifact in wheels):
             raise ArtifactError("A Python environment requires one or more wheel artifacts.")
+        require_compatible_python_wheels(wheels)
         expected = {
             artifact.artifact_id: artifact.sha256
             for artifact in sorted(wheels, key=lambda item: item.artifact_id)

@@ -45,6 +45,7 @@ from whoopy.adapters.tts.mlx_qwen3_tts import (
     MlxQwenAdapter,
     MlxQwenSettings,
     adapter_source_sha256,
+    parent_guard_source_sha256,
     source_sha256,
 )
 from whoopy.artifacts import (
@@ -707,6 +708,11 @@ def _mlx_adapter_from_durable(
     raw_output_directory: Path,
 ) -> MlxQwenAdapter:
     """Fail closed if an explicitly experimental run's installed bytes changed."""
+    if durable.experimental_parent_guard_sha256 is None:
+        raise GenerationError(
+            "Experimental MLX run predates parent-guard attestation; start a new run "
+            "or use the original frozen source. Its saved provenance was not rewritten."
+        )
     models_root = models_root_from_artifact_store(models_dir)
     installation = resolve_mlx_qwen_installation(
         models_root, durable.backend, manifest_path=config_dir / "experimental_tts.yaml"
@@ -717,6 +723,7 @@ def _mlx_adapter_from_durable(
         installation.model_revision,
         installation.runtime_revision,
         source_sha256(worker),
+        parent_guard_source_sha256(worker),
         adapter_source_sha256(),
     )
     expected = (
@@ -724,6 +731,7 @@ def _mlx_adapter_from_durable(
         durable.experimental_model_revision,
         durable.experimental_runtime_revision,
         durable.experimental_worker_sha256,
+        durable.experimental_parent_guard_sha256,
         durable.experimental_adapter_sha256,
     )
     if actual != expected:
@@ -1124,6 +1132,16 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Local-first, timeline-driven meditation generation.",
     )
     subcommands = parser.add_subparsers(dest="command")
+    screen_parser = subcommands.add_parser(
+        "speech-screen",
+        help="Start an optional independent local word check for finished narration.",
+    )
+    screen_parser.add_argument("run_id")
+    screen_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    screen_parser.add_argument("--models-dir", type=Path, default=Path("models/managed"))
+    screen_parser.add_argument(
+        "--status", action="store_true", help="Read status without inference."
+    )
 
     config_parser = subcommands.add_parser("config", help="Inspect Whoopy configuration.")
     config_commands = config_parser.add_subparsers(dest="config_command")
@@ -1863,6 +1881,11 @@ def _build_parser() -> argparse.ArgumentParser:
             default=Path("runs"),
             help="Directory containing durable generation runs.",
         )
+        local_app_parser.add_argument(
+            "--static-directory",
+            type=Path,
+            help="Serve an explicitly built local Studio bundle instead of the packaged interface.",
+        )
 
     return parser
 
@@ -1885,6 +1908,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "speech-screen":
+        from whoopy.evaluation.speech_screening import SpeechScreening
+
+        try:
+            screening = SpeechScreening(
+                args.runs_dir, models_root_from_artifact_store(args.models_dir)
+            )
+            screen_result = (
+                screening.status(args.run_id) if args.status else screening.start(args.run_id)
+            )
+        except (OSError, ValueError, RunStoreError) as error:
+            parser.error(str(error))
+        print(json.dumps(screen_result, indent=2, allow_nan=False))
+        return 0
 
     if args.command == "config" and args.config_command == "show":
         try:
@@ -2424,10 +2462,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 else None
             )
             speed = (
-                pacing_profile.speech_speed
-                if prompt_mode and use_pacing_profile
-                else args.speed
+                args.speed
                 if args.speed is not None
+                else pacing_profile.speech_speed
+                if prompt_mode and use_pacing_profile
                 else settings.tts.speed
             )
             if not 0.5 <= speed <= 1.2:
@@ -2619,6 +2657,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     experimental_model_revision=mlx_installation.model_revision,
                     experimental_runtime_revision=mlx_installation.runtime_revision,
                     experimental_worker_sha256=source_sha256(worker_script),
+                    experimental_parent_guard_sha256=parent_guard_source_sha256(worker_script),
                     experimental_adapter_sha256=adapter_source_sha256(),
                     experimental_classification="experimental_local",
                     experimental_managed_ready=False,
@@ -3357,6 +3396,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             models_directory=args.models_dir,
             runs_directory=args.runs_dir,
             open_browser=args.open,
+            static_directory=args.static_directory,
         )
         return 0
 

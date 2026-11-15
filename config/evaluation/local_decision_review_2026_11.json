@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "ground-contact-3m",
+      "prompt": "I am seated after an overstimulating workday. Guide a three-minute grounding practice using the contact of my feet with the floor and my body with the chair. Let ordinary sounds remain in the background. Develop one simple contact practice with time to try it, offer permission to adjust my position, and finish with a gentle return to the rest of my day. Do not promise a particular feeling.",
+      "minutes": 3.0,
+      "meditation_kind": "grounding",
+      "seed": 42,
+      "pace": "slow",
+      "speed": 0.8
+    },
+    {
+      "id": "natural-breath-3m",
+      "prompt": "Guide a three-minute seated breath-awareness practice. Invite me to notice the natural breath without changing its depth, rhythm, or speed. Give me time to explore one ordinary sensation of breathing and gently return when attention wanders. If attending to breath is uncomfortable, offer contact with the chair or floor instead. Do not use counting, breath holds, or controlled breathing. Finish ready to continue my day without promising a particular feeling.",
+      "minutes": 3.0,
+      "meditation_kind": "breath_awareness",
+      "seed": 42,
+      "pace": "slow",
+      "speed": 0.8
+    },
+    {
+      "id": "sleep-3m",
+      "prompt": "I am lying in bed at the end of a busy day. Guide a three-minute gentle sleep meditation with awareness of the support beneath my body and permission to stop following the words. Keep the practice simple, leave quiet space, and taper the ending toward rest. Do not ask me to sit up, open my eyes, return to my day, or deliberately control my breathing. Do not promise that I will fall asleep.",
+      "minutes": 3.0,
+      "meditation_kind": "sleep",
+      "seed": 42,
+      "pace": "slow",
+      "speed": 0.8
+    },
+    {
+      "id": "panic-education-3m",
+      "prompt": "For general education, guide a three-minute seated grounding practice someone could try when noticing panic-like sensations. Use contact with the chair and floor and ordinary sights or sounds, with the option to keep eyes open or stop. Explain briefly that attention may wander and that no particular sensation or outcome is required. Do not diagnose, offer treatment, make clinical claims, promise safety or symptom relief, or prescribe breath control. End with permission to choose a comfortable next step.",
+      "minutes": 3.0,
+      "meditation_kind": "grounding",
+      "seed": 42,
+      "pace": "slow",
+      "speed": 0.8
+    }
+  ],
+  "default_cases": [
+    "ground-contact-3m",
+    "natural-breath-3m",
+    "sleep-3m",
+    "panic-education-3m"
+  ],
+  "default_profiles": [
+    "high"
+  ],
+  "default_methods": [
+    "plan_first",
+    "recipe_whole_session"
+  ],
+  "default_voices": [
+    "am_michael"
+  ],
+  "timeout_seconds": 1800.0,
+  "total_seconds": 18000,
+  "max_cases": 8
+}

@@ -258,6 +258,11 @@ def verify_audio(
         failures.append("Independent ASR result lacks a transcript.")
     else:
         comparison = compare_transcripts(expected, asr_result["text"])
+        if asr_result.get("metric_warnings"):
+            reviews.append(
+                "Independent ASR has nonfinite optional confidence metrics requiring review: "
+                f"{asr_result['metric_warnings']}"
+            )
         if not comparison["observed_word_count"]:
             failures.append("Independent ASR recognized no words.")
         if comparison["word_error_rate"] > 0.35 or comparison["ordered_word_coverage"] < 0.65:

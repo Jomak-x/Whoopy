@@ -79,6 +79,13 @@ def adapter_source_sha256() -> str:
     return source_sha256(Path(__file__))
 
 
+def parent_guard_source_sha256(worker: Path) -> str:
+    helper = worker.with_name("worker_parent_guard.py")
+    if helper.is_symlink() or not helper.is_file():
+        raise FatalSynthesisError("Experimental MLX parent guard helper is missing or symlinked")
+    return source_sha256(helper)
+
+
 @dataclass(frozen=True)
 class MlxQwenSettings:
     installation: MlxQwenInstallation
@@ -124,6 +131,7 @@ class MlxQwenAdapter:
         self._bytecode: tempfile.TemporaryDirectory[str] | None = None
         self._diagnostics = BoundedDiagnostics()
         self._slot = HeavyweightModelSlot(settings.models_root, install.backend)
+        self._parent_guard_sha256 = parent_guard_source_sha256(settings.worker_script)
         self.last_evidence: dict[str, Any] | None = None
         self.capabilities = self.capabilities_for_mode(
             "preset" if install.task == "custom_voice" else "designed"
@@ -140,6 +148,7 @@ class MlxQwenAdapter:
                 "managed_ready=false",
                 f"installation_sha256={install.installation_sha256}",
                 f"worker_sha256={source_sha256(settings.worker_script)}",
+                f"parent_guard_sha256={self._parent_guard_sha256}",
                 f"adapter_sha256={adapter_source_sha256()}",
                 f"voice={settings.voice}",
                 f"language={settings.language}",
@@ -192,6 +201,8 @@ class MlxQwenAdapter:
         if self._controller is not None and self._controller.running:
             return self._controller
         self.close()
+        if parent_guard_source_sha256(self.settings.worker_script) != self._parent_guard_sha256:
+            raise FatalSynthesisError("Experimental MLX parent guard helper changed before launch")
         self._bytecode = tempfile.TemporaryDirectory(prefix="whoopy-mlx-bytecode-")
         raw_output = self.settings.raw_output_directory.absolute()
         raw_output.mkdir(parents=True, exist_ok=True)

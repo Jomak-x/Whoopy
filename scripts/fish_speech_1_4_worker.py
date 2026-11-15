@@ -1,4 +1,4 @@
-# mypy: disable_error_code = import-not-found
+# mypy: disable_error_code = "import-not-found, import-untyped"
 """Persistent JSON-lines bridge for the optional local Fish Speech 1.4 runtime.
 
 This script runs inside Fish's isolated Python 3.10 environment. Whoopy keeps
@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
+import os
 import sys
 from pathlib import Path
+from typing import Any
 
 
 def _arguments() -> argparse.Namespace:
@@ -30,7 +33,7 @@ def _reply(payload: dict[str, object]) -> None:
     sys.stdout.flush()
 
 
-def main() -> int:
+def _run_worker() -> int:
     args = _arguments()
     runtime = args.runtime.resolve()
     sys.path.insert(0, str(runtime))
@@ -148,6 +151,25 @@ def main() -> int:
                 }
             )
     return 0
+
+
+def main() -> int:
+    # Isolated runtimes do not import the application package, and -I excludes
+    # ordinary sibling imports. Execute only these verified local helper bytes.
+    helper = Path(__file__).with_name("worker_parent_guard.py")
+    if helper.is_symlink():
+        raise RuntimeError("Parent guard helper must not be a symlink")
+    source = helper.read_bytes()
+    expected = os.environ.get("WHOOPY_PARENT_GUARD_SHA256")
+    if expected is not None and hashlib.sha256(source).hexdigest() != expected:
+        raise RuntimeError("Parent guard helper hash changed before worker launch")
+    namespace: dict[str, Any] = {"__file__": str(helper), "__name__": "whoopy_worker_parent_guard"}
+    exec(compile(source, str(helper), "exec"), namespace)
+    guard = namespace["start_parent_watch"]()
+    try:
+        return _run_worker()
+    finally:
+        guard.close()
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ from whoopy.meditation.models import (
     DraftedSection,
     MeditationKind,
     MeditationPlan,
+    MeditationTechnique,
     PlannedSection,
     RawGenerationAttempt,
     SectionId,
@@ -82,16 +83,22 @@ def _public_validation_error(error: ValueError | TypeError) -> str:
 MARKDOWN_EMPHASIS = re.compile(r"(?P<marker>\*{1,3}|_{1,3})(?=\S).+?(?<=\S)(?P=marker)")
 
 BREATH = re.compile(r"\b(?:breath\w*|inhale|exhale|inhalation|exhalation)\b", re.I)
+SOUND_ATTENTION = re.compile(r"\b(?:sounds?|hear(?:ing)?|listen(?:ing)?)\b", re.I)
+BODY_SCAN_INSTRUCTION = re.compile(
+    r"\bbody[ -]scan(?:s|ning)?\b|\bscan(?:ning)?\s+(?:(?:your|the)\s+)?body\b|"
+    r"\b(?:head|forehead)\b.{0,65}\b(?:shoulders?|chest)\b.{0,65}\b(?:feet|toes)\b",
+    re.I,
+)
+IMAGERY_INSTRUCTION = re.compile(
+    r"\b(?:imagine|visuali[sz]e|picture)\s+(?:(?:yourself|a|an|the|that)\s+)|"
+    r"\bin your mind['\u2019]s eye\b",
+    re.I,
+)
 HOLD = re.compile(r"\bhold(?:ing)?\b.{0,20}\b(?:breath|inhale|exhale|count|second)\w*\b", re.I)
 TIMED_BREATH = re.compile(
     r"\b(?:inhale|exhale|breathe in|breathe out)\b.{0,35}"
     r"\b(?:one|two|three|four|five|six|\d+)\b|"
     r"\b(?:count|counting)\b.{0,25}\b(?:breath|inhale|exhale)\w*\b",
-    re.I,
-)
-SAFETY_ASSURANCE = re.compile(
-    r"\b(?:you are|you're|you\u2019re|you will be) "
-    r"(?:always |completely |perfectly |entirely )?safe\b|\bnothing can harm you\b",
     re.I,
 )
 PERSISTENCE = re.compile(
@@ -129,16 +136,46 @@ NEGATED_WAKING = re.compile(
 RETURN_SOUND_REFERENCE = (
     r"(?:(?:surrounding|nearby|external|environmental|ambient)\s+sounds?|"
     r"sounds?\s+(?:around you|(?:in|from|outside|of)\s+"
-    r"(?:(?:the|your)\s+)?(?:room|surroundings|environment)))\b"
+    r"(?:(?:the|your)\s+)?(?:room|surroundings|environment))|"
+    r"sounds|sound(?=\s*(?:[.!?,;]|$)|\s+(?:and|or|as|again|now|here|of|if)\b))\b"
+)
+DIRECTIONAL_SOUND_ATTENTION = (
+    r"(?:turn(?:ing)?|bring(?:ing)?|direct(?:ing)?|shift(?:ing)?|return(?:ing)?)\s+"
+    r"(?:(?:again|back|gently)\s+)?(?:(?:your|the)\s+)?"
+    r"(?:attention|awareness|focus)\s+(?:(?:again|back|gently)\s+)?(?:to|towards?|on)|"
+    r"(?:turn(?:ing)?|return(?:ing)?)\s+(?:(?:again|back|gently)\s+)?(?:to|towards?)"
 )
 RETURN_SOUND = re.compile(
-    r"\b(?:hear(?:ing)?|listen(?:ing)?|notice|noticing|check in with|"
-    r"attend to|return to|become aware of)"
-    r"(?:,\s*if you (?:wish|like|want),)?\s+(?:to\s+)?"
-    r"(?:(?:the|a|an|some|any|ordinary|familiar|quiet)\s+)*"
+    r"\b(?:(?:begin(?:ning)?|start(?:ing)?)\s+by\s+)?"
+    rf"(?:{DIRECTIONAL_SOUND_ATTENTION}|hear(?:ing)?|listen(?:ing)?|notice|noticing|"
+    r"check in with|attend to|(?:be|become|remain) aware of)"
+    r"(?:,\s*if you (?:wish|like|want),)?\s+"
+    r"(?:(?:again|gently|briefly|carefully|closely)\s+)*(?:to\s+)?"
+    r"(?:(?:the|a|an|some|any|what|whatever|ordinary|familiar|quiet)\s+)*"
     rf"{RETURN_SOUND_REFERENCE}|"
     r"\b(?:hear(?:ing)?|listen(?:ing)?)\s+(?:to\s+)?(?:the\s+)?"
     r"(?:room|surroundings|around you)\b",
+    re.I,
+)
+NON_ACTUAL_SOUND_FRAME = re.compile(
+    r"\b(?:imagin\w*|visuali[sz]\w*|pictur\w*|recall\w*|recollect\w*|"
+    r"remember(?:ing)?(?!\s+to\b)|list(?:ing)?|think(?:ing)?\s+about)\b",
+    re.I,
+)
+NON_EXTERNAL_SOUND_REFERENCE = re.compile(
+    r"^\s+(?:(?:that|which)\s+)?(?:you\s+)?"
+    r"(?:imagine|remember|recall|visuali[sz]e)\b|"
+    r"^\s+(?:(?:that|which)\s+)?are\s+(?:only\s+)?"
+    r"(?:imagined|remembered|recalled|internal)\b|"
+    r"^\s+(?:(?:that|which)\s+)?are\s+(?:present\s+)?(?:only\s+)?"
+    r"in\s+(?:(?:your|the|a|an)\s+)?(?:memor\w*|mind|imagin\w*|dream|story)\b|"
+    r"^\s+(?:in|from|of)\s+(?:(?:your|a|an|the)\s+)?"
+    r"(?:memor\w*|mind|imagin\w*|remembered|scene|story|dream)\b|"
+    r"^\s+of\s+(?:(?:your|our|the|each|every|a|an|one|two|three|four|five|six|"
+    r"seven|eight|nine|ten|both|several|some|many|few|all|any|own|next|single|individual|\d+)\s+)*"
+    r"(?:of\s+(?:your|our|the)\s+)?"
+    r"(?:(?:natural|ordinary|deep|soft|quiet|slow|steady|rhythmic)\s+)?"
+    r"(?:breath\w*|inhal\w*|exhal\w*|heart(?:beat)?s?|pulse)\b",
     re.I,
 )
 RETURN_MOVEMENT = re.compile(
@@ -202,6 +239,20 @@ def _has_waking_instruction(text: str) -> bool:
 
 def _has_positive_return_cue(text: str, cue: re.Pattern[str]) -> bool:
     positive = NEGATED_RETURN.sub(lambda match: " " * len(match.group()), text)
+    if cue is RETURN_SOUND:
+        for match in cue.finditer(positive):
+            # Perceiving "sounds" is already concrete. An adjective such as
+            # "surrounding" is not required, but recalled/imagined/listed sounds
+            # do not establish present sensory orientation.
+            prefix = re.split(
+                r"[.!?;\n]|\b(?:but|however|instead)\b", positive[: match.start()], flags=re.I
+            )[-1]
+            if NON_ACTUAL_SOUND_FRAME.search(prefix):
+                continue
+            if NON_EXTERNAL_SOUND_REFERENCE.search(positive[match.end() :]):
+                continue
+            return True
+        return False
     return cue.search(positive) is not None
 
 
@@ -233,6 +284,14 @@ def _prepared_for_quiet(section_id: str, kind: MeditationKind, text: str) -> boo
         section_id == "practice" and kind == "reflection"
     )
     if CONTINUE_CUE.search(sentences[-1]) or (is_reflection and "?" in sentences[-1]):
+        return True
+    if kind == "visualization" and IMAGERY_INSTRUCTION.search(sentences[-1]):
+        return True
+    if kind in {"loving_kindness", "self_compassion"} and re.search(
+        r"\b(?:repeat|offer|say)\b.{0,45}\b(?:words?|phrase|wish|kindness)\b",
+        sentences[-1],
+        re.I,
+    ):
         return True
     if section_id == "comfort":
         # Supported posture plus permission to adjust is a complete embodied
@@ -343,10 +402,13 @@ def _allocate_whole_quiets(
                     + ". End them with a concrete invitation to continue the familiar practice. "
                 )
         else:
-            allowed_words = math.floor((sum(durations) - minimum) * words_per_minute / 60_000)
+            allowed_words = min(
+                math.floor((sum(durations) - minimum) * words_per_minute / 60_000),
+                sum(slot.maximum_words for section_slots in slots for slot in section_slots),
+            )
             direction = (
                 f"Too much spoken guidance: {actual_words} words. At most {allowed_words} "
-                f"spoken words fit the minimum quiet (about "
+                f"spoken words fit both timing and paragraph caps (about "
                 f"{max(0, actual_words - allowed_words)} fewer words). "
                 "Shorten the complete session while preserving the practice arc and "
                 "required content. "
@@ -452,8 +514,12 @@ def _validate_session(
                 errors.append(
                     f"{label}: use the selected {session.anchor} anchor without breath guidance"
                 )
-            if SAFETY_ASSURANCE.search(text):
-                errors.append(f"{label}: do not assert the listener is safe")
+            if "sound" in session.excluded_anchors and SOUND_ATTENTION.search(text):
+                errors.append(f"{label}: sound attention is excluded; use a permitted cue")
+            if session.body_scan_excluded and BODY_SCAN_INSTRUCTION.search(text):
+                errors.append(f"{label}: body scanning is excluded; stay with the selected anchor")
+            if session.imagery_excluded and IMAGERY_INSTRUCTION.search(text):
+                errors.append(f"{label}: imagery is excluded; use actual experience")
             if PERSISTENCE.search(text):
                 errors.append(f"{label}: never require persistence through discomfort")
             if HOLD.search(text) or TIMED_BREATH.search(text):
@@ -486,9 +552,11 @@ def _validate_session(
     ):
         errors.append("comfort: offer permission to adjust or move")
     orientation = " ".join(draft.sections[1].paragraphs)
-    if not _has_positive_return_cue(orientation, RETURN_SOUND):
+    if "sound" not in session.excluded_anchors and not _has_positive_return_cue(
+        orientation, RETURN_SOUND
+    ):
         errors.append("orientation: establish surrounding sound before inward practice")
-    if not re.search(
+    if "contact" not in session.excluded_anchors and not re.search(
         r"\b(?:support|contact|weight|surface|seat|chair|bed|floor|mattress)\b|"
         r"\b(?:body|hands?|feet|back|legs?|arms?)\s+touch(?:es|ing)?\b",
         orientation,
@@ -502,10 +570,22 @@ def _validate_session(
         if not re.search(r"\b(?:rest\w*|sleep\w*|quiet\w*)\b", ending, re.I):
             errors.append("taper: permit quiet rest without a new task")
     else:
-        if not _has_positive_return_cue(ending, RETURN_SOUND) or not _has_positive_return_cue(
-            ending, RETURN_MOVEMENT
-        ):
-            errors.append("return: include surrounding sound and an optional small movement")
+        missing_sound = "sound" not in session.excluded_anchors and not _has_positive_return_cue(
+            ending, RETURN_SOUND
+        )
+        missing_movement = not _has_positive_return_cue(ending, RETURN_MOVEMENT)
+        if missing_sound or missing_movement:
+            errors.append(
+                "return: include surrounding sound and an optional small movement"
+                if "sound" not in session.excluded_anchors
+                else "return: include an optional small movement"
+            )
+            if missing_movement:
+                errors.append(
+                    "return: offer a positive optional movement of a named small body part "
+                    "(such as fingers or toes); "
+                    "a generic instruction to move gently is not concrete enough"
+                )
         if re.search(
             r"\b(?:fall asleep|go to sleep|drift off|"
             r"(?:drift|fall) (?:back )?(?:to |into )sleep)\b",
@@ -532,7 +612,7 @@ def _make_plan(
                 id=beat.id,
                 title=beat.id.replace("-", " ").title(),
                 purpose=beat.purpose,
-                technique=beat.technique,
+                technique=_practice_technique(session) if beat.id == "practice" else beat.technique,
                 beat="arrival"
                 if index == 0
                 else ("ending" if index == len(slots) - 1 else "practice"),
@@ -564,17 +644,69 @@ def _make_plan(
     )
 
 
+def _practice_technique(session: RoutedSession) -> MeditationTechnique:
+    techniques: dict[MeditationKind, MeditationTechnique] = {
+        "body_scan": "body_scan",
+        "noting": "noting",
+        "reflection": "reflection",
+        "loving_kindness": "loving_kindness",
+        "self_compassion": "loving_kindness",
+        "visualization": "visualization",
+        "open_awareness": "resting_awareness",
+    }
+    if session.kind == "sleep":
+        return "focused_attention" if session.body_scan_excluded else "body_scan"
+    return techniques.get(session.kind, "focused_attention")
+
+
+def _orientation_content(session: RoutedSession) -> list[str]:
+    cues = []
+    if "sound" not in session.excluded_anchors:
+        cues.append("Actual surrounding sound")
+    if "contact" not in session.excluded_anchors:
+        cues.append("A concrete point of bodily contact")
+    return cues or ["Optional visual orientation to actual surroundings, without imagined detail"]
+
+
+def _practice_progression(session: RoutedSession) -> str:
+    progressions = {
+        "body_scan": "Move through body areas in one ordered sequence; do not alternate anchors.",
+        "noting": "Notice distraction, optionally label it thinking, then return without analysis.",
+        "reflection": "Ask once, allow an unanswered response, then release the event.",
+        "self_compassion": (
+            "Acknowledge difficulty, offer optional kindness, then let the words rest."
+        ),
+        "loving_kindness": (
+            "Introduce optional well-wishes, then repeat without demanding a feeling."
+        ),
+        "visualization": (
+            "Settle with the anchor, then let one explicitly imagined scene be the practice; "
+            "do not divide attention between scene and anchor. Release the scene before ending."
+        ),
+        "open_awareness": (
+            "Settle with the anchor, then broaden to permitted experiences without pursuing them; "
+            "return to the anchor only as an optional support."
+        ),
+    }
+    return progressions.get(
+        session.kind, "Explain the selected practice, allow an attempt, then use fewer reminders."
+    )
+
+
 def _required_content(section_id: str, session: RoutedSession) -> list[str]:
+    continuity = f"Continuity with the earlier {session.anchor} anchor"
+    if session.kind in {"visualization", "open_awareness", "body_scan"}:
+        continuity = _practice_progression(session)
     requirements = {
         "comfort": [f"Supported {session.posture} posture", "Permission to adjust or move"],
-        "orientation": ["Actual surrounding sound", "A concrete point of bodily contact"],
+        "orientation": _orientation_content(session),
         "arrival": [f"Ordinary experience of the {session.anchor} anchor", "No forced change"],
         "anchor": [f"One {session.anchor} anchor", "Wandering and a simple return to that anchor"],
         "body": [
             "A clear ordered sequence of body areas",
             "Neutral sensation without forcing change",
         ],
-        "practice": [session.main_practice, f"Continuity with the earlier {session.anchor} anchor"],
+        "practice": [session.main_practice, continuity],
         "reflection": ["One bounded ordinary moment from the day", "Exactly one genuine question"],
         "response": ["Space for the listener's own response", "No new question or supplied answer"],
         "release": ["Release the earlier reflection", f"Return to familiar {session.anchor}"],
@@ -584,8 +716,10 @@ def _required_content(section_id: str, session: RoutedSession) -> list[str]:
         ],
         "taper": ["Progressively fewer demands", "Quiet rest with no waking reorientation"],
         "return": [
-            "Actual surrounding sounds",
-            "An optional small movement before the day resumes",
+            *_orientation_content(session),
+            "An optional movement of a named small body part, such as fingers or toes",
+            "A brief check-in allowing change or no change without supplying the outcome",
+            "One concrete cue to use the familiar practice as the next ordinary activity begins",
         ],
     }
     return requirements[section_id]
@@ -756,6 +890,17 @@ def generate_whole_session(
         "posture": session.posture,
         "ending": session.recipe.ending,
         "anchor": session.anchor,
+        "excluded_anchors": session.excluded_anchors,
+        "body_scan": "excluded" if session.body_scan_excluded else "permitted when selected",
+        "imagery": (
+            "excluded"
+            if session.imagery_excluded
+            else "one optional original imagined scene"
+            if session.kind == "visualization"
+            else "not selected; use actual experience"
+        ),
+        "practice_kind": session.kind,
+        "practice_progression": _practice_progression(session),
         "breath_focus": (
             "excluded"
             if session.breath_excluded

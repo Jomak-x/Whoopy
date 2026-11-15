@@ -323,6 +323,10 @@ def test_rejects_non_native_or_invalid_waveforms(
     )
     assert metadata["returned_outputs"] == evidence["returned_outputs"]
     assert metadata["request"] == payload
+    assert [item["phase"] for item in metadata["memory_measurements"]["snapshots"]] == [
+        "before_generation",
+        "after_generation_and_decode",
+    ]
     assert metadata["stop_evidence"][0]["generated_codec_steps"] == 3
     assert sidecar.stat().st_mode & 0o222 == 0
     original_sidecar = sidecar.read_bytes()
@@ -454,6 +458,15 @@ def test_json_loop_reports_bad_requests_and_closes_without_runtime_inference(
     }.items():
         monkeypatch.setitem(sys.modules, name, value)
     globals_ = worker["main"].__globals__
+    observed_startup: list[list[dict[str, Any]]] = []
+    original_synthesize = worker["_synthesize"]
+
+    def observed_synthesis(request: Any, **kwargs: Any) -> Any:
+        observed_startup.append(kwargs["startup_memory_snapshots"])
+        assert kwargs["psutil"] is psutil
+        return original_synthesize(request, **kwargs)
+
+    monkeypatch.setitem(globals_, "_synthesize", observed_synthesis)
     monkeypatch.setitem(
         globals_,
         "_arguments",
@@ -479,6 +492,9 @@ def test_json_loop_reports_bad_requests_and_closes_without_runtime_inference(
     assert replies[3]["request_id"] == "bad"
     assert replies[4] == {"status": "closing", "request_id": "done"}
     assert limits == [24 * 1024**3]
+    assert len(observed_startup) == 1
+    assert [item["phase"] for item in observed_startup[0]] == ["before_load", "after_load"]
+    assert all(item["system_available_bytes"] == 32 * 1024**3 for item in observed_startup[0])
 
 
 def test_generation_without_chunks_fails_closed(
@@ -577,3 +593,154 @@ def test_host_guard_rejects_unsupported_platforms_before_runtime_imports(
 
 def test_host_guard_accepts_darwin_arm64(worker: dict[str, Any]) -> None:
     assert worker["_require_supported_host"]("darwin", "arm64") is None
+
+
+def test_memory_snapshot_keeps_allocator_and_system_counters_distinct(
+    worker: dict[str, Any],
+) -> None:
+    mx = SimpleNamespace(
+        get_active_memory=lambda: 101,
+        get_cache_memory=lambda: 0,
+        get_peak_memory=lambda: 303,
+    )
+    psutil = SimpleNamespace(
+        virtual_memory=lambda: SimpleNamespace(available=404),
+        swap_memory=lambda: SimpleNamespace(used=505),
+    )
+    snapshot = worker["_memory_snapshot"]("after_load", mx=mx, psutil=psutil)
+    assert snapshot == {
+        "phase": "after_load",
+        "mlx_allocator_active_bytes": 101,
+        "mlx_allocator_cache_bytes": 0,
+        "mlx_allocator_cumulative_peak_bytes": 303,
+        "system_available_bytes": 404,
+        "system_swap_used_bytes": 505,
+        "unavailable_reasons": {},
+    }
+    report = worker["_memory_report"]([snapshot])
+    assert "not process RSS" in report["mlx_counter_scope"]
+    assert "not reset" in report["peak_scope"]
+    assert report["separate_code_generation_measurement"]["available"] is False
+    assert "decoded audio" in report["separate_code_generation_measurement"]["reason"]
+    json.dumps(report, allow_nan=False)
+
+
+@pytest.mark.parametrize("value", [None, True, -1, 1.5, float("nan"), float("inf"), "12"])
+def test_invalid_or_missing_optional_memory_metrics_are_json_safe_unavailable(
+    worker: dict[str, Any], value: Any
+) -> None:
+    def unavailable() -> Any:
+        raise RuntimeError("counter unsupported")
+
+    mx = SimpleNamespace(get_active_memory=lambda: value, get_peak_memory=unavailable)
+    psutil = SimpleNamespace(virtual_memory=lambda: SimpleNamespace(available=99))
+    snapshot = worker["_memory_snapshot"]("before_generation", mx=mx, psutil=psutil)
+    assert snapshot["mlx_allocator_active_bytes"] is None
+    assert snapshot["mlx_allocator_cache_bytes"] is None
+    assert snapshot["mlx_allocator_cumulative_peak_bytes"] is None
+    assert snapshot["system_swap_used_bytes"] is None
+    assert snapshot["system_available_bytes"] == 99
+    assert set(snapshot["unavailable_reasons"]) == {
+        "mlx_allocator_active_bytes",
+        "mlx_allocator_cache_bytes",
+        "mlx_allocator_cumulative_peak_bytes",
+        "system_swap_used_bytes",
+    }
+    assert all(snapshot["unavailable_reasons"].values())
+    assert (
+        "counter unsupported"
+        in snapshot["unavailable_reasons"]["mlx_allocator_cumulative_peak_bytes"]
+    )
+    json.dumps(snapshot, allow_nan=False)
+
+
+@pytest.mark.parametrize("eos", [True, False])
+def test_memory_observations_are_bound_to_new_native_attempt_without_audio_changes(
+    worker: dict[str, Any], payload: dict[str, Any], tmp_path: Path, eos: bool
+) -> None:
+    peaks = iter([10, 20, 30, 40])
+    evaluations: list[Audio] = []
+
+    class ObservedMLX(FakeMLX):
+        def get_active_memory(self) -> int:
+            return 12
+
+        def get_cache_memory(self) -> int:
+            return 3
+
+        def get_peak_memory(self) -> int:
+            return next(peaks)
+
+        def eval(self, _audio: Audio) -> None:
+            evaluations.append(_audio)
+
+    mx, sf = ObservedMLX(), FakeSF()
+    psutil = SimpleNamespace(
+        virtual_memory=lambda: SimpleNamespace(available=20 * 1024**3),
+        swap_memory=lambda: SimpleNamespace(used=7 * 1024**3),
+    )
+    startup = [
+        worker["_memory_snapshot"](phase, mx=mx, psutil=psutil)
+        for phase in ("before_load", "after_load")
+    ]
+    model = FakeModel(eos=eos)
+
+    def generate() -> Any:
+        return worker["_synthesize"](
+            payload,
+            task=payload["task"],
+            model=model,
+            model_path=Path("/local/pinned/checkpoint"),
+            raw_dir=tmp_path,
+            mx=mx,
+            np=FakeNP,
+            sf=sf,
+            psutil=psutil,
+            startup_memory_snapshots=startup,
+        )
+
+    if eos:
+        response = generate()
+        evidence = response["raw_evidence"]
+        assert struct.unpack("<hhh", base64.b64decode(response["pcm_s16le"])) == (
+            32767,
+            4096,
+            -32767,
+        )
+    else:
+        with pytest.raises(worker["NativeOutputError"], match="EOS") as error:
+            generate()
+        evidence = error.value.evidence
+    sidecar = Path(evidence["sidecar_path"])
+    metadata = json.loads(sidecar.read_text())
+    snapshots = metadata["memory_measurements"]["snapshots"]
+    assert [item["phase"] for item in snapshots] == [
+        "before_load",
+        "after_load",
+        "before_generation",
+        "after_generation_and_decode",
+    ]
+    assert [item["mlx_allocator_cumulative_peak_bytes"] for item in snapshots] == [10, 20, 30, 40]
+    assert all(item["system_available_bytes"] == 20 * 1024**3 for item in snapshots)
+    assert len(startup) == 2  # Attempt snapshots do not mutate the retained startup observations.
+    assert mx.seeds == [42]
+    assert evaluations == [model.audio]  # The worker performs exactly its existing evaluation.
+    assert model.calls[0]["max_tokens"] == 192
+    assert evidence["sidecar_sha256"] == hashlib.sha256(sidecar.read_bytes()).hexdigest()
+    assert sidecar.stat().st_mode & 0o222 == 0
+
+
+def test_missing_memory_apis_do_not_fail_synthesis_or_invent_zero_metrics(
+    worker: dict[str, Any], payload: dict[str, Any], tmp_path: Path
+) -> None:
+    response, _model, _mx, _sf = synthesize(worker, payload, tmp_path)
+    metadata = json.loads(Path(response["raw_evidence"]["sidecar_path"]).read_text())
+    assert response["status"] == "ok"
+    snapshots = metadata["memory_measurements"]["snapshots"]
+    assert [item["phase"] for item in snapshots] == [
+        "before_generation",
+        "after_generation_and_decode",
+    ]
+    for snapshot in snapshots:
+        assert all(snapshot[field] is None for field in snapshot["unavailable_reasons"])
+        assert len(snapshot["unavailable_reasons"]) == 5

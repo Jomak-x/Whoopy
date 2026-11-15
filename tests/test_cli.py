@@ -747,7 +747,7 @@ def test_generate_rejects_unsupported_numeric_speed_before_backend_setup(
     [
         ([], 0.6, "meditative-v2"),
         (["--speed", "0.9"], 0.9, None),
-        (["--speed", "0.9", "--pacing-profile", "meditative-v2"], 0.6, "meditative-v2"),
+        (["--speed", "0.9", "--pacing-profile", "meditative-v2"], 0.9, "meditative-v2"),
     ],
 )
 def test_generate_prompt_joins_validated_draft_to_real_audio_contract(

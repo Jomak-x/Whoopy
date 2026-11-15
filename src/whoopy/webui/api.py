@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from starlette.types import Scope
+from starlette.types import ASGIApp, Scope
 
 from whoopy.evaluation import (
     EvaluationExecutionError,
@@ -59,10 +59,12 @@ from whoopy.voice_references import VoiceConsent
 from whoopy.webui.audio_inspection import AudioInspectionError
 from whoopy.webui.catalog import LocalCatalog
 from whoopy.webui.evaluation import LocalProductionExperimentExecutor
+from whoopy.webui.generation_requests import GenerationRequestError
 from whoopy.webui.server import (
     MAX_REQUEST_BYTES,
     SEGMENT_ID_PATTERN,
     LocalWebApplication,
+    validate_mlx_controls,
 )
 
 API_VERSION = 1
@@ -148,10 +150,10 @@ def _supported_low_resource_llm_ids() -> tuple[str, ...]:
     )
 
 
-def _bundled_script_csp() -> str:
+def _bundled_script_csp(static_root: Path | None = None) -> str:
     """Authorize exact inline bootstraps from every bundled static route."""
 
-    static_root = Path(__file__).with_name("static")
+    static_root = static_root if static_root is not None else Path(__file__).with_name("static")
     hashes: set[str] = set()
     for html in sorted(static_root.rglob("*.html")):
         try:
@@ -179,6 +181,7 @@ class GenerationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     _allow_studio_moss_instruction: ClassVar[bool] = False
+    request_id: UUID | None = None
 
     mode: Literal["prompt", "script"]
     text: str = Field(min_length=1, max_length=20_000)
@@ -193,6 +196,8 @@ class GenerationRequest(BaseModel):
         "qwen3-voice-design-1.7b",
         "qwen3-base-clone-0.6b",
         "qwen3-base-clone-1.7b",
+        "mlx-qwen3-custom-voice-1.7b-8bit",
+        "mlx-qwen3-voice-design-1.7b-8bit",
     ] = "kokoro"
     surface: Literal["studio", "lab"] = "studio"
     profile: Literal["basic", "lite", "standard", "high"] | None = None
@@ -247,6 +252,9 @@ class GenerationRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_model_controls(self) -> GenerationRequest:
+        if self.speed is not None and self.tts_model != "kokoro":
+            raise ValueError("Numeric speed is supported only by Kokoro; use the pace control.")
+        validate_mlx_controls(self.tts_model, self.model_dump(exclude_none=True))
         if self.mode == "prompt" and self.profile == "basic":
             raise ValueError("Prompt generation requires the Lite or Standard profile")
         if self.mode == "script" and self.profile not in {None, "basic"}:
@@ -280,7 +288,7 @@ class GenerationRequest(BaseModel):
             and self.moss_use_reference is False
         ):
             raise ValueError("MOSS direct voice mode cannot use a voice reference")
-        if not self.tts_model.startswith("qwen3-") and any(
+        if not self.tts_model.startswith(("qwen3-", "mlx-qwen3-")) and any(
             value is not None for value in qwen_fields
         ):
             raise ValueError("Qwen controls are valid only for Qwen3-TTS speech models")
@@ -847,6 +855,10 @@ class _LabApiService:
 class LocalSecurityMiddleware(BaseHTTPMiddleware):
     """Enforce the loopback browser boundary and bounded request bodies."""
 
+    def __init__(self, app: ASGIApp, *, script_csp: str = BUNDLED_SCRIPT_CSP) -> None:
+        super().__init__(app)
+        self.script_csp = script_csp
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         voice_upload = (
             request.method == "POST" and request.url.path == "/api/v1/voice-references"
@@ -862,21 +874,27 @@ class LocalSecurityMiddleware(BaseHTTPMiddleware):
                 if declared_length < 0:
                     raise ValueError
                 if declared_length > request_limit:
-                    return JSONResponse(
-                        {"error": f"Request must contain at most {request_limit} bytes."},
-                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    return self._secure_response(
+                        JSONResponse(
+                            {"error": f"Request must contain at most {request_limit} bytes."},
+                            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                        )
                     )
             except ValueError:
-                return JSONResponse({"error": "Invalid Content-Length."}, status_code=400)
+                return self._secure_response(
+                    JSONResponse({"error": "Invalid Content-Length."}, status_code=400)
+                )
         if request.method in MUTATING_METHODS and not voice_upload:
             # Content-Length is optional and can be dishonest. Reading ordinary JSON/control
             # bodies here enforces the real byte count for HTTP/1.1 chunked requests too. Voice
             # WAV uploads keep their streaming path, whose writer independently enforces 100 MiB.
             body = await request.body()
             if len(body) > request_limit:
-                return JSONResponse(
-                    {"error": f"Request must contain at most {request_limit} bytes."},
-                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                return self._secure_response(
+                    JSONResponse(
+                        {"error": f"Request must contain at most {request_limit} bytes."},
+                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    )
                 )
         if request.method in MUTATING_METHODS:
             origin = request.headers.get("origin")
@@ -891,17 +909,21 @@ class LocalSecurityMiddleware(BaseHTTPMiddleware):
                     and parsed.netloc.lower() == request_host
                 )
                 if not valid:
-                    return JSONResponse(
-                        {"error": "Only the local Whoopy page may change local data."},
-                        status_code=status.HTTP_403_FORBIDDEN,
+                    return self._secure_response(
+                        JSONResponse(
+                            {"error": "Only the local Whoopy page may change local data."},
+                            status_code=status.HTTP_403_FORBIDDEN,
+                        )
                     )
-        response = await call_next(request)
+        return self._secure_response(await call_next(request))
+
+    def _secure_response(self, response: Response) -> Response:
         if "cache-control" not in response.headers:
             response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; img-src 'self' data:; media-src 'self'; "
-            f"style-src 'self' 'unsafe-inline'; {BUNDLED_SCRIPT_CSP}"
+            f"style-src 'self' 'unsafe-inline'; {self.script_csp}"
         )
         return response
 
@@ -972,9 +994,17 @@ async def _temporary_wav(request: Request) -> Path:
         raise
 
 
-def create_api(application: LocalWebApplication) -> FastAPI:
+def create_api(
+    application: LocalWebApplication, *, static_directory: Path | None = None
+) -> FastAPI:
     """Compose the versioned API around the existing production service."""
 
+    static_root = (
+        static_directory if static_directory is not None else Path(__file__).with_name("static")
+    ).resolve()
+    if not (static_root / "index.html").is_file():
+        raise ValueError("The Studio static directory must contain index.html.")
+    script_csp = _bundled_script_csp(static_root)
     catalog = LocalCatalog(application.runs_directory / ".whoopy-catalog.sqlite3")
     lab = _LabApiService(
         application=application,
@@ -1080,7 +1110,7 @@ def create_api(application: LocalWebApplication) -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
-    app.add_middleware(LocalSecurityMiddleware)
+    app.add_middleware(LocalSecurityMiddleware, script_csp=script_csp)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_request: Request, error: RequestValidationError) -> JSONResponse:
@@ -1100,6 +1130,12 @@ def create_api(application: LocalWebApplication) -> FastAPI:
     @app.exception_handler(ValueError)
     async def value_error(_request: Request, error: ValueError) -> JSONResponse:
         return JSONResponse({"error": str(error)}, status_code=400)
+
+    @app.exception_handler(GenerationRequestError)
+    async def request_identity_error(
+        _request: Request, error: GenerationRequestError
+    ) -> JSONResponse:
+        return JSONResponse(error.payload, status_code=error.status)
 
     @app.exception_handler(EvaluationExecutionError)
     async def evaluation_execution_error(
@@ -1152,6 +1188,17 @@ def create_api(application: LocalWebApplication) -> FastAPI:
     @router.get("/model-packs")
     def model_packs() -> dict[str, Any]:
         return application.list_model_packs()
+
+    @router.get("/voice-previews/{model_id}/{voice_id}")
+    def voice_preview(model_id: str, voice_id: str) -> Response:
+        preview = _not_found(
+            application.voice_previews.lookup(model_id, voice_id), "Voice preview unavailable."
+        )
+        return Response(
+            content=preview.wav_bytes,
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.get("/runtime-packs")
     def runtime_packs() -> dict[str, Any]:
@@ -1351,19 +1398,24 @@ def create_api(application: LocalWebApplication) -> FastAPI:
             raise ValueError("Minimum duration cannot exceed maximum duration.")
         if created_from is not None and created_to is not None and created_from > created_to:
             raise ValueError("Creation start cannot be after creation end.")
-        catalog.replace_runs(application.list_runs())
+        summaries = application.list_runs()
+        catalog.replace_runs(summaries)
+        requests = {item["run_id"]: item.get("generation_request") for item in summaries}
+        values = catalog.search_runs(
+            query=query,
+            audience=None if audience == "all" else audience,
+            status=run_status,
+            tts_model=tts_model,
+            minimum_duration_seconds=minimum_duration_seconds,
+            maximum_duration_seconds=maximum_duration_seconds,
+            created_from=created_from,
+            created_to=created_to,
+            limit=limit,
+        )
         return {
-            "runs": catalog.search_runs(
-                query=query,
-                audience=None if audience == "all" else audience,
-                status=run_status,
-                tts_model=tts_model,
-                minimum_duration_seconds=minimum_duration_seconds,
-                maximum_duration_seconds=maximum_duration_seconds,
-                created_from=created_from,
-                created_to=created_to,
-                limit=limit,
-            )
+            "runs": [
+                {**item, "generation_request": requests.get(item["run_id"])} for item in values
+            ]
         }
 
     @router.get("/trash/runs")
@@ -1397,6 +1449,26 @@ def create_api(application: LocalWebApplication) -> FastAPI:
             "Run not found.",
         )
         return {"run_id": str(run_id), "attempts": attempts}
+
+    @router.get("/runs/{run_id}/speech-screen")
+    def speech_screen_status(run_id: UUID) -> dict[str, Any]:
+        return _not_found(application.speech_screen_status(str(run_id)), "Run not found.")
+
+    @router.post("/runs/{run_id}/speech-screen", status_code=202)
+    def start_speech_screen(run_id: UUID, _body: EmptyBody) -> dict[str, Any]:
+        return _not_found(application.start_speech_screen(str(run_id)), "Run not found.")
+
+    @router.post("/runs/{run_id}/speech-screen/{attempt_id}/cancel", status_code=202)
+    def cancel_speech_screen(run_id: UUID, attempt_id: UUID, _body: EmptyBody) -> dict[str, Any]:
+        return _not_found(
+            application.cancel_speech_screen(str(run_id), str(attempt_id)), "Run not found."
+        )
+
+    @router.get("/runs/{run_id}/speech-screen/{attempt_id}/report")
+    def speech_screen_report(run_id: UUID, attempt_id: UUID) -> dict[str, Any]:
+        return _not_found(
+            application.speech_screen_report(str(run_id), str(attempt_id)), "Run not found."
+        )
 
     @router.get("/tasks/{task_id}")
     def task(task_id: UUID) -> dict[str, Any]:
@@ -1506,11 +1578,25 @@ def create_api(application: LocalWebApplication) -> FastAPI:
 
     @app.post(f"/api/v{API_VERSION}/generate", status_code=202)
     def generate(body: GenerationRequest) -> dict[str, Any]:
-        return application.start_generation(body.model_dump(exclude_none=True))
+        payload = body.model_dump(mode="json", exclude_none=True)
+        return (
+            application.start_generation(payload, _validated_client_payload=payload)
+            if body.request_id is not None
+            else application.start_generation(payload)
+        )
 
     @app.post("/api/generate", status_code=202, include_in_schema=False)
     def legacy_generate(body: LegacyGenerationRequest) -> dict[str, Any]:
-        return application.start_generation(body.model_dump(exclude_none=True))
+        payload = body.model_dump(mode="json", exclude_none=True)
+        return (
+            application.start_generation(payload, _validated_client_payload=payload)
+            if body.request_id is not None
+            else application.start_generation(payload)
+        )
+
+    @router.post("/generation-requests/{request_id}/cancel")
+    def cancel_generation_request(request_id: UUID, _body: EmptyBody) -> dict[str, Any]:
+        return application.cancel_generation_request(str(request_id))
 
     @app.post("/api/tasks/{task_id}/cancel", status_code=202, include_in_schema=False)
     def legacy_cancel(task_id: UUID, _body: EmptyBody) -> dict[str, Any]:
@@ -2088,6 +2174,5 @@ def create_api(application: LocalWebApplication) -> FastAPI:
     app.include_router(router, prefix=f"/api/v{API_VERSION}")
     app.include_router(router, prefix="/api", include_in_schema=False)
 
-    static_root = Path(__file__).with_name("static")
     app.mount("/", ProductStaticFiles(directory=static_root, html=True), name="application")
     return app

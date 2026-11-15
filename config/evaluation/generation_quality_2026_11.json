@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "default_cases": ["meeting-grounding"],
+  "default_profiles": ["standard"],
+  "default_methods": ["plan_first"],
+  "default_voices": ["af_heart"],
+  "timeout_seconds": 1800,
+  "total_seconds": 7200,
+  "max_cases": 6,
+  "cases": [
+    {
+      "id": "meeting-grounding",
+      "prompt": "Create a three-minute grounding meditation before an important meeting. Keep the language adult, practical, and reassuring. Use contact with the chair, feet, and visible surroundings as anchors. Do not guide the breath, breathing, inhaling, exhaling, or breath counting. Help the listener return ready for the meeting.",
+      "minutes": 3,
+      "meditation_kind": "grounding",
+      "delivery": "grounded"
+    },
+    {
+      "id": "contact-only-grounding",
+      "prompt": "Create a three-minute grounding meditation using only ordinary touch and contact sensations: the feet meeting the floor and the body supported by the chair. Do not use sound, listening, hearing, breath, breathing, inhalation, exhalation, visualization, or a body scan. Offer simple choices and time to notice contact without needing to feel a particular way.",
+      "minutes": 3,
+      "meditation_kind": "grounding",
+      "delivery": "calm"
+    },
+    {
+      "id": "sleep-without-scan",
+      "prompt": "Create a five-minute bedtime meditation for someone ready to sleep. Use simple permissive language, a quiet sense of support, and gradually less guidance. Do not ask for reflection, journaling, reviewing the day, setting intentions, solving problems, or a body scan. Avoid an energizing closing or instructions to reopen the eyes. End with permission to drift into sleep.",
+      "minutes": 5,
+      "meditation_kind": "sleep",
+      "delivery": "sleepy"
+    },
+    {
+      "id": "loving-kindness",
+      "prompt": "Create a five-minute loving-kindness meditation. Begin with accessible goodwill toward oneself, then optionally include a person who feels easy to care about. Offer a few ordinary, sincere wishes, time to repeat them, and permission for feelings to be neutral. Avoid demanding forgiveness or bringing in a difficult person. Close gently with a practical return.",
+      "minutes": 5,
+      "meditation_kind": "loving_kindness",
+      "delivery": "compassionate"
+    },
+    {
+      "id": "body-scan",
+      "prompt": "Create a five-minute gentle body scan that moves coherently from the feet upward through the body. Offer permission to skip any region, keep eyes open, or notice support instead. Notice ordinary sensation without promising relaxation or asking the listener to change it. Give enough quiet space in each region and close with the body as a whole.",
+      "minutes": 5,
+      "meditation_kind": "body_scan",
+      "delivery": "soothing"
+    },
+    {
+      "id": "breath-observation",
+      "prompt": "Create a three-minute breath observation meditation. Invite noticing the breath as it already is, at one comfortable place. Do not prescribe a breathing rhythm, count, breath hold, deeper breath, or extended exhale. Normalize wandering attention and returning gently. Offer contact with the chair as an alternative if attending to breath is uncomfortable, then close with an easy return.",
+      "minutes": 3,
+      "meditation_kind": "breath_awareness",
+      "delivery": "calm"
+    }
+  ]
+}

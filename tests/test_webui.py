@@ -431,7 +431,7 @@ def test_kokoro_generation_requires_current_ready_smoke_evidence(tmp_path: Path)
     [
         ({}, "0.6", "meditative-v2"),
         ({"speed": 0.9}, "0.9", None),
-        ({"speed": 0.9, "pacing_profile_id": "meditative-v2"}, "0.6", "meditative-v2"),
+        ({"speed": 0.9, "pacing_profile_id": "meditative-v2"}, "0.9", "meditative-v2"),
     ],
 )
 def test_prompt_task_preallocates_a_durable_run_and_uses_the_real_cli_contract(

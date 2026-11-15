@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -19,7 +21,9 @@ from typing import Any, cast
 
 import psutil
 
+from whoopy.adapters.tts._json_process import parent_guard_environment
 from whoopy.artifacts import ArtifactLock, ArtifactSpec, ArtifactStore, TargetPlatform
+from whoopy.locations import runtime_worker_script
 from whoopy.ports import (
     AdapterMetadata,
     FatalAdapterError,
@@ -40,6 +44,7 @@ class LlamaProcessResult:
     load_elapsed_unavailable_reason: str | None = None
     peak_process_tree_memory_bytes: int | None = None
     memory_unavailable_reason: str | None = None
+    execution_guard: dict[str, Any] | None = None
 
 
 ProcessRunner = Callable[
@@ -51,10 +56,17 @@ MonotonicClock = Callable[[], float]
 class CapturingProcessRunner:
     """Keep immutable evidence before the adapter removes its temporary inputs."""
 
-    def __init__(self, root: Path, runner: ProcessRunner) -> None:
+    def __init__(
+        self,
+        root: Path,
+        runner: ProcessRunner,
+        *,
+        retained_inputs: tuple[tuple[str, bytes], ...] = (),
+    ) -> None:
         self.root = root
         self.runner = runner
         self.invocations = 0
+        self.retained_inputs = retained_inputs
 
     def __call__(
         self, command: Sequence[str], timeout_seconds: float
@@ -70,21 +82,29 @@ class CapturingProcessRunner:
         save("command.json", json.dumps(list(command), indent=2) + "\n")
         receipt: dict[str, Any] = {"timeout_seconds": timeout_seconds, "returncode": None}
         try:
+            for name, data in self.retained_inputs:
+                save(name, data)
             for flag, name in (
                 ("--file", "prompt.txt"),
                 ("--system-prompt-file", "system.txt"),
                 ("--json-schema-file", "response-schema.json"),
+                ("--grammar-file", "response-grammar.gbnf"),
             ):
                 if flag in command:
                     save(name, Path(command[command.index(flag) + 1]).read_bytes())
             result = self.runner(command, timeout_seconds)
             completed = result.completed if isinstance(result, LlamaProcessResult) else result
+            if isinstance(result, LlamaProcessResult) and result.execution_guard is not None:
+                receipt["execution_guard"] = result.execution_guard
             save("stdout.txt", completed.stdout)
             save("stderr.txt", completed.stderr)
             receipt.update(status="completed", returncode=completed.returncode)
             return result
         except BaseException as error:
             receipt.update(status="failed", exception_type=type(error).__name__, error=str(error))
+            execution_guard = getattr(error, "execution_guard", None)
+            if isinstance(execution_guard, dict):
+                receipt["execution_guard"] = execution_guard
             for stream in ("stdout", "stderr"):
                 value = getattr(error, stream, None)
                 if isinstance(value, str | bytes):
@@ -134,13 +154,104 @@ class LlamaCppSettings:
             raise ValueError("llama.cpp reasoning must be on, off, or auto")
 
 
+SESSION_GRAMMAR_STRATEGY = "b10142-whole-session-gbnf@1"
+
+
+def _whole_session_grammar(schema: dict[str, Any]) -> str:
+    """Compile only Whoopy's closed, fixed-shape session schema, failing closed.
+
+    b10142 incorrectly prefills chat role/thinking tokens into JSON-schema
+    grammars (upstream #29066). User GBNF grammars are not prefilled. This small
+    compiler preserves the same IDs, order, exact counts and nonempty strings;
+    it is deliberately not a general JSON Schema converter.
+    """
+
+    def require(condition: bool) -> None:
+        if not condition:
+            raise FatalAdapterError(
+                f"{SESSION_GRAMMAR_STRATEGY} does not support this session schema shape"
+            )
+
+    def closed_object(value: Any, keys: list[str]) -> dict[str, Any]:
+        require(isinstance(value, dict))
+        require(set(value) == {"type", "properties", "required", "additionalProperties"})
+        require(value["type"] == "object" and value["additionalProperties"] is False)
+        require(value["required"] == keys)
+        properties = value["properties"]
+        require(isinstance(properties, dict) and list(properties) == keys)
+        return cast(dict[str, Any], properties)
+
+    sections = closed_object(schema, ["sections"])["sections"]
+    require(isinstance(sections, dict))
+    require(set(sections) == {"type", "prefixItems", "minItems", "maxItems"})
+    require(sections["type"] == "array" and isinstance(sections["prefixItems"], list))
+    items = sections["prefixItems"]
+    require(1 <= len(items) <= 12)
+    require(
+        type(sections["minItems"]) is int
+        and type(sections["maxItems"]) is int
+        and sections["minItems"] == sections["maxItems"] == len(items)
+    )
+    rules = [
+        r'char ::= [^"\\\x7F\x00-\x1F] | [\\] (["\\bfnrt] | "u" [0-9a-fA-F]{4})',
+        r'paragraph ::= "\"" char+ "\""',
+        r'space ::= | " " | "\n"{1,2} [ \t]{0,20}',
+    ]
+    for index, item in enumerate(items):
+        properties = closed_object(item, ["section_id", "paragraphs"])
+        identity = properties["section_id"]
+        require(isinstance(identity, dict) and set(identity) == {"type", "const"})
+        require(identity["type"] == "string" and isinstance(identity["const"], str))
+        require(re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", identity["const"]) is not None)
+        paragraphs = properties["paragraphs"]
+        require(isinstance(paragraphs, dict))
+        require(set(paragraphs) == {"type", "items", "minItems", "maxItems"})
+        require(paragraphs["type"] == "array")
+        require(paragraphs["items"] == {"type": "string", "minLength": 1})
+        require(type(paragraphs["items"]["minLength"]) is int)
+        count = paragraphs["minItems"]
+        require(type(count) is int and 1 <= count <= 100)
+        require(type(paragraphs["maxItems"]) is int and paragraphs["maxItems"] == count)
+        # Encode the literal JSON string as a GBNF string, including its quotes.
+        literal_id = json.dumps(json.dumps(identity["const"]))
+        spoken = ' "," space '.join(["paragraph"] * count)
+        rules.append(
+            f'section-{index} ::= "{{" space "\\"section_id\\"" space ":" space '
+            f'{literal_id} "," space "\\"paragraphs\\"" space ":" space '
+            f'"[" space {spoken} space "]" space "}}"'
+        )
+    body = ' "," space '.join(f"section-{index}" for index in range(len(items)))
+    rules.append(
+        f'root ::= "{{" space "\\"sections\\"" space ":" space '
+        f'"[" space {body} space "]" space "}}"'
+    )
+    return "\n".join(rules) + "\n"
+
+
 def _run_process(
     command: Sequence[str],
     timeout_seconds: float,
 ) -> LlamaProcessResult:
     started = time.monotonic()
+    guardian = runtime_worker_script("worker_parent_guard.py")
+    guardian_command = [
+        sys.executable,
+        "-B",
+        str(guardian),
+        "--guardian-timeout",
+        str(timeout_seconds + 1),
+        "--",
+        *command,
+    ]
+    environment = parent_guard_environment(guardian)
+    execution_guard = {
+        "policy": "owned-parent-watch@1",
+        "command": guardian_command,
+        "helper_sha256": environment["WHOOPY_PARENT_GUARD_SHA256"],
+    }
     process = subprocess.Popen(
-        list(command),
+        guardian_command,
+        env=environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -232,6 +343,7 @@ def _run_process(
         stdout_reader.join(timeout=1)
         stderr_reader.join(timeout=1)
     if failure is not None:
+        failure.__dict__["execution_guard"] = execution_guard
         incomplete_reasons: dict[str, str] = {}
         for name, reader in (("stdout", stdout_reader), ("stderr", stderr_reader)):
             if reader.is_alive():
@@ -250,6 +362,7 @@ def _run_process(
     )
     return LlamaProcessResult(
         completed=completed,
+        execution_guard=execution_guard,
         load_elapsed_seconds=load_elapsed_seconds,
         load_elapsed_unavailable_reason=(
             None
@@ -401,6 +514,7 @@ class LlamaCppScriptGenerator:
         settings: LlamaCppSettings | None = None,
         process_runner: ProcessRunner = _run_process,
         monotonic: MonotonicClock = time.monotonic,
+        models_root: Path | None = None,
     ) -> None:
         if not executable_path.is_file():
             raise FatalAdapterError(f"llama.cpp executable not found: {executable_path}")
@@ -411,6 +525,10 @@ class LlamaCppScriptGenerator:
         self.settings = settings or LlamaCppSettings()
         self.process_runner = process_runner
         self.monotonic = monotonic
+        self.models_root = models_root
+        # A shared adapter may draft two sections concurrently. Queue those local
+        # calls instead of treating its own sibling invocation as a foreign owner.
+        self._invocation_lock = threading.Lock()
         self.metadata = AdapterMetadata(
             adapter_id="whoopy.llama_cpp",
             versioned_model_id=versioned_model_id,
@@ -426,6 +544,11 @@ class LlamaCppScriptGenerator:
                 f"gpu_layers={self.settings.gpu_layers}",
                 f"reasoning={self.settings.reasoning}",
                 f"timeout_seconds={self.settings.timeout_seconds}",
+                *(
+                    (f"session_schema_transport={SESSION_GRAMMAR_STRATEGY}",)
+                    if runtime_version == "b10142"
+                    else ()
+                ),
             ),
         )
 
@@ -441,6 +564,8 @@ class LlamaCppScriptGenerator:
         settings: LlamaCppSettings | None = None,
     ) -> LlamaCppScriptGenerator:
         """Resolve and fully verify locked runtime/model bytes before use."""
+
+        from whoopy.model_packs.resolution import models_root_from_artifact_store
 
         artifacts = artifact_lock.resolve(profile_name, target)
         runtime = _component(artifacts, "llm_runtime")
@@ -465,10 +590,18 @@ class LlamaCppScriptGenerator:
             license_id=model.license_id,
             device=device,
             settings=settings,
+            models_root=models_root_from_artifact_store(store.root),
         )
 
     def generate(self, request: ScriptGenerationRequest) -> ScriptGenerationResult:
         """Generate one response through temporary private input/output files."""
+
+        # Keep slot dependencies out of module import: the ASR supervisor also
+        # imports this module's lightweight process-tree cleanup helper.
+        from whoopy.model_packs.operations import (
+            HeavyweightModelSlot,
+            HeavyweightModelSlotUnavailable,
+        )
 
         with tempfile.TemporaryDirectory(prefix="whoopy-llama-") as temporary_name:
             temporary = Path(temporary_name)
@@ -515,20 +648,58 @@ class LlamaCppScriptGenerator:
                 system_path.write_text(request.system_prompt, encoding="utf-8")
                 system_path.chmod(0o600)
                 command.extend(["--system-prompt-file", str(system_path)])
+            retained_inputs: tuple[tuple[str, bytes], ...] = ()
             if request.response_json_schema is not None:
                 schema_path = temporary / "response-schema.json"
                 schema_path.write_text(
                     json.dumps(request.response_json_schema, allow_nan=False), encoding="utf-8"
                 )
                 schema_path.chmod(0o600)
-                command.extend(["--json-schema-file", str(schema_path)])
+                properties = request.response_json_schema.get("properties")
+                if (
+                    self.metadata.runtime_version == "b10142"
+                    and isinstance(properties, dict)
+                    and "sections" in properties
+                ):
+                    grammar_path = temporary / "response-grammar.gbnf"
+                    grammar = _whole_session_grammar(request.response_json_schema).encode("utf-8")
+                    grammar_path.write_bytes(grammar)
+                    grammar_path.chmod(0o600)
+                    schema_bytes = schema_path.read_bytes()
+                    transport = {
+                        "strategy": SESSION_GRAMMAR_STRATEGY,
+                        "schema_sha256": hashlib.sha256(schema_bytes).hexdigest(),
+                        "grammar_sha256": hashlib.sha256(grammar).hexdigest(),
+                    }
+                    retained_inputs = (
+                        ("response-schema.json", schema_bytes),
+                        (
+                            "structured-output.json",
+                            (json.dumps(transport, indent=2) + "\n").encode(),
+                        ),
+                    )
+                    command.extend(["--grammar-file", str(grammar_path)])
+                else:
+                    command.extend(["--json-schema-file", str(schema_path)])
 
             runner = self.process_runner
             if request.raw_invocation_directory is not None:
-                runner = CapturingProcessRunner(request.raw_invocation_directory, runner)
+                runner = CapturingProcessRunner(
+                    request.raw_invocation_directory, runner, retained_inputs=retained_inputs
+                )
             started = self.monotonic()
             try:
-                process_result = runner(command, self.settings.timeout_seconds)
+                if self.models_root is None:
+                    # Direct constructors remain usable for isolated contract fixtures.
+                    process_result = runner(command, self.settings.timeout_seconds)
+                else:
+                    with (
+                        self._invocation_lock,
+                        HeavyweightModelSlot(self.models_root, "llama-cpp-writer"),
+                    ):
+                        process_result = runner(command, self.settings.timeout_seconds)
+            except HeavyweightModelSlotUnavailable as error:
+                raise TransientAdapterError(str(error)) from error
             except subprocess.TimeoutExpired as error:
                 raise TransientAdapterError(
                     f"llama.cpp exceeded its {self.settings.timeout_seconds:g}-second timeout"

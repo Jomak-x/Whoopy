@@ -1,0 +1,325 @@
+"""Standard-library parent watching and an owned-process guardian; no model imports."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
+from collections.abc import Callable
+from contextlib import suppress
+from pathlib import Path
+from typing import Any, cast
+
+PARENT_PID = "WHOOPY_PARENT_PID"
+PARENT_TOKEN = "WHOOPY_PARENT_CREATION_TOKEN"
+HELPER_SHA256 = "WHOOPY_PARENT_GUARD_SHA256"
+
+
+def _windows_parent(pid: int) -> tuple[Any, Any, str]:
+    """Retain a kernel handle, so a reused PID cannot become the watched parent."""
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = vars(ctypes)["WinDLL"]("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.GetProcessTimes.argtypes = [wintypes.HANDLE, *([ctypes.POINTER(wintypes.FILETIME)] * 4)]
+    kernel.GetProcessTimes.restype = wintypes.BOOL
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.CloseHandle.restype = wintypes.BOOL
+    handle = kernel.OpenProcess(0x00100000 | 0x1000, False, pid)
+    if not handle:
+        raise OSError("Cannot open the actual parent process for watching")
+    creation, exit_time, system, user = (wintypes.FILETIME() for _ in range(4))
+    if not kernel.GetProcessTimes(
+        handle,
+        ctypes.byref(creation),
+        ctypes.byref(exit_time),
+        ctypes.byref(system),
+        ctypes.byref(user),
+    ):
+        kernel.CloseHandle(handle)
+        raise OSError("Cannot verify the actual parent process creation identity")
+    token = str((int(creation.dwHighDateTime) << 32) | int(creation.dwLowDateTime))
+    return kernel, handle, token
+
+
+def _validated_windows_parent(pid: int, expected_token: str | None) -> tuple[Any, Any]:
+    kernel, handle, actual = _windows_parent(pid)
+    if expected_token is not None and expected_token != actual:
+        kernel.CloseHandle(handle)
+        raise RuntimeError("Worker launch parent creation identity does not match")
+    return kernel, handle
+
+
+def _windows_redirector_parent(parent_pid: int) -> tuple[Any, Any]:
+    """Accept only one verified Python venv redirector between worker and caller."""
+    import ctypes
+    from ctypes import wintypes
+
+    class ProcessEntry(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", wintypes.LONG),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    direct = os.getppid()
+    kernel, handle, birth = _windows_parent(direct)
+    snapshot = None
+    try:
+        self_kernel, self_handle, self_birth = _windows_parent(os.getpid())
+        self_kernel.CloseHandle(self_handle)
+        if int(birth) > int(self_birth) or kernel.WaitForSingleObject(handle, 0) != 258:
+            raise RuntimeError("Worker redirector identity is stale")
+        kernel.QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.LPWSTR,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        kernel.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        image = ctypes.create_unicode_buffer(32768)
+        size = wintypes.DWORD(len(image))
+        if not kernel.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(size)):
+            raise OSError("Cannot inspect the Python launch redirector")
+        if os.path.normcase(os.path.realpath(image.value)) != os.path.normcase(
+            os.path.realpath(sys.executable)
+        ):
+            raise RuntimeError("Worker intermediate parent is not its Python redirector")
+        kernel.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        kernel.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessEntry)]
+        kernel.Process32FirstW.restype = wintypes.BOOL
+        kernel.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessEntry)]
+        kernel.Process32NextW.restype = wintypes.BOOL
+        snapshot = kernel.CreateToolhelp32Snapshot(2, 0)
+        if snapshot in (None, wintypes.HANDLE(-1).value):
+            snapshot = None
+            raise OSError("Cannot inspect the Python launch ancestry")
+        entry = ProcessEntry()
+        entry.dwSize = ctypes.sizeof(entry)
+        found = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
+        while found:
+            if entry.th32ProcessID == direct:
+                if entry.th32ParentProcessID != parent_pid:
+                    raise RuntimeError("Worker launch parent is not the redirector's parent")
+                return kernel, handle
+            found = kernel.Process32NextW(snapshot, ctypes.byref(entry))
+        raise RuntimeError("Worker redirector disappeared during ancestry verification")
+    except BaseException:
+        kernel.CloseHandle(handle)
+        raise
+    finally:
+        if snapshot is not None:
+            kernel.CloseHandle(snapshot)
+
+
+def launch_environment() -> dict[str, str]:
+    """Call in the process that will actually create the guarded child."""
+    token = ""
+    if os.name == "nt":
+        kernel, handle, token = _windows_parent(os.getpid())
+        kernel.CloseHandle(handle)
+    return {
+        PARENT_PID: str(os.getpid()),
+        PARENT_TOKEN: token,
+        HELPER_SHA256: hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+    }
+
+
+class ParentWatch:
+    """Exit only this worker when its actual launch parent disappears."""
+
+    def __init__(
+        self,
+        parent_pid: int,
+        creation_token: str | None = None,
+        *,
+        on_death: Callable[[], None] | None = None,
+        poll_seconds: float = 0.1,
+    ) -> None:
+        if parent_pid <= 0 or parent_pid == os.getpid():
+            raise RuntimeError("Worker launch parent identity does not match")
+        self.parent_pid = parent_pid
+        self._kernel: Any = None
+        self._handle: Any = None
+        self._redirector: tuple[Any, Any] | None = None
+        if os.name == "nt":
+            self._kernel, self._handle = _validated_windows_parent(parent_pid, creation_token)
+            if os.getppid() != parent_pid:
+                try:
+                    self._redirector = _windows_redirector_parent(parent_pid)
+                except BaseException:
+                    self._kernel.CloseHandle(self._handle)
+                    self._handle = None
+                    raise
+        elif os.getppid() != parent_pid:
+            raise RuntimeError("Worker launch parent identity does not match")
+        self._stop = threading.Event()
+        self._on_death = on_death
+        self._poll_seconds = poll_seconds
+        self._thread = threading.Thread(target=self._run, name="whoopy-parent-watch", daemon=True)
+        self._thread.start()
+
+    def alive(self) -> bool:
+        if self._handle is None:
+            return os.getppid() == self.parent_pid
+        handles = [(self._kernel, self._handle)]
+        if self._redirector is not None:
+            handles.append(self._redirector)
+        for kernel, handle in handles:
+            state = kernel.WaitForSingleObject(handle, 0)
+            if state not in (0, 258):
+                raise OSError("Parent process handle observation failed")
+            if state == 0:
+                return False
+        return True
+
+    def _run(self) -> None:
+        try:
+            while not self._stop.wait(self._poll_seconds):
+                try:
+                    alive = self.alive()
+                except Exception:
+                    alive = False
+                if not alive:
+                    with suppress(OSError):
+                        os.write(
+                            2, b"Whoopy parent guard: launch parent exited; stopping owned work.\n"
+                        )
+                    if self._on_death is not None:
+                        self._on_death()
+                    else:
+                        os._exit(75)
+                    return
+        finally:
+            if self._handle is not None:
+                self._kernel.CloseHandle(self._handle)
+                self._handle = None
+            if self._redirector is not None:
+                kernel, handle = self._redirector
+                kernel.CloseHandle(handle)
+                self._redirector = None
+
+    def close(self) -> None:
+        self._stop.set()
+        if threading.current_thread() is not self._thread:
+            self._thread.join(timeout=1)
+
+
+def start_parent_watch(*, on_death: Callable[[], None] | None = None) -> ParentWatch:
+    supplied = os.environ.get(PARENT_PID)
+    token = os.environ.get(PARENT_TOKEN) or None
+    if supplied is not None and os.name == "nt" and token is None:
+        raise RuntimeError("Managed Windows worker has no launch-parent creation identity")
+    return ParentWatch(
+        int(supplied) if supplied is not None else os.getppid(), token, on_death=on_death
+    )
+
+
+def _stop_owned(process: subprocess.Popen[bytes]) -> None:
+    """Use only the live child this guardian created, never persisted PID records."""
+    if os.name == "posix":
+        with suppress(ProcessLookupError):
+            cast(Any, os).killpg(process.pid, signal.SIGTERM)
+    elif process.poll() is None:
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                capture_output=True,
+                check=False,
+                timeout=2,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            process.kill()
+    try:
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        if os.name == "posix":
+            with suppress(ProcessLookupError):
+                cast(Any, os).killpg(process.pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+        else:
+            process.kill()
+        process.wait(timeout=2)
+    # A child can exit while descendants in its still-owned process group remain.
+    if os.name == "posix":
+        with suppress(ProcessLookupError):
+            cast(Any, os).killpg(process.pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+
+
+def guardian(command: list[str], timeout_seconds: float) -> int:
+    """Supervise external llama without importing its runtime or altering its streams."""
+    stopped = threading.Event()
+    parent_lost = threading.Event()
+    previous = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+
+    def stop(_number: int, _frame: Any) -> None:
+        stopped.set()
+
+    for number in previous:
+        signal.signal(number, stop)
+    watch = start_parent_watch(on_death=parent_lost.set)
+    process: subprocess.Popen[bytes] | None = None
+    started = time.monotonic()
+    try:
+        if not watch.alive():
+            return 75
+        process = subprocess.Popen(
+            command,
+            start_new_session=os.name == "posix",
+            creationflags=(
+                int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200))
+                if os.name == "nt"
+                else 0
+            ),
+        )
+        while process.poll() is None:
+            if (
+                parent_lost.is_set()
+                or stopped.is_set()
+                or time.monotonic() - started >= timeout_seconds
+            ):
+                _stop_owned(process)
+                return 75 if parent_lost.is_set() else 130 if stopped.is_set() else 124
+            time.sleep(0.02)
+        return process.returncode
+    finally:
+        if process is not None:
+            _stop_owned(process)
+        watch.close()
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--guardian-timeout", type=float, required=True)
+    parser.add_argument("command", nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    command = args.command[1:] if args.command[:1] == ["--"] else args.command
+    if not command or args.guardian_timeout <= 0:
+        parser.error("A command and positive guardian timeout are required")
+    return guardian(command, args.guardian_timeout)
+
+
+if __name__ == "__main__":
+    code = main()
+    if code < 0 and os.name == "posix":
+        signal.signal(-code, signal.SIG_DFL)
+        os.kill(os.getpid(), -code)
+    raise SystemExit(code)

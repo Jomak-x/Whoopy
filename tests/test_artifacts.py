@@ -313,14 +313,14 @@ def test_verified_python_wheels_materialize_into_one_environment(tmp_path: Path)
         "python",
         "sherpa_python",
         first_payload,
-        filename="python.whl",
+        filename="sherpa_python-1-py3-none-any.whl",
         kind="python_wheel",
     )
     second = _artifact(
         "native",
         "sherpa_native",
         second_payload,
-        filename="native.whl",
+        filename="sherpa_native-1-py3-none-any.whl",
         kind="python_wheel",
     )
     offline = tmp_path / "offline"
@@ -446,3 +446,55 @@ def test_lock_model_rejects_ambiguous_component_resolution() -> None:
             "standard",
             TargetPlatform(operating_system="linux", architecture="x86_64"),
         )
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_python_wheel_abi_rejected_before_materialization_or_cache_reuse(
+    tmp_path: Path, monkeypatch: MonkeyPatch, cached: bool
+) -> None:
+    from packaging.tags import Tag
+
+    artifact = _artifact(
+        "native",
+        "native",
+        b"not opened",
+        kind="python_wheel",
+        filename="native-1-cp311-cp311-macosx_11_0_arm64.whl",
+    )
+    store = ArtifactStore(tmp_path / "managed")
+    environment = store.python_environments / "abi_test"
+    if cached:
+        import json
+
+        environment.mkdir(parents=True)
+        (environment / ".whoopy-wheels.json").write_text(
+            json.dumps({artifact.artifact_id: artifact.sha256})
+        )
+    monkeypatch.setattr(
+        "whoopy.artifacts.sys_tags",
+        lambda: iter([Tag("cp312", "cp312", "macosx_11_0_arm64")]),
+    )
+    with pytest.raises(ArtifactError, match=r"incompatible.*Python"):
+        store.materialize_python_wheels([artifact], environment_name="abi_test")
+    assert environment.exists() is cached
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "native-1-cp312-cp312-macosx_11_0_arm64.whl",
+        "native-1-cp311-abi3-macosx_11_0_arm64.whl",
+        "native-1-py3-none-any.whl",
+    ],
+)
+def test_python_wheel_tag_check_accepts_native_stable_abi_and_pure_python(filename: str) -> None:
+    from packaging.tags import compatible_tags, cpython_tags
+
+    from whoopy.artifacts import require_compatible_python_wheels
+
+    supported = set(cpython_tags((3, 12), abis=("cp312",), platforms=("macosx_11_0_arm64",)))
+    supported.update(
+        compatible_tags((3, 12), interpreter="cp312", platforms=("macosx_11_0_arm64",))
+    )
+    artifact = _artifact("native", "native", b"not opened", kind="python_wheel", filename=filename)
+    require_compatible_python_wheels([artifact], supported_tags=supported)

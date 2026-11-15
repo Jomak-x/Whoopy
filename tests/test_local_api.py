@@ -402,7 +402,13 @@ def test_speech_model_contract_exposes_profiles_and_only_typed_request_fields(
     payload = response.json()
     assert set(payload["profiles"]) == {"basic", "lite", "standard", "high"}
     for profile in payload["profiles"].values():
-        assert set(profile) == {"compatible", "installed", "messages", "artifact_count"}
+        assert set(profile) == {
+            "compatible",
+            "installed",
+            "messages",
+            "artifact_count",
+            "writer_model",
+        }
 
     request_properties = set(GenerationRequest.model_json_schema()["properties"])
     models = payload["speech_models"]
