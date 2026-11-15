@@ -498,7 +498,7 @@ evidence.
 Missing targets stay `not_run`; partial or mismatched reports are rejected.
 
 The sole checked-in hosted workflow, `.github/workflows/ci.yml`, runs on `ubuntu-latest`,
-`macos-14`, and `windows-latest`. Each job installs locked development dependencies, runs
+`macos-15`, and `windows-latest`. Each job installs locked development dependencies, runs
 `uv run --extra dev python scripts/check.py`, and runs `uv run whoopy doctor --json`.
 It does not build or upload offline application bundles, perform installed-application launch
 acceptance, or aggregate packaging receipts.
