@@ -2,6 +2,7 @@ import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // A source fingerprint keeps rebuilds reproducible while detecting UI upgrades.
@@ -18,6 +19,13 @@ const version = fingerprint.digest('hex').slice(0, 16);
 
 export default {
   preprocess: vitePreprocess(),
+  compilerOptions: process.env.NODE_ENV === 'production' ? {
+    cssHash: ({ filename, css, hash }) => {
+      // Svelte's default includes the absolute checkout path in production.
+      const component = filename ? relative(fileURLToPath(webRoot), filename).replaceAll('\\', '/') : '';
+      return `svelte-${hash(`${component}\0${css}`)}`;
+    }
+  } : {},
   kit: {
     version: { name: version },
     adapter: adapter({
